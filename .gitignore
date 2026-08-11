@@ -1,0 +1,15 @@
+# --- secrets & runtime (never commit) ---
+.env
+.agent-live-key
+data/
+server.log
+*.log
+
+# --- deps / tooling ---
+node_modules/
+
+# --- internal agent notes (not for public review) ---
+memory.md
+
+# --- os noise ---
+.DS_Store

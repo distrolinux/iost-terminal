@@ -1,0 +1,33 @@
+# IOST Terminal
+
+> AI real-time trading platform for crypto + equities. Live market data, AI trade
+> scores (0-100 with full subscore breakdown), risk engine, news sentiment,
+> IOST on-chain dashboard, paper trading and an autonomous autopilot.
+> Paper-first: nothing here moves real money without explicit enablement.
+
+## Key pages
+
+- [Terminal dashboard](/app) — scanner, AI scores, risk, portfolio, on-chain, news, assistant, journal. Deep links: /app#scanner /app#scores /app#risk /app#portfolio /app#onchain /app#news /app#assistant /app#journal
+- [Landing](/)
+- [3D Automation Hub](/hub) — 8 strategy bots visualized; intel also available as JSON via /api/ui-state
+
+## Machine-readable interfaces
+
+- [Agent discovery manifest](/.well-known/agent.json) — what this service is + where everything lives
+- [Agent API index](/api) — every endpoint, method, body and purpose
+- [Live platform state](/api/ui-state) — one-call snapshot mirroring the dashboard (scanner, scores, account, autopilot, market, on-chain)
+- [Platform meta](/api/meta) — watchlist, account, engine health, data freshness
+- [Autopilot proposals](/api/autopilot/proposals) — pending human-in-the-loop entries with full reasoning (symbol, side, size, entry, stop, target, confidence, reason)
+
+## Data model
+
+- Watchlist: 16 crypto (IOST, BTC, ETH, SOL, XRP, DOGE, ADA, AVAX, LINK, DOT, SUI, ARB, OP, TON, NEAR, LTC) + 9 equities (AAPL, MSFT, NVDA, TSLA, AMZN, GOOGL, META, SPY, QQQ)
+- AI trade score: 0-100 composite over momentum, technical setup, volume, news sentiment, on-chain activity, risk
+- Every page ships a machine layer: server-rendered data table, JSON-LD knowledge graph (Schema.org FinancialProduct/Stock/Offer, ISO 8601 dates, explicit priceCurrency), and a `<script type="application/json" id="agent-state">` state blob
+
+## Important caveats
+
+- Paper execution only. Autopilot trades simulated fills at live prices.
+- Stocks data is delayed (Yahoo); crypto is near-real-time (OKX/KuCoin/Gate).
+- Autopilot supports requireApproval mode: entries queue as proposals and wait for a human/agent to approve or reject before executing.
+- Not financial advice.

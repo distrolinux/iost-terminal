@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Terms of Service — IOST Terminal</title>
+<meta name="description" content="Terms of Service for IOST Terminal — beta software, paper-first execution, no financial advice, user obligations and liability limits.">
+<meta name="robots" content="index,follow">
+<link rel="canonical" href="https://iostcallister.com/terms">
+<style>
+:root {
+  --bg: #04060a; --surface: #0a0e15; --line: #16202e; --line-strong: #22324a;
+  --text: #e8f1f8; --muted: #8294a6; --dim: #51617a;
+  --cyan: #00e5ff; --violet: #7c5cff; --mint: #22d3aa; --amber: #ffc857;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+  --sans: 'Inter', system-ui, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { color-scheme: dark; }
+body {
+  background:
+    radial-gradient(70% 55% at 50% 0%, rgba(0, 229, 255, .07), transparent 65%),
+    var(--bg);
+  color: var(--text); font-family: var(--sans); font-size: 15px; line-height: 1.7;
+}
+a { color: var(--cyan); text-decoration: none; }
+a:hover { text-decoration: underline; }
+header {
+  padding: 28px 32px; border-bottom: 1px solid var(--line);
+  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+}
+header .brand { font-family: var(--mono); font-weight: 700; letter-spacing: 1.5px; color: var(--text); }
+header .brand .dot { color: var(--cyan); }
+header .crumb { font-size: 12px; color: var(--dim); font-family: var(--mono); }
+main { max-width: 860px; margin: 0 auto; padding: 56px 32px 96px; }
+h1 { font-family: var(--mono); font-size: clamp(26px, 4vw, 38px); letter-spacing: 1px; margin-bottom: 10px; }
+.effective { font-family: var(--mono); font-size: 12px; color: var(--amber); letter-spacing: 1px; margin-bottom: 8px; }
+.lede { color: var(--muted); margin: 18px 0 8px; max-width: 70ch; }
+h2 {
+  font-family: var(--mono); font-size: 17px; letter-spacing: 1px; color: var(--cyan);
+  margin: 44px 0 14px; padding-top: 18px; border-top: 1px solid var(--line);
+}
+h2::before { content: '> '; color: var(--violet); }
+p { margin-bottom: 14px; max-width: 72ch; }
+ul { margin: 0 0 14px 22px; max-width: 72ch; }
+li { margin-bottom: 8px; }
+.placeholder { color: var(--amber); font-family: var(--mono); font-size: .92em; }
+.note {
+  border: 1px solid rgba(255, 200, 87, .35); background: rgba(255, 200, 87, .06);
+  border-radius: 4px; padding: 14px 16px; color: var(--amber); margin: 20px 0;
+  font-size: 14px;
+}
+footer {
+  border-top: 1px solid var(--line); padding: 28px 32px;
+  display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  font-size: 12px; color: var(--dim); font-family: var(--mono);
+}
+footer a { color: var(--muted); }
+footer a:hover { color: var(--cyan); text-decoration: none; }
+@media (max-width: 640px) { main { padding: 40px 20px 80px; } }
+</style>
+</head>
+<body>
+<header>
+  <a class="brand" href="/">◈ IOST<span class="dot">TERMINAL</span></a>
+  <span class="crumb">/ terms</span>
+</header>
+
+<main>
+  <h1>Terms of Service</h1>
+  <div class="effective">EFFECTIVE DATE: <span class="placeholder">[Effective Date]</span> — DRAFT v0.1 (pending review)</div>
+  <p class="lede">These Terms of Service ("Terms") govern your access to and use of the IOST Terminal platform (the "Service"), operated by <span class="placeholder">[Company Name]</span>, <span class="placeholder">[Jurisdiction]</span> ("we", "us", "our"). By accessing or using the Service you agree to these Terms. If you do not agree, do not use the Service.</p>
+
+  <div class="note">DRAFT — These terms are a draft prepared for review by PROJECT OWNER and counsel. Placeholders marked <span class="placeholder">[brackets]</span> must be filled in before the Service is marketed to the public.</div>
+
+  <h2>1. The Service is beta software</h2>
+  <p>The Service is provided on a beta basis. Features, pricing, data feeds and availability may change at any time without notice. The Service may contain bugs, experience downtime, or return delayed or incorrect data. You use it at your own risk and with the understanding that it is under active development.</p>
+
+  <h2>2. Paper-first execution; live trading</h2>
+  <p>The Service is paper-first: by default, all trading is simulated with virtual funds and has no real-world financial effect. Where live trading is offered (e.g. via your own exchange API key), it is subject to additional gating, explicit user enablement, and exchange-side terms. We are not a broker, exchange, custodian or counterparty. All live execution happens on third-party venues under their own terms, and you are solely responsible for any orders placed through the Service, including orders placed by automated features (e.g. Autopilot) that you have enabled.</p>
+
+  <h2>3. Not financial advice</h2>
+  <p>Nothing in the Service — including AI trade scores, signals, probabilities, grades, analyses, or the output of any engine — constitutes financial, investment, legal or tax advice, or a recommendation, solicitation or offer to buy or sell any security or asset. All outputs are informational and generated by automated systems. You are solely responsible for your own investment decisions.</p>
+
+  <h2>4. Your obligations</h2>
+  <ul>
+    <li>You must provide accurate information when creating an account and keep your credentials secure. You are responsible for all activity under your account.</li>
+    <li>You must not misuse the Service: no attempts to breach security, overload infrastructure, scrape at abusive rates, resell access, or use the Service for unlawful activity.</li>
+    <li>You must not rely on the Service for regulatory, tax or reporting obligations without independent verification.</li>
+    <li>Where you connect third-party API keys (e.g. a crypto exchange key), you confirm you are authorized to do so and understand the permissions you grant.</li>
+  </ul>
+
+  <h2>5. Accounts and termination</h2>
+  <p>You may close your account at any time. We may suspend or terminate access — with or without notice — for breach of these Terms, suspected abuse, security risk, or extended inactivity. On termination, your data will be deleted in accordance with our Privacy Policy. Live positions held at third-party venues are not affected by termination of your Service account.</p>
+
+  <h2>6. Disclaimers and limitation of liability</h2>
+  <p>The Service is provided "AS IS" and "AS AVAILABLE", without warranties of any kind, express or implied, including merchantability, fitness for a particular purpose, accuracy, and non-infringement. We do not warrant that market data, scores or signals will be accurate, complete or timely.</p>
+  <p>To the maximum extent permitted by law, <span class="placeholder">[Company Name]</span>, its affiliates and licensors shall not be liable for any indirect, incidental, special, consequential or punitive damages, or any loss of profits, revenue, data or trading losses, arising out of or related to your use of the Service — even if advised of the possibility of such damages. Our aggregate liability for all claims shall not exceed the greater of <span class="placeholder">[$100]</span> or the fees you paid us in the <span class="placeholder">[12]</span> months preceding the claim.</p>
+
+  <h2>7. Governing law</h2>
+  <p>These Terms are governed by the laws of <span class="placeholder">[Jurisdiction]</span>, without regard to conflict-of-law principles. Any disputes shall be resolved in the courts of <span class="placeholder">[Jurisdiction]</span>.</p>
+
+  <h2>8. Changes to these Terms</h2>
+  <p>We may update these Terms from time to time. Material changes will be announced in the Service. Continued use after changes take effect constitutes acceptance.</p>
+
+  <h2>9. Contact</h2>
+  <p>Questions about these Terms: <span class="placeholder">[legal@example.com]</span>.</p>
+</main>
+
+<footer>
+  <span>◈ IOST TERMINAL — AI real-trading platform · paper-first</span>
+  <span><a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · <a href="/risk-disclosure">Risk Disclosure</a> · <a href="/">← Home</a></span>
+</footer>
+</body>
+</html>

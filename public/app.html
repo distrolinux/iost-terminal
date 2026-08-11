@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="agent:api" content="/api">
+<link rel="agent-manifest" href="/.well-known/agent.json">
+<title>IOST Terminal — AI Command Center</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Sora:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css?v=2.8">
+</head>
+<body class="cmd">
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">◈</span>
+    <span class="brand-name">IOST<span class="brand-dim">TERMINAL</span></span>
+    <span class="brand-tag">AI COMMAND CENTER</span>
+  </div>
+  <button class="nav-btn tb-agent" data-view="assistant" aria-label="View AI trade assistant"><span class="ic">✦</span><span class="lbl">Agent</span></button>
+  <div class="tb-status" role="status" aria-live="polite">
+    <span class="live-dot" id="liveDot" aria-label="Connection"></span>
+    <span class="tb-net mono" id="netStatus">ONLINE</span>
+    <span class="clock mono" id="clock" role="timer" aria-label="UTC clock">--:--:--</span>
+    <span class="live-trade-chip hidden" id="liveTradeChip" role="status" aria-label="Live trading active">● LIVE</span>
+  </div>
+  <div class="tb-right">
+    <div class="tb-auth" id="tbAuth" aria-label="Account"></div>
+    <span class="tb-balance mono" title="Paper account">$<b id="tbBalance">--</b></span>
+    <span class="tb-balance mono tb-points" id="tbPointsWrap" role="button" tabindex="0" aria-label="Points balance — open the Points view" title="Platform points — 1:1 AIT conversion planned at TGE (not issued yet)">◆ <b id="tbPoints">--</b></span>
+    <button class="chip ap-chip needs-auth" id="tbAutopilot" aria-label="Toggle autopilot">AUTOPILOT OFF</button>
+    <button class="btn sm ghost" id="tbRescan" aria-label="Rescan all markets">⟳ Rescan</button>
+  </div>
+</header>
+
+<div class="cmd-body">
+  <aside class="sidebar" aria-label="Command navigation">
+    <nav class="side-nav">
+      <button class="nav-btn is-active" data-view="scanner" aria-label="View AI market scanner"><span class="ic">▤</span><span class="lbl">Markets</span></button>
+      <button class="nav-btn" data-view="scores" aria-label="View AI trade scores"><span class="ic">◈</span><span class="lbl">Scores</span></button>
+      <button class="nav-btn" data-view="risk" aria-label="View risk calculator"><span class="ic">⚖</span><span class="lbl">Risk</span></button>
+      <button class="nav-btn" data-view="portfolio" aria-label="View portfolio AI"><span class="ic">◔</span><span class="lbl">Pfolio</span></button>
+      <button class="nav-btn" data-view="onchain" aria-label="View IOST on-chain dashboard"><span class="ic">⛓</span><span class="lbl">Chain</span></button>
+      <button class="nav-btn" data-view="news" aria-label="View market news and sentiment"><span class="ic">✉</span><span class="lbl">News</span></button>
+      <button class="nav-btn" data-view="journal" aria-label="View AI trading journal"><span class="ic">▦</span><span class="lbl">Journal</span></button>
+      <button class="nav-btn" data-view="performance" aria-label="View performance analytics"><span class="ic">◮</span><span class="lbl">Perf</span></button>
+      <button class="nav-btn" data-view="whales" aria-label="View large trades log"><span class="ic">🐋</span><span class="lbl">Whales</span></button>
+      <button class="nav-btn" data-view="agents" aria-label="View decentralized AI agents marketplace"><span class="ic">🤖</span><span class="lbl">Agents</span></button>
+      <button class="nav-btn" data-view="points" aria-label="View platform points and referral program"><span class="ic">◆</span><span class="lbl">Points</span></button>
+      <button class="nav-btn" data-view="wallet" aria-label="View your free IOST wallet"><span class="ic">👛</span><span class="lbl">Wallet</span></button>
+    </nav>
+    <div class="side-foot">
+      <!-- Logs tab hidden per PROJECT OWNER 2026-08-10 (raw /api/audit endpoint still available) -->
+      <a class="side-link" href="/" aria-label="Back to landing page"><span class="ic">⌂</span><span class="lbl">Home</span></a>
+      <span class="side-link badge-io" role="img" aria-label="Signals proven on the IOST blockchain" title="Every signal is SHA-256 hash-pinned on IOST mainnet"><span class="ic">⛓</span><span class="lbl">PROVEN ON IOST</span></span>
+    </div>
+  </aside>
+
+  <main class="cmd-main">
+    <div class="view" id="view-scanner" aria-label="AI market scanner view"></div>
+    <div class="view hidden" id="view-scores" aria-label="AI trade scores view"></div>
+    <div class="view hidden" id="view-risk" aria-label="Risk calculator view"></div>
+    <div class="view hidden" id="view-portfolio" aria-label="Portfolio AI view"></div>
+    <div class="view hidden" id="view-onchain" aria-label="On-chain dashboard view"></div>
+    <div class="view hidden" id="view-news" aria-label="Market news view"></div>
+    <div class="view hidden" id="view-assistant" aria-label="AI trade assistant view"></div>
+    <div class="view hidden" id="view-journal" aria-label="AI trading journal view"></div>
+    <div class="view hidden" id="view-performance" aria-label="Performance analytics view"></div>
+    <div class="view hidden" id="view-whales" aria-label="Large trades log view"></div>
+    <div class="view hidden" id="view-agents" aria-label="Decentralized AI agents view"></div>
+    <div class="view hidden" id="view-points" aria-label="Platform points view"></div>
+    <div class="view hidden" id="view-wallet" aria-label="Your free IOST wallet view"></div>
+  </main>
+
+  <aside class="rail" aria-label="AI command intelligence rail">
+    <section class="glass rail-card" aria-label="Market probability gauge">
+      <div class="rc-title">MARKET OVERVIEW <span class="rc-sub mono" id="gaugeSym">--</span></div>
+      <canvas id="gaugeCanvas" class="gauge" aria-label="Probability gauge"></canvas>
+      <div class="gauge-label mono" id="gaugeLabel">--</div>
+      <div class="gauge-scale"><span>0%</span><span>50%</span><span>100%</span></div>
+    </section>
+
+    <section class="glass rail-card" aria-label="Agent fusion recommendation">
+      <div class="rc-title">AGENT FUSION <span class="rc-sub">signal agent · live</span></div>
+      <div class="fusion-rec" id="fusionRec">—</div>
+      <div class="fusion-conf mono" id="fusionConf">--% confidence</div>
+      <div class="fusion-quote" id="fusionQuote">awaiting signal…</div>
+      <div class="fusion-drivers" id="fusionDrivers"></div>
+    </section>
+
+    <section class="glass rail-card" aria-label="State classification">
+      <div class="rc-title">STATE CLASSIFICATION</div>
+      <div class="state-grid">
+        <div class="state-cell"><span class="s-label">24H HIGH</span><span class="s-val mono" id="stHigh">--</span></div>
+        <div class="state-cell"><span class="s-label">24H LOW</span><span class="s-val mono" id="stLow">--</span></div>
+        <div class="state-cell"><span class="s-label">VOL 24H</span><span class="s-val mono" id="stVol">--</span></div>
+        <div class="state-cell"><span class="s-label">LATENCY</span><span class="s-val mono" id="stLat">--</span></div>
+      </div>
+    </section>
+
+    <section class="glass rail-card" aria-label="Portfolio allocation">
+      <div class="rc-title">PORTFOLIO <span class="rc-sub mono" id="pfPnl">--</span></div>
+      <canvas id="donutCanvas" class="donut" aria-label="Portfolio allocation donut"></canvas>
+      <div class="donut-legend" id="donutLegend"></div>
+    </section>
+
+    <section class="glass rail-card exec" aria-label="Execution controls">
+      <button class="btn-big buy needs-auth" id="cmdBuy" aria-label="Execute paper buy order on top asset">BUY</button>
+      <button class="btn-big sell needs-auth" id="cmdSell" aria-label="Execute paper sell order on top asset">SELL</button>
+    </section>
+  </aside>
+</div>
+
+<footer class="foot">
+  <span>Paper execution · Live market data (OKX/KuCoin/Gate · Yahoo) · IOST mainnet RPC</span>
+  <span class="mono foot-legal"><a href="/terms" aria-label="Terms of Service">Terms</a> · <a href="/privacy" aria-label="Privacy Policy">Privacy</a> · <a href="/risk-disclosure" aria-label="Risk Disclosure">Risk Disclosure</a></span>
+  <span class="mono" id="footTs"></span>
+</footer>
+
+<!-- asset detail modal -->
+<!-- sign-in gate: the Terminal requires an account (free) -->
+<div class="modal-backdrop hidden" id="gateOverlay" role="dialog" aria-modal="true" aria-label="Sign in required">
+  <div class="modal auth-modal" style="text-align:center">
+    <button class="gate-close" id="gateClose" aria-label="Close and browse without signing in">✕</button>
+    <div class="auth-head">
+      <div class="auth-title">SIGN IN TO ENTER</div>
+      <div class="auth-sub">Your $100K paper account and live trading live here.</div>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+      <button class="btn green" id="gateLogin" aria-label="Sign in to your account">SIGN IN</button>
+      <button class="btn ghost" id="gateSignup" aria-label="Create a free account">CREATE ACCOUNT</button>
+    </div>
+    <div class="muted" style="font-size:11px;margin-top:12px">Free paper trading · no credit card · 4h session</div>
+  </div>
+</div>
+
+<div class="modal-backdrop hidden" id="detailModal" role="dialog" aria-modal="true" aria-label="Asset detail">
+  <div class="modal" id="detailBody"></div>
+</div>
+
+<!-- auth modal (login / signup / forgot password / 2FA / backup codes) -->
+<div class="modal-backdrop hidden" id="authModal" role="dialog" aria-modal="true" aria-label="Account sign in">
+  <div class="modal auth-modal" id="authBody" role="document"></div>
+</div>
+
+<!-- password reset panel — reached from email link /app#reset?token=... -->
+<div class="auth-reset-overlay hidden" id="authReset" role="dialog" aria-modal="true" aria-label="Reset password">
+  <div class="auth-reset-card" id="authResetBody" role="document"></div>
+</div>
+
+<script defer src="/js/vendor/lightweight-charts.js"></script>
+<script defer src="/js/vendor/tweetnacl.min.js"></script>
+<script type="module" src="/js/app.js?v=2.7.9"></script>
+<script type="module" src="/js/auth.js?v=2.7.2"></script>
+<script type="application/json" id="agent-state">null</script>
+</body>
+</html>

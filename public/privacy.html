@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Privacy Policy — IOST Terminal</title>
+<meta name="description" content="Privacy Policy for IOST Terminal — what data is collected (email, hashed passwords, trading data), how it is secured (bcrypt, 2FA), and that it is never sold.">
+<meta name="robots" content="index,follow">
+<link rel="canonical" href="https://iostcallister.com/privacy">
+<style>
+:root {
+  --bg: #04060a; --surface: #0a0e15; --line: #16202e; --line-strong: #22324a;
+  --text: #e8f1f8; --muted: #8294a6; --dim: #51617a;
+  --cyan: #00e5ff; --violet: #7c5cff; --mint: #22d3aa; --amber: #ffc857;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+  --sans: 'Inter', system-ui, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { color-scheme: dark; }
+body {
+  background:
+    radial-gradient(70% 55% at 50% 0%, rgba(0, 229, 255, .07), transparent 65%),
+    var(--bg);
+  color: var(--text); font-family: var(--sans); font-size: 15px; line-height: 1.7;
+}
+a { color: var(--cyan); text-decoration: none; }
+a:hover { text-decoration: underline; }
+header {
+  padding: 28px 32px; border-bottom: 1px solid var(--line);
+  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+}
+header .brand { font-family: var(--mono); font-weight: 700; letter-spacing: 1.5px; color: var(--text); }
+header .brand .dot { color: var(--cyan); }
+header .crumb { font-size: 12px; color: var(--dim); font-family: var(--mono); }
+main { max-width: 860px; margin: 0 auto; padding: 56px 32px 96px; }
+h1 { font-family: var(--mono); font-size: clamp(26px, 4vw, 38px); letter-spacing: 1px; margin-bottom: 10px; }
+.effective { font-family: var(--mono); font-size: 12px; color: var(--amber); letter-spacing: 1px; margin-bottom: 8px; }
+.lede { color: var(--muted); margin: 18px 0 8px; max-width: 70ch; }
+h2 {
+  font-family: var(--mono); font-size: 17px; letter-spacing: 1px; color: var(--cyan);
+  margin: 44px 0 14px; padding-top: 18px; border-top: 1px solid var(--line);
+}
+h2::before { content: '> '; color: var(--violet); }
+p { margin-bottom: 14px; max-width: 72ch; }
+ul { margin: 0 0 14px 22px; max-width: 72ch; }
+li { margin-bottom: 8px; }
+.placeholder { color: var(--amber); font-family: var(--mono); font-size: .92em; }
+.note {
+  border: 1px solid rgba(255, 200, 87, .35); background: rgba(255, 200, 87, .06);
+  border-radius: 4px; padding: 14px 16px; color: var(--amber); margin: 20px 0;
+  font-size: 14px;
+}
+footer {
+  border-top: 1px solid var(--line); padding: 28px 32px;
+  display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  font-size: 12px; color: var(--dim); font-family: var(--mono);
+}
+footer a { color: var(--muted); }
+footer a:hover { color: var(--cyan); text-decoration: none; }
+@media (max-width: 640px) { main { padding: 40px 20px 80px; } }
+</style>
+</head>
+<body>
+<header>
+  <a class="brand" href="/">◈ IOST<span class="dot">TERMINAL</span></a>
+  <span class="crumb">/ privacy</span>
+</header>
+
+<main>
+  <h1>Privacy Policy</h1>
+  <div class="effective">EFFECTIVE DATE: <span class="placeholder">[Effective Date]</span> — DRAFT v0.1 (pending review)</div>
+  <p class="lede">This Privacy Policy explains what data IOST Terminal ("we", "us"), operated by <span class="placeholder">[Company Name]</span>, collects, why we collect it, and the choices you have. In short: we collect the minimum needed to run the Service, we never sell your data, and we store secrets in hashed or encrypted form.</p>
+
+  <div class="note">DRAFT — Prepared for review by PROJECT OWNER and counsel. Placeholders marked <span class="placeholder">[brackets]</span> must be filled in before publication.</div>
+
+  <h2>1. What we collect</h2>
+  <ul>
+    <li><b>Account data:</b> email address, a <b>hashed</b> password (bcrypt — plaintext passwords are never stored or logged), and optional two-factor authentication (2FA) configuration.</li>
+    <li><b>Trading data:</b> paper-trading positions, journal entries, autopilot configuration and actions, and — if you enable live trading — your own exchange API keys, stored <b>encrypted</b>, plus records of orders routed through the Service.</li>
+    <li><b>Session data:</b> a session cookie (<code>iost.sid</code>, httpOnly, SameSite=Lax, Secure when served over HTTPS) so you stay signed in. We do not use third-party advertising cookies or tracking cookies.</li>
+    <li><b>Technical logs:</b> brief server-side audit entries (timestamp, method, path, API key label or "anon") used to detect abuse. No request bodies are logged.</li>
+  </ul>
+
+  <h2>2. How we use data</h2>
+  <p>To operate and secure the Service: authenticating you, running your paper account, executing orders you authorize, generating AI analyses from market data, and preventing abuse. Market data and AI outputs shown in the Service are derived from public third-party feeds, not from your personal data.</p>
+
+  <h2>3. What we do NOT do</h2>
+  <ul>
+    <li>We do <b>not</b> sell, rent, or trade your personal data.</li>
+    <li>We do <b>not</b> use your data for advertising or ad targeting.</li>
+    <li>We do <b>not</b> share your exchange API keys with any third party. Orders are submitted directly from the Service to the venue you designate.</li>
+  </ul>
+
+  <h2>4. Data sharing</h2>
+  <p>We share data only with service providers strictly necessary to run the Service (hosting), and only where required by law or to protect the rights and safety of the Service and its users. A list of processors and their purposes is available on request.</p>
+
+  <h2>5. Security practices</h2>
+  <ul>
+    <li>Passwords are hashed with <b>bcrypt</b>; exchange API secrets are <b>encrypted at rest</b>.</li>
+    <li><b>2FA</b> (TOTP) is supported and recommended for your account.</li>
+    <li>All traffic is served over <b>HTTPS</b> with HSTS; security headers (CSP, nosniff, X-Frame-Options, Referrer-Policy, Permissions-Policy) are set on every response.</li>
+    <li>Sessions expire after 4 hours of inactivity.</li>
+    <li>Access to production infrastructure is limited to authorized operators.</li>
+  </ul>
+
+  <h2>6. Retention and deletion</h2>
+  <p>Account and trading data are kept while your account is active. You may request deletion of your account and associated data at any time via <span class="placeholder">[privacy@example.com]</span>; we will delete or anonymize the data within <span class="placeholder">[30]</span> days, except where law requires retention (e.g. audit records required for fraud prevention).</p>
+
+  <h2>7. Your rights</h2>
+  <p>Depending on your jurisdiction, you may have rights to access, correct, export, or delete your personal data, and to object to or restrict certain processing. To exercise them, contact <span class="placeholder">[privacy@example.com]</span>.</p>
+
+  <h2>8. Changes to this policy</h2>
+  <p>We will post any changes here with a revised effective date. Material changes will be announced in the Service.</p>
+
+  <h2>9. Contact</h2>
+  <p>Privacy questions: <span class="placeholder">[privacy@example.com]</span>.</p>
+</main>
+
+<footer>
+  <span>◈ IOST TERMINAL — AI real-trading platform · paper-first</span>
+  <span><a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · <a href="/risk-disclosure">Risk Disclosure</a> · <a href="/">← Home</a></span>
+</footer>
+</body>
+</html>

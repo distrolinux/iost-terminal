@@ -1,0 +1,27 @@
+{
+  "name": "iost-terminal",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "bs58": "^6.0.0",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.6.2",
+    "express-session": "^1.19.0",
+    "nodemailer": "^9.0.5",
+    "otplib": "^13.4.1",
+    "qrcode": "^1.5.4",
+    "tweetnacl": "^1.0.3"
+  }
+}

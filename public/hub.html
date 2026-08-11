@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IOST Terminal — Automation Hub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #03060b; --cyan: #00e5ff; --violet: #7c5cff; --mint: #22d3aa;
+  --text: #e8f1f8; --muted: #7d8fa3; --dim: #45566b; --red: #ff5c5c; --amber: #ffc857;
+  --mono: 'JetBrains Mono', ui-monospace, monospace; --disp: 'Space Grotesk', system-ui, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body { background: var(--bg); color: var(--text); font-family: var(--mono); }
+#scene { position: fixed; inset: 0; display: block; }
+#fallback {
+  position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+  background: radial-gradient(60% 50% at 50% 30%, rgba(0,229,255,.08), transparent), var(--bg);
+  text-align: center; padding: 40px; font-size: 14px; color: var(--muted); line-height: 1.8;
+}
+.no-webgl #scene { display: none; } .no-webgl #fallback { display: flex; }
+
+.hud { position: fixed; z-index: 20; pointer-events: none; }
+.hud.tl { top: 26px; left: 32px; }
+.hud.tr { top: 26px; right: 32px; text-align: right; }
+.hud.bl { bottom: 26px; left: 32px; }
+.hud.br { bottom: 26px; right: 32px; text-align: right; }
+.hud .t1 { font-family: var(--disp); font-weight: 700; font-size: 19px; letter-spacing: 2.5px; }
+.hud .t1 .dot { color: var(--cyan); text-shadow: 0 0 12px var(--cyan); }
+.hud .t2 { font-size: 10px; letter-spacing: 3px; color: var(--muted); margin-top: 4px; text-transform: uppercase; }
+.hud .t3 { font-size: 11px; color: var(--dim); letter-spacing: 1px; margin-top: 10px; line-height: 1.9; }
+.hud a { pointer-events: auto; color: var(--muted); text-decoration: none; font-size: 12px; letter-spacing: 1.5px; border: 1px solid var(--dim); padding: 7px 14px; border-radius: 4px; transition: all .2s; }
+.hud a:hover { color: var(--cyan); border-color: var(--cyan); box-shadow: 0 0 14px rgba(0,229,255,.25); }
+.live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 10px var(--mint); animation: blink 1.6s infinite; margin-right: 8px; vertical-align: middle; }
+@keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: .2; } }
+
+#tooltip {
+  position: fixed; z-index: 30; display: none; pointer-events: none;
+  background: rgba(6, 11, 18, .92); border: 1px solid rgba(0, 229, 255, .35);
+  border-radius: 6px; padding: 12px 16px; min-width: 210px;
+  box-shadow: 0 12px 40px rgba(0,0,0,.6), 0 0 22px rgba(0,229,255,.12);
+  font-size: 12px; line-height: 1.7;
+}
+#tooltip .tt-name { font-weight: 700; font-size: 13px; letter-spacing: 1px; color: var(--cyan); margin-bottom: 4px; }
+#tooltip .tt-row { display: flex; justify-content: space-between; gap: 18px; color: var(--muted); }
+#tooltip .tt-row b { color: var(--text); font-weight: 500; }
+#tooltip .tt-sim { color: var(--amber); }
+
+@media (prefers-reduced-motion: reduce) {
+  .live-dot { animation: none; }
+}
+</style>
+</head>
+<body>
+<canvas id="scene" aria-hidden="true"></canvas>
+<div id="fallback">WebGL is unavailable in this browser.<br>The Automation Hub needs a GPU-accelerated context.<br><a href="/" style="color:var(--cyan)">← back to terminal</a></div>
+
+<div class="hud tl">
+  <div class="t1">◈ IOST<span style="color:var(--muted)">TERMINAL</span> <span class="dot">AUTOMATION HUB</span></div>
+  <div class="t2">3D command network · 8 strategy bots · live data</div>
+</div>
+<div class="hud tr">
+  <div class="t2"><span class="live-dot" role="status" aria-label="Live"></span><span id="clock" role="timer" aria-label="UTC clock">--:--:--</span> UTC</div>
+  <div style="margin-top:10px"><a href="/" aria-label="Back to IOST Terminal landing page">← Landing</a>&nbsp;&nbsp;<a href="/app" aria-label="Open IOST Terminal trading console">Terminal →</a></div>
+</div>
+<div class="hud bl">
+  <div class="t3">DRAG orbit · SCROLL zoom · CLICK a bot for intel (ESC unpins) · machine layer: <a href="/api/ui-state" aria-label="Machine-readable platform state as JSON">/api/ui-state</a></div>
+  <div class="t3 legal"><a href="/terms" aria-label="Terms of Service">Terms</a> · <a href="/privacy" aria-label="Privacy Policy">Privacy</a> · <a href="/risk-disclosure" aria-label="Risk Disclosure">Risk Disclosure</a></div>
+</div>
+<div class="hud br">
+  <div class="t2" id="feedState" role="status" aria-live="polite">SYNCING…</div>
+</div>
+
+<div id="tooltip" role="tooltip" aria-hidden="true"></div>
+
+<script type="application/json" id="agent-state">null</script>
+
+<script src="/js/vendor/three.min.js"></script>
+<script src="/js/vendor/OrbitControls.js"></script>
+<script>
+'use strict';
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const $ = s => document.querySelector(s);
+const data = { scan: [], scores: [], klines: [], onchain: null, market: null, paper: null };
+const panels = [];
+const screens = [];
+
+/* ============ canvas texture helpers ============ */
+function makeTex(w, h, draw) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.minFilter = THREE.LinearFilter; t.needsUpdate = true;
+  return { tex: t, canvas: c };
+}
+function panelSprite(w, h, draw, scaleW) {
+  const { tex } = makeTex(w, h, draw);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, opacity: .96 }));
+  const aspect = w / h;
+  sp.scale.set(scaleW, scaleW / aspect, 1);
+  return sp;
+}
+function drawPanelBase(ctx, w, h, title, color) {
+  ctx.clearRect(0, 0, w, h);
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, 'rgba(8,14,24,.94)'); g.addColorStop(1, 'rgba(5,9,16,.94)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.roundRect ? ctx.roundRect(6, 6, w - 12, h - 12, 14) : ctx.rect(6, 6, w - 12, h - 12);
+  ctx.fill();
+  ctx.strokeStyle = color || '#00e5ff'; ctx.globalAlpha = .9; ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect ? ctx.roundRect(6, 6, w - 12, h - 12, 14) : ctx.rect(6, 6, w - 12, h - 12);
+  ctx.stroke(); ctx.globalAlpha = 1;
+  ctx.fillStyle = color || '#00e5ff'; ctx.font = '700 21px "JetBrains Mono", monospace';
+  ctx.fillText(title, 26, 42);
+  ctx.fillStyle = 'rgba(0,229,255,.6)'; ctx.fillRect(26, 56, 30, 2);
+}
+function chip(ctx, x, y, text, color) {
+  ctx.font = '600 17px "JetBrains Mono", monospace';
+  const wdt = ctx.measureText(text).width + 22;
+  ctx.fillStyle = color; ctx.globalAlpha = .16;
+  ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y - 18, wdt, 26, 6) : ctx.rect(x, y - 18, wdt, 26); ctx.fill();
+  ctx.globalAlpha = 1; ctx.fillStyle = color; ctx.fillText(text, x + 11, y);
+}
+
+/* ============ renderer / scene ============ */
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas: $('#scene'), antialias: true, alpha: false });
+} catch (e) { document.body.classList.add('no-webgl'); throw e; }
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputEncoding = THREE.sRGBEncoding;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x03060b);
+scene.fog = new THREE.Fog(0x03060b, 26, 46);
+
+const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.1, 120);
+const camEnd = new THREE.Vector3(15, 7.5, 17);
+const camStart = new THREE.Vector3(34, 22, 44);
+/* intro: phase 0 = dolly fly-in, phase 1 = slow orbit settle */
+let intro = !reduceMotion, introPhase = 0, introT = 0;
+const settleSweep = 0.55, settleDur = 3.2;
+const settleR = camEnd.length();
+const settlePhi = Math.acos(camEnd.y / settleR);
+const settleTheta0 = Math.atan2(camEnd.z, camEnd.x);
+camera.position.copy(intro ? camStart : camEnd);
+camera.lookAt(0, 0, 0);
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enabled = !intro;
+controls.enableDamping = true; controls.dampingFactor = 0.06;
+controls.minDistance = 7; controls.maxDistance = 30;
+controls.maxPolarAngle = Math.PI / 2.05;
+controls.target.set(0, 0, 0);
+
+/* stars */
+const starGeo = new THREE.BufferGeometry();
+const starN = 2200;
+const starPos = new Float32Array(starN * 3);
+for (let i = 0; i < starN; i++) {
+  const r = 24 + Math.random() * 46;
+  const th = Math.random() * Math.PI * 2, ph = Math.acos(2 * Math.random() - 1);
+  starPos[i * 3] = r * Math.sin(ph) * Math.cos(th);
+  starPos[i * 3 + 1] = r * Math.cos(ph) * .6;
+  starPos[i * 3 + 2] = r * Math.sin(ph) * Math.sin(th);
+}
+starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xd8f2ff, size: 0.19, transparent: true, opacity: 1 })));
+
+/* faint candlestick background billboards (unite.ai-style market tape) */
+function candleChartTex(w, h, seed) {
+  return makeTex(w, h, (ctx) => {
+    ctx.clearRect(0, 0, w, h);
+    const n = 22;
+    let price = 0.5;
+    const candles = [];
+    for (let i = 0; i < n; i++) {
+      const drift = (Math.sin(seed * 12.9898 + i * 1.3) * 43758.5453) % 1;
+      const move = (Math.abs(drift) - 0.5) * 0.09;
+      price = Math.max(0.12, Math.min(0.88, price + move));
+      const o = price;
+      price = Math.max(0.12, Math.min(0.88, price + (Math.abs(drift) - 0.5) * 0.12));
+      const c = price;
+      candles.push({ o, c, h: Math.abs(c - o) + 0.012 });
+    }
+    const pad = 20;
+    const cw = (w - pad * 2) / n;
+    candles.forEach((cd, i) => {
+      const x = pad + i * cw + cw / 2;
+      const yO = pad + (1 - cd.o) * (h - pad * 2);
+      const yC = pad + (1 - cd.c) * (h - pad * 2);
+      const up = cd.c >= cd.o;
+      const col = up ? 'rgba(34,211,170,' : 'rgba(255,92,92,';
+      ctx.fillStyle = col + '.55)';
+      ctx.fillRect(x - cw * 0.28, Math.min(yO, yC), cw * 0.56, Math.max(Math.abs(yC - yO), 2));
+      ctx.fillRect(x - 0.75, Math.min(yO, yC) - cd.h * (h - pad * 2) * 0.6, 1.5, cd.h * (h - pad * 2) * 0.6 + Math.abs(yC - yO));
+    });
+  });
+}
+[0, 1, 2].forEach((seed, i) => {
+  const { tex } = candleChartTex(720, 360, seed * 0.618);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: tex, transparent: true, depthWrite: false, opacity: 0.15,
+    blending: THREE.AdditiveBlending, depthTest: false,
+  }));
+  sp.position.set((i - 1) * 9.5, 1.2 + Math.sin(seed * 9) * 1.6, -13 - i * 4);
+  sp.scale.set(14, 7, 1);
+  scene.add(sp);
+});
+
+/* ---------- lighting (for the physical AI operator) ---------- */
+scene.add(new THREE.AmbientLight(0x7788aa, 1.0));
+const keyLight = new THREE.DirectionalLight(0xc4ecff, 1.6);
+keyLight.position.set(8, 14, 6);
+scene.add(keyLight);
+const rimLight = new THREE.DirectionalLight(0x8f6bff, 0.85);
+rimLight.position.set(-8, 4, -8);
+scene.add(rimLight);
+const popLight = new THREE.PointLight(0xff3cf0, 0.65, 18);
+popLight.position.set(-5, 3, 9);
+scene.add(popLight);
+const deskLight = new THREE.PointLight(0xff8844, 0.6, 10);
+deskLight.position.set(10, 1.2, 5.6);
+scene.add(deskLight);
+
+/* ---------- orbital data-center backdrop ---------- */
+const dscTex = new THREE.TextureLoader().load('/img/space-datacenter.png?v=2');
+const dsc = new THREE.Sprite(new THREE.SpriteMaterial({ map: dscTex, transparent: true, opacity: 0.46, depthWrite: false, fog: false }));
+dsc.position.set(0, 4.5, -40);
+dsc.scale.set(92, 52, 1);
+scene.add(dsc);
+
+/* ---------- AI trader workstation (desk + monitors + operator) ---------- */
+function deskScreen(desk, x, y, draw, w = 1.55, h = 0.98) {
+  const { tex } = makeTex(640, 400, draw);
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex }));
+  m.position.set(x, y, 0.62);
+  desk.add(m);
+  screens.push({ mesh: m, draw, w: 640, h: 400 });
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(w + 0.12, h + 0.12, 0.07), new THREE.MeshStandardMaterial({ color: 0x141a24, roughness: .6 }));
+  frame.position.set(x, y, 0.585);
+  desk.add(frame);
+}
+function drawDeskFeed(ctx, w, h) {
+  ctx.clearRect(0, 0, w, h); ctx.fillStyle = '#060b12'; ctx.fillRect(0, 0, w, h);
+  const k = data.klines.slice(-42);
+  if (k.length > 3) {
+    const cw = w / k.length, pad = 16;
+    const min = Math.min(...k.map(x => x.l)), max = Math.max(...k.map(x => x.h));
+    k.forEach((c, i) => {
+      const x = i * cw + cw / 2;
+      const yv = (v) => pad + (1 - (v - min) / (max - min || 1)) * (h - pad * 2);
+      const up = c.c >= c.o;
+      ctx.strokeStyle = up ? '#22d3aa' : '#ff5c5c'; ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.moveTo(x, yv(c.h)); ctx.lineTo(x, yv(c.l)); ctx.stroke();
+      ctx.fillStyle = up ? '#22d3aa' : '#ff5c5c';
+      ctx.fillRect(x - cw * 0.32, Math.min(yv(c.o), yv(c.c)), cw * 0.64, Math.max(Math.abs(yv(c.c) - yv(c.o)), 2));
+    });
+  }
+  ctx.fillStyle = '#22d3aa'; ctx.font = '700 21px "JetBrains Mono", monospace';
+  ctx.fillText('BTC/USDT · LIVE', 16, 30);
+}
+function drawDeskSignals(ctx, w, h) {
+  ctx.clearRect(0, 0, w, h); ctx.fillStyle = '#060b12'; ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = '#00e5ff'; ctx.font = '700 20px "JetBrains Mono", monospace';
+  ctx.fillText('LIVE SIGNALS', 16, 30);
+  (data.scores || []).slice(0, 4).forEach((s, i) => {
+    const y = 64 + i * 44;
+    const dir = s.composite >= 65 ? 'BUY' : s.composite <= 45 ? 'SELL' : 'HOLD';
+    ctx.fillStyle = '#e8f1f8'; ctx.font = '700 17px "JetBrains Mono", monospace';
+    ctx.fillText(s.symbol, 16, y);
+    ctx.fillStyle = dir === 'BUY' ? '#22d3aa' : dir === 'SELL' ? '#ff5c5c' : '#ffc857';
+    ctx.font = '700 17px "JetBrains Mono", monospace';
+    ctx.fillText(dir + ' ' + s.composite, w - 96, y);
+  });
+}
+function stdMat(color, r = 0.4, m = 0.15) { return new THREE.MeshStandardMaterial({ color, roughness: r, metalness: m }); }
+
+/* desk screen: on-chain readout (variety for the second operator) */
+function drawDeskChain(ctx, w, h) {
+  ctx.clearRect(0, 0, w, h); ctx.fillStyle = '#060b12'; ctx.fillRect(0, 0, w, h);
+  const c = data.onchain?.chain;
+  ctx.fillStyle = '#7c5cff'; ctx.font = '700 20px "JetBrains Mono", monospace';
+  ctx.fillText('IOST MAINNET', 16, 30);
+  const rows = [
+    ['TPS', c ? String(c.tps) : '—'],
+    ['HEAD', c ? Number(c.headBlock).toLocaleString() : '—'],
+    ['PEERS', c ? String(c.peerCount) : '—'],
+    ['ADDR', c ? String(c.activeAddresses) : '—'],
+  ];
+  rows.forEach(([k, v], i) => {
+    const y = 78 + i * 58;
+    ctx.fillStyle = '#7d8fa3'; ctx.font = '500 17px "JetBrains Mono", monospace';
+    ctx.fillText(k, 16, y);
+    ctx.fillStyle = '#c9d6e4'; ctx.font = '700 24px "JetBrains Mono", monospace';
+    ctx.fillText(v, 16, y + 30);
+    ctx.fillStyle = 'rgba(124,92,255,.25)';
+    ctx.fillRect(16, y + 40, w - 32, 1);
+  });
+}
+/* floating hologram above the main desk */
+function drawHolo(ctx, w, h) {
+  ctx.clearRect(0, 0, w, h);
+  const g = ctx.createLinearGradient(0, 0, w, h);
+  g.addColorStop(0, 'rgba(4,10,18,.92)'); g.addColorStop(1, 'rgba(12,6,26,.92)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = '#00e5ff'; ctx.globalAlpha = .55; ctx.lineWidth = 2; ctx.strokeRect(4, 4, w - 8, h - 8); ctx.globalAlpha = 1;
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#00e5ff'; ctx.font = '700 24px "JetBrains Mono", monospace';
+  ctx.fillText('◈ MARKET CORE — LIVE', w / 2, 40);
+  const s = data.scores[0];
+  ctx.fillStyle = '#ffffff'; ctx.font = '700 46px "JetBrains Mono", monospace';
+  ctx.fillText(s ? `${s.symbol}  ${s.composite}/100 · ${s.grade}` : 'SYNCING…', w / 2, 108);
+  const c = data.onchain?.chain;
+  ctx.fillStyle = '#7d8fa3'; ctx.font = '500 19px "JetBrains Mono", monospace';
+  ctx.fillText(`TPS ${c ? c.tps : '—'}  ·  HEAD ${c ? Number(c.headBlock).toLocaleString() : '—'}  ·  PEERS ${c ? c.peerCount : '—'}`, w / 2, 150);
+  const m = data.market;
+  ctx.fillStyle = '#22d3aa'; ctx.font = '700 21px "JetBrains Mono", monospace';
+  ctx.fillText(m ? `${m.bullish} BULL · ${m.neutral} NEUT · ${m.bearish} BEAR` : '', w / 2, 194);
+  ctx.textAlign = 'left';
+}
+
+/* operator builder — desk + live monitors + stylized AI trader */
+const operators = [];
+function buildOperator(x, z, rotY, opts = {}) {
+  const accent = opts.accent || 0x22d3aa;
+  const draws = opts.draws || [drawDeskFeed, drawDeskSignals];
+  const desk = new THREE.Group();
+  desk.position.set(x, -3.0, z);
+  desk.rotation.y = rotY;
+  scene.add(desk);
+  const table = new THREE.Mesh(new THREE.BoxGeometry(3.1, 0.13, 1.55), stdMat(0x0e1522, 0.55));
+  table.position.y = 0.62; desk.add(table);
+  [-1.4, 1.4].forEach(px => { const leg = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.62, 0.14), stdMat(0x141a24, 0.6)); leg.position.set(px, 0.31, 0); desk.add(leg); });
+  deskScreen(desk, -0.66, 1.6, draws[0]);
+  deskScreen(desk, 0.74, 1.6, draws[1]);
+
+  const bot = new THREE.Group();
+  bot.position.set(0, 1.0, 1.32);
+  desk.add(bot);
+  const WHT = 0xf2f5f7;
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.74, 0.84, 0.44), stdMat(WHT, 0.35, 0.12));
+  torso.position.y = 0.78; bot.add(torso);
+  const chest = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.28, 0.06), stdMat(0xe9eef3, 0.3));
+  chest.position.set(0, 0.88, -0.23); bot.add(chest);
+  const chestLight = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.07, 0.02), new THREE.MeshBasicMaterial({ color: accent }));
+  chestLight.position.set(0, 0.88, -0.26); bot.add(chestLight);
+  function arm(side) {
+    const g = new THREE.Group(); g.position.set(side * 0.47, 1.24, 0); bot.add(g);
+    const sh = new THREE.Mesh(new THREE.SphereGeometry(0.15, 14, 14), stdMat(WHT, 0.3));
+    g.add(sh);
+    const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.095, 0.34, 10), stdMat(WHT, 0.4));
+    upper.position.y = -0.17; g.add(upper);
+    const elbow = new THREE.Mesh(new THREE.SphereGeometry(0.085, 10, 10), stdMat(0x1a1f26, 0.55));
+    elbow.position.y = -0.37; g.add(elbow);
+    const fore = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.075, 0.3, 10), stdMat(WHT, 0.4));
+    fore.position.y = -0.56; g.add(fore);
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.08, 0.17), stdMat(WHT, 0.35));
+    hand.position.set(0, -0.74, -0.06); g.add(hand);
+    const light = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 8), new THREE.MeshBasicMaterial({ color: 0xff8a3c }));
+    light.position.set(side * 0.05, -0.08, 0.13); g.add(light);
+    return g;
+  }
+  const armL = arm(-1), armR = arm(1);
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.12, 0.13, 10), stdMat(0x1a1f26, 0.55));
+  neck.position.y = 1.36; bot.add(neck);
+  const head = new THREE.Group(); head.position.y = 1.55; bot.add(head);
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.275, 22, 22), stdMat(WHT, 0.3, 0.08));
+  head.add(skull);
+  const headRing = new THREE.Mesh(new THREE.TorusGeometry(0.295, 0.036, 10, 36), new THREE.MeshBasicMaterial({ color: opts.ring || 0xff8a3c }));
+  headRing.rotation.z = Math.PI / 2; headRing.position.x = 0.27;
+  head.add(headRing);
+  const visor = new THREE.Mesh(new THREE.PlaneGeometry(0.17, 0.055), new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.85 }));
+  visor.position.set(0, 0.04, -0.272); head.add(visor);
+  const op = { desk, bot, head, headRing, armL, armR, visor, chestLight, phase: opts.phase || 0 };
+  operators.push(op);
+  return op;
+}
+const op1 = buildOperator(10.2, 5.2, -2.15, { phase: 0 });
+const op2 = buildOperator(-10.6, 4.8, 2.15, { accent: 0x7c5cff, ring: 0x7c5cff, draws: [drawDeskFeed, drawDeskChain], phase: 2.1 });
+/* main operator refs (animated as the lead) */
+let head = op1.head, headRing = op1.headRing, armL = op1.armL, armR = op1.armR, visor = op1.visor, chestLight = op1.chestLight;
+/* floating hologram above the lead desk */
+const holo = new THREE.Mesh(
+  new THREE.PlaneGeometry(3.3, 1.24),
+  new THREE.MeshBasicMaterial({ map: makeTex(800, 300, drawHolo).tex, transparent: true, opacity: 0.92 })
+);
+holo.position.set(0, 3.15, 0.5); holo.rotation.x = -0.2;
+op1.desk.add(holo);
+screens.push({ mesh: holo, draw: drawHolo, w: 800, h: 300 });
+
+/* grid floor */
+const grid = new THREE.GridHelper(52, 36, 0x00ffd5, 0x1a4d66);
+grid.material.transparent = true; grid.material.opacity = 0.6;
+grid.position.y = -4.2;
+scene.add(grid);
+const floor = new THREE.Mesh(
+  new THREE.PlaneGeometry(60, 60),
+  new THREE.MeshBasicMaterial({ color: 0x07243a, transparent: true, opacity: 0.65 })
+);
+floor.rotation.x = -Math.PI / 2; floor.position.y = -4.22;
+scene.add(floor);
+
+/* ============ central hub ============ */
+const hub = new THREE.Group();
+scene.add(hub);
+const core = new THREE.Mesh(
+  new THREE.SphereGeometry(1.05, 32, 32),
+  new THREE.MeshStandardMaterial({ color: 0x041018, emissive: 0x00e5ff, emissiveIntensity: 2.2, metalness: .3, roughness: .25 })
+);
+hub.add(core);
+const shell = new THREE.Mesh(
+  new THREE.IcosahedronGeometry(1.55, 1),
+  new THREE.MeshBasicMaterial({ color: 0x00ffd5, wireframe: true, transparent: true, opacity: 0.5 })
+);
+hub.add(shell);
+function ring(radius, tilt, speed, color) {
+  const r = new THREE.Mesh(
+    new THREE.TorusGeometry(radius, 0.02, 8, 90),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.75 })
+  );
+  r.rotation.x = Math.PI / 2 + tilt;
+  r.userData.speed = speed;
+  hub.add(r);
+  return r;
+}
+const rings = [
+  ring(2.1, 0.5, 0.0035, 0x00e5ff),
+  ring(2.6, -0.85, -0.0028, 0x7c5cff),
+  ring(3.1, 0.1, 0.0019, 0x22d3aa),
+];
+/* hub glow */
+const glowTex = makeTex(256, 256, (ctx, w) => {
+  const g = ctx.createRadialGradient(w / 2, w / 2, 0, w / 2, w / 2, w / 2);
+  g.addColorStop(0, 'rgba(0,229,255,.75)'); g.addColorStop(1, 'rgba(0,229,255,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, w);
+});
+const hubGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex.tex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+hubGlow.scale.set(11, 11, 1);
+hub.add(hubGlow);
+/* hub label */
+const hubLabelTex = makeTex(512, 120, (ctx, w, h) => {
+  ctx.clearRect(0, 0, w, h);
+  ctx.textAlign = 'center'; ctx.font = '700 38px "JetBrains Mono", monospace';
+  ctx.fillStyle = '#00e5ff'; ctx.shadowColor = '#00e5ff'; ctx.shadowBlur = 16;
+  ctx.fillText('MARKET CORE', w / 2, 48);
+  ctx.shadowBlur = 0; ctx.font = '400 20px "JetBrains Mono", monospace';
+  ctx.fillStyle = '#7d8fa3';
+  ctx.fillText('LIVE · 24 ASSETS · CRYPTO + EQUITIES', w / 2, 86);
+});
+const hubLabel = new THREE.Sprite(new THREE.SpriteMaterial({ map: hubLabelTex.tex, transparent: true, depthWrite: false }));
+hubLabel.position.set(0, 2.7, 0); hubLabel.scale.set(6.4, 1.5, 1);
+hub.add(hubLabel);
+
+/* ============ strategy bots ============ */
+const BOT_DEFS = [
+  { name: 'MOMENTUM',      color: 0x00e5ff, metric: 'roc',     desc: 'rides the strongest live momentum' },
+  { name: 'MEAN REVERSION', color: 0x7c5cff, metric: 'rsiLow',  desc: 'fades stretched RSI extremes' },
+  { name: 'BREAKOUT',      color: 0x22d3aa, metric: 'breakout', desc: 'buys volume-confirmed range breaks' },
+  { name: 'SCALPING',      color: 0xffc857, metric: 'volz',    desc: 'harvests micro-moves on volume spikes' },
+  { name: 'SWING',         color: 0xff5c5c, metric: 'best24h', desc: 'holds multi-day trend structure' },
+  { name: 'ARBITRAGE',     color: 0x38bdf8, metric: 'trades',  desc: 'captures cross-market spread' },
+  { name: 'NEWS TRADING',  color: 0x22d3aa, metric: 'news',    desc: 'front-runs classified headlines' },
+  { name: 'OPTIONS FLOW',  color: 0x7c5cff, metric: 'onchain', desc: 'reads whale tape + chain activity' },
+];
+const SIM_PNL = [12.45, 7.21, 9.64, 5.32, 8.19, 3.17, 11.03, 6.71];
+const heights = [2.4, 1.3, 0.4, -0.7, -1.7, -0.9, 0.3, 1.6];
+const radii = [7.2, 6.6, 7.4, 6.8, 7.6, 6.9, 7.3, 6.7];
+
+const orbit = new THREE.Group();
+scene.add(orbit);
+const bots = [];
+
+function botLabelTex(name, line2, color) {
+  return makeTex(560, 150, (ctx, w, h) => {
+    ctx.clearRect(0, 0, w, h);
+    ctx.textAlign = 'center';
+    ctx.font = '700 34px "JetBrains Mono", monospace';
+    ctx.fillStyle = '#ffffff'; ctx.shadowColor = color; ctx.shadowBlur = 14;
+    ctx.fillText(name, w / 2, 56);
+    ctx.shadowBlur = 0;
+    ctx.font = '500 22px "JetBrains Mono", monospace';
+    ctx.fillStyle = color;
+    ctx.fillText(line2, w / 2, 94);
+    ctx.font = '700 18px "JetBrains Mono", monospace';
+    ctx.fillStyle = '#22d3aa';
+    ctx.fillText('● ACTIVE', w / 2, 128);
+  });
+}
+BOT_DEFS.forEach((def, i) => {
+  const grp = new THREE.Group();
+  const a = (i / BOT_DEFS.length) * Math.PI * 2;
+  grp.position.set(Math.cos(a) * radii[i], heights[i], Math.sin(a) * radii[i]);
+  grp.rotation.y = -a;
+
+  const body = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(0.46, 0),
+    new THREE.MeshStandardMaterial({ color: 0x050a12, emissive: def.color, emissiveIntensity: 1.8, metalness: .5, roughness: .25 })
+  );
+  grp.add(body);
+  const wire = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(0.64, 0),
+    new THREE.MeshBasicMaterial({ color: def.color, wireframe: true, transparent: true, opacity: 0.6 })
+  );
+  grp.add(wire);
+  const botGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex.tex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  botGlow.scale.set(3.2, 3.2, 1);
+  grp.add(botGlow);
+
+  const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: botLabelTex(def.name, `P&L +${SIM_PNL[i].toFixed(2)}% · SIM`, `#${def.color.toString(16).padStart(6, '0')}`).tex, transparent: true, depthWrite: false }));
+  label.position.set(0, 1.45, 0); label.scale.set(6.2, 1.66, 1);
+  grp.add(label);
+
+  /* connection + pulse */
+  const lineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(radii[i], 0, 0)]);
+  const line = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color: def.color, transparent: true, opacity: 0.75 }));
+  grp.add(line);
+  const pulse = new THREE.Mesh(
+    new THREE.SphereGeometry(0.11, 10, 10),
+    new THREE.MeshBasicMaterial({ color: def.color, transparent: true, opacity: 0.95 })
+  );
+  grp.add(pulse);
+
+  grp.userData = { def, i, label, body, wire, pulse, phase: i * 0.7, simPnl: SIM_PNL[i], lineGeo };
+  orbit.add(grp);
+  bots.push(grp);
+});
+
+/* ============ HUD panels (live data) ============ */
+function addPanel(x, y, z, w, draw, scaleW) {
+  const sp = panelSprite(w, 420, draw, scaleW);
+  sp.position.set(x, y, z);
+  scene.add(sp);
+  panels.push({ sprite: sp, draw, w });
+  return sp;
+}
+
+function drawFeed(ctx, w, h) {
+  drawPanelBase(ctx, w, h, 'MARKET DATA FEED', '#00e5ff');
+  const closes = data.klines.slice(-90).map(k => k.c);
+  if (closes.length > 4) {
+    const min = Math.min(...closes), max = Math.max(...closes);
+    const pad = 46, top = 92, bot = h - 46;
+    const px = (i) => pad + (i / (closes.length - 1)) * (w - pad * 2);
+    const py = (v) => top + (1 - (v - min) / (max - min || 1)) * (bot - top);
+    const grad = ctx.createLinearGradient(0, top, 0, bot);
+    grad.addColorStop(0, 'rgba(34,211,170,.30)'); grad.addColorStop(1, 'rgba(34,211,170,0)');
+    ctx.beginPath(); ctx.moveTo(px(0), py(closes[0]));
+    closes.forEach((v, i) => ctx.lineTo(px(i), py(v)));
+    ctx.strokeStyle = '#22d3aa'; ctx.lineWidth = 2.5; ctx.shadowColor = '#22d3aa'; ctx.shadowBlur = 8; ctx.stroke(); ctx.shadowBlur = 0;
+    ctx.lineTo(px(closes.length - 1), bot); ctx.lineTo(px(0), bot); ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
+    ctx.fillStyle = '#22d3aa'; ctx.font = '700 30px "JetBrains Mono", monospace';
+    ctx.fillText(closes[closes.length - 1].toFixed(closes[closes.length - 1] < 1 ? 6 : 2), pad, 80);
+    ctx.fillStyle = '#7d8fa3'; ctx.font = '400 16px "JetBrains Mono", monospace';
+    ctx.fillText('BTC · 15m · UPDATING', pad, 108);
+  } else {
+    ctx.fillStyle = '#7d8fa3'; ctx.font = '400 18px "JetBrains Mono", monospace';
+    ctx.fillText('loading feed…', 46, 90);
+  }
+}
+function drawNews(ctx, w, h) {
+  drawPanelBase(ctx, w, h, 'NEWS ANALYSIS', '#22d3aa');
+  const m = data.market || { bullish: 0, neutral: 0, bearish: 0 };
+  const mood = m.bullish > m.bearish ? 'POSITIVE' : m.bearish > m.bullish ? 'NEGATIVE' : 'MIXED';
+  const col = mood === 'POSITIVE' ? '#22d3aa' : mood === 'NEGATIVE' ? '#ff5c5c' : '#ffc857';
+  ctx.font = '700 30px "JetBrains Mono", monospace'; ctx.fillStyle = col;
+  ctx.fillText('SENTIMENT: ' + mood, 26, 100);
+  ctx.font = '400 17px "JetBrains Mono", monospace'; ctx.fillStyle = '#7d8fa3';
+  ctx.fillText(`${m.bullish} bullish · ${m.neutral} neutral · ${m.bearish} bearish`, 26, 132);
+  const total = Math.max(m.bullish + m.bearish + m.neutral, 1);
+  const bw = w - 52, y = 170, bh = 22;
+  ctx.fillStyle = '#22d3aa'; ctx.fillRect(26, y, bw * (m.bullish / total), bh);
+  ctx.fillStyle = '#45566b'; ctx.fillRect(26 + bw * (m.bullish / total), y, bw * (m.neutral / total), bh);
+  ctx.fillStyle = '#ff5c5c'; ctx.fillRect(26 + bw * ((m.bullish + m.neutral) / total), y, bw * (m.bearish / total), bh);
+  ctx.fillStyle = '#7d8fa3'; ctx.font = '400 16px "JetBrains Mono", monospace';
+  ctx.fillText(`impact: ${mood === 'POSITIVE' ? '+' : mood === 'NEGATIVE' ? '−' : '±'}${Math.abs((m.bullish - m.bearish) / total * 5).toFixed(1)}%`, 26, y + 52);
+}
+function drawRisk(ctx, w, h) {
+  drawPanelBase(ctx, w, h, 'RISK MANAGEMENT', '#ffc857');
+  const exposure = data.paper?.positions?.length ? (data.paper.positions.reduce((a, p) => a + p.notional, 0) / (data.paper.account?.initialCash || 1)) * 100 : 0;
+  const drawdown = data.paper?.journal?.length
+    ? Math.max(0, Math.min(100, Math.abs((data.paper.journal.filter(j => j.result === 'loss').reduce((a, j) => a + (j.pnl || 0), 0) / (data.paper.account?.initialCash || 1)) * 100)))
+    : 0;
+  ctx.font = '700 28px "JetBrains Mono", monospace'; ctx.fillStyle = '#ffc857';
+  ctx.fillText(exposure.toFixed(2) + '%', 26, 96);
+  ctx.font = '400 16px "JetBrains Mono", monospace'; ctx.fillStyle = '#7d8fa3';
+  ctx.fillText('PORTFOLIO EXPOSURE', 26, 122);
+  ctx.fillStyle = '#ff5c5c'; ctx.font = '700 28px "JetBrains Mono", monospace';
+  ctx.fillText(drawdown.toFixed(2) + '%', 26, 180);
+  ctx.fillStyle = '#7d8fa3'; ctx.font = '400 16px "JetBrains Mono", monospace';
+  ctx.fillText('MAX DRAWDOWN (PAPER)', 26, 206);
+  ctx.fillStyle = '#22d3aa'; ctx.font = '700 28px "JetBrains Mono", monospace';
+  ctx.fillText('1.0%', 26, 264);
+  ctx.fillStyle = '#7d8fa3'; ctx.font = '400 16px "JetBrains Mono", monospace';
+  ctx.fillText('RISK BUDGET / TRADE', 26, 290);
+  chip(ctx, 26, 336, 'SHIELD ACTIVE', '#ffc857');
+}
+function drawPortfolio(ctx, w, h) {
+  drawPanelBase(ctx, w, h, 'PORTFOLIO OVERVIEW', '#7c5cff');
+  const paper = data.paper;
+  const positions = paper?.positions || [];
+  const cash = paper?.account?.cash ?? 0;
+  const inv = paper?.account?.initialCash || 1;
+  const notional = positions.reduce((a, p) => a + p.notional, 0);
+  const stockN = positions.filter(p => p.type === 'stock').reduce((a, p) => a + p.notional, 0);
+  const cryptoN = notional - stockN;
+  const segs = [
+    { v: stockN, c: '#00e5ff', l: 'EQUITIES' },
+    { v: cryptoN, c: '#7c5cff', l: 'CRYPTO' },
+    { v: cash, c: '#22d3aa', l: 'CASH' },
+  ];
+  const total = Math.max(segs.reduce((a, s) => a + s.v, 0), 1);
+  const cx = w * 0.32, cy = h * 0.52, R = 82;
+  let a0 = -Math.PI / 2;
+  for (const s of segs) {
+    const a1 = a0 + (s.v / total) * Math.PI * 2;
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, R, a0, a1); ctx.closePath();
+    ctx.fillStyle = s.c; ctx.globalAlpha = .85; ctx.fill(); ctx.globalAlpha = 1;
+    a0 = a1;
+  }
+  ctx.strokeStyle = '#0a1220'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
+  let y = 92;
+  for (const s of segs) {
+    ctx.fillStyle = s.c; ctx.fillRect(w * 0.62, y, 14, 14);
+    ctx.fillStyle = '#c9d6e4'; ctx.font = '600 18px "JetBrains Mono", monospace';
+    ctx.fillText(s.l, w * 0.62 + 24, y + 13);
+    ctx.fillStyle = '#7d8fa3'; ctx.font = '400 18px "JetBrains Mono", monospace';
+    ctx.fillText(((s.v / total) * 100).toFixed(0) + '%', w - 60, y + 13);
+    y += 38;
+  }
+  const pnlPct = paper?.journal?.length ? paper.journal.reduce((a, j) => a + (j.pnl || 0), 0) / inv * 100 : 0;
+  ctx.fillStyle = pnlPct >= 0 ? '#22d3aa' : '#ff5c5c';
+  ctx.font = '700 30px "JetBrains Mono", monospace';
+  ctx.fillText((pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(2) + '%', 26, h - 30);
+  ctx.fillStyle = '#7d8fa3'; ctx.font = '400 15px "JetBrains Mono", monospace';
+  ctx.fillText('TOTAL RETURN (PAPER)', 26, h - 10);
+}
+function drawSignals(ctx, w, h) {
+  drawPanelBase(ctx, w, h, 'TRADING SIGNALS', '#00e5ff');
+  const tops = (data.scores || []).slice(0, 4);
+  if (!tops.length) { ctx.fillStyle = '#7d8fa3'; ctx.font = '400 18px "JetBrains Mono", monospace'; ctx.fillText('loading signals…', 26, 100); return; }
+  let y = 96;
+  tops.forEach(s => {
+    const dir = s.composite >= 65 ? 'BUY' : s.composite <= 45 ? 'SELL' : 'HOLD';
+    const col = dir === 'BUY' ? '#22d3aa' : dir === 'SELL' ? '#ff5c5c' : '#ffc857';
+    const qty = Math.max(1, Math.round(10000 * 0.01 / (Math.abs(s.price) || 1) / 100) * 100);
+    ctx.fillStyle = '#e8f1f8'; ctx.font = '700 21px "JetBrains Mono", monospace';
+    ctx.fillText(s.symbol, 26, y);
+    ctx.fillStyle = '#7d8fa3'; ctx.font = '400 16px "JetBrains Mono", monospace';
+    ctx.fillText(`QTY ${qty} · ${s.price.toFixed(s.price < 1 ? 6 : 2)}`, 26, y + 22);
+    ctx.font = '600 17px "JetBrains Mono", monospace';
+    ctx.fillText(`CONF ${s.composite}%`, w - 150, y + 22);
+    chip(ctx, w - 84, y, dir, col);
+    y += 66;
+  });
+}
+function drawStatus(ctx, w, h) {
+  drawPanelBase(ctx, w, h, 'SYSTEM STATUS', '#22d3aa');
+  const up = data.scan.length > 0;
+  const rows = [
+    ['DATA FEED', up], ['EXECUTION', up], ['RISK CHECK', up],
+    ['CONNECTIVITY', up], ['IOST RPC', !!data.onchain], ['BACKUP', true],
+  ];
+  let y = 98;
+  rows.forEach(([name, ok]) => {
+    ctx.fillStyle = '#c9d6e4'; ctx.font = '600 19px "JetBrains Mono", monospace';
+    ctx.fillText(name, 26, y);
+    ctx.fillStyle = ok ? '#22d3aa' : '#ff5c5c'; ctx.font = '700 19px "JetBrains Mono", monospace';
+    ctx.fillText(ok ? 'ONLINE' : 'OFFLINE', w - 140, y);
+    y += 44;
+  });
+}
+addPanel(-10.8, 4.9, 2.5, 560, drawFeed, 5.6);
+addPanel(-4.8, 5.3, 8.4, 560, drawNews, 5.6);
+addPanel(4.8, 5.3, 8.4, 560, drawRisk, 5.6);
+addPanel(10.8, 4.9, 2.5, 560, drawPortfolio, 5.6);
+addPanel(-10.6, -1.9, 5.2, 560, drawSignals, 5.6);
+addPanel(10.6, -1.9, 5.2, 560, drawStatus, 5.6);
+
+function refreshPanels() {
+  for (const p of panels) {
+    const { tex } = makeTex(p.w, 420, p.draw);
+    p.sprite.material.map = tex;
+    p.sprite.material.needsUpdate = true;
+  }
+  for (const s of screens) {
+    const { tex } = makeTex(s.w, s.h, s.draw);
+    s.mesh.material.map = tex;
+    s.mesh.material.needsUpdate = true;
+  }
+}
+
+/* ============ live data ============ */
+async function loadData(initial = false) {
+  try {
+    const [scan, scores, onchain, paper] = await Promise.all([
+      fetch('/api/scanner').then(r => r.json()).catch(() => []),
+      fetch('/api/scores').then(r => r.json()).catch(() => []),
+      fetch('/api/onchain').then(r => r.json()).catch(() => null),
+      fetch('/api/paper').then(r => r.json()).catch(() => null),
+    ]);
+    data.scan = scan; data.scores = scores; data.onchain = onchain; data.paper = paper;
+    const newsRes = await fetch('/api/news').then(r => r.json()).catch(() => null);
+    data.market = newsRes?.market ?? null;
+    fetch('/api/klines/BTC?bar=15m&limit=120').then(r => r.json()).then(k => { data.klines = k; }).catch(() => {});
+    updateBotMetrics();
+    refreshPanels();
+    $('#feedState').textContent = `SYNCED · ${new Date().toLocaleTimeString('en-GB', { hour12: false })} UTC`;
+  } catch (e) {
+    $('#feedState').textContent = 'FEED ERROR — retrying…';
+  }
+}
+function updateBotMetrics() {
+  const scan = data.scan;
+  if (!scan.length) return;
+  const find = (fn) => scan.filter(fn).sort((a, b) => b.change24hPct - a.change24hPct)[0];
+  const metrics = {
+    roc: () => { const a = [...scan].sort((x, y) => (y.indicators.roc15m || 0) - (x.indicators.roc15m || 0))[0]; return `${a.symbol} · ROC ${(a.indicators.roc15m || 0).toFixed(1)}%`; },
+    rsiLow: () => { const a = [...scan].filter(x => x.indicators.rsi != null).sort((x, y) => x.indicators.rsi - y.indicators.rsi)[0]; return `${a.symbol} · RSI ${a.indicators.rsi.toFixed(0)}`; },
+    breakout: () => { const a = scan.find(x => x.signals.some(s => s.label === 'Breakout' || s.label === 'Breakdown')) || scan[0]; const b = a.signals.find(s => s.label === 'Breakout' || s.label === 'Breakdown'); return `${a.symbol} · ${b ? b.label : 'none now'}`; },
+    volz: () => { const a = [...scan].sort((x, y) => (y.indicators.volZ || 0) - (x.indicators.volZ || 0))[0]; return `${a.symbol} · volZ ${(a.indicators.volZ || 0).toFixed(1)}`; },
+    best24h: () => { const a = find(x => x.change24hPct > 0); return `${a.symbol} · ${(a.change24hPct || 0).toFixed(2)}%`; },
+    trades: () => { const a = [...scan].sort((x, y) => (y.whale?.bigTrades24h || 0) - (x.whale?.bigTrades24h || 0))[0]; return `${a.symbol} · ${a.whale?.bigTrades24h || 0} big trades`; },
+    news: () => { const by = data.market?.byAsset || {}; const top = Object.entries(by).sort((a, b) => b[1].total - a[1].total)[0]; return top ? `${top[0]} · ${top[1].total} headlines` : 'no headlines'; },
+    onchain: () => data.onchain?.chain ? `IOST · ${data.onchain.chain.tps} TPS` : 'IOST · sync…',
+  };
+  bots.forEach((bot, i) => {
+    const def = BOT_DEFS[i];
+    const line2 = metrics[def.metric] ? metrics[def.metric]() : 'syncing…';
+    const color = `#${def.color.toString(16).padStart(6, '0')}`;
+    const tex = botLabelTex(def.name, `${line2} · P&L +${bot.userData.simPnl.toFixed(2)}% SIM`, color).tex;
+    bot.userData.label.material.map = tex;
+    bot.userData.label.material.needsUpdate = true;
+    bot.userData.line2 = line2;
+  });
+}
+
+/* ============ interactions ============ */
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+const tooltip = $('#tooltip');
+let pinnedBot = null; // ARD: no ghost elements — intel is available on hover AND click-pin
+function botAt(e) {
+  pointer.x = (e.clientX / innerWidth) * 2 - 1;
+  pointer.y = -(e.clientY / innerHeight) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  const hits = raycaster.intersectObjects(bots.map(b => b.userData.body), false);
+  return hits[0] ? bots.find(b => b.userData.body === hits[0].object) : null;
+}
+function showTooltip(bot, x, y) {
+  const u = bot.userData;
+  tooltip.style.display = 'block';
+  tooltip.style.left = x + 'px';
+  tooltip.style.top = y + 'px';
+  tooltip.innerHTML = `
+    <div class="tt-name">BOT ${String(u.i + 1).padStart(2, '0')} — ${u.def.name}${pinnedBot ? ' · PINNED' : ''}</div>
+    <div class="tt-row"><span>status</span><b style="color:var(--mint)">● ACTIVE</b></div>
+    <div class="tt-row"><span>live metric</span><b>${escHtml(u.line2 || 'syncing…')}</b></div>
+    <div class="tt-row"><span>paper P&L</span><b class="tt-sim">+${u.simPnl.toFixed(2)}% · SIM</b></div>
+    <div class="tt-row"><span>logic</span><b>${u.def.desc}</b></div>`;
+}
+renderer.domElement.addEventListener('pointermove', (e) => {
+  if (pinnedBot) return;
+  const bot = botAt(e);
+  for (const b of bots) b.userData.body.material.emissiveIntensity = 1.1;
+  if (bot) {
+    bot.userData.body.material.emissiveIntensity = 2.4;
+    showTooltip(bot, e.clientX + 18, e.clientY + 14);
+  } else tooltip.style.display = 'none';
+});
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  const bot = botAt(e);
+  if (bot) { pinnedBot = bot; showTooltip(bot, e.clientX + 18, e.clientY + 14); }
+  else { pinnedBot = null; tooltip.style.display = 'none'; }
+});
+addEventListener('keydown', (e) => { if (e.key === 'Escape' && pinnedBot) { pinnedBot = null; tooltip.style.display = 'none'; } });
+renderer.domElement.addEventListener('pointerleave', () => { if (!pinnedBot) tooltip.style.display = 'none'; });
+function escHtml(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+/* ============ loop ============ */
+const clock = new THREE.Clock();
+let lastT = 0;
+let lastRefresh = 0;
+function animate() {
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+  const dt = t - lastT; lastT = t;
+  /* intro: dolly fly-in over the grid, then a slow orbiting settle */
+  if (intro) {
+    introT += dt;
+    if (introPhase === 0) {
+      const k = Math.min(1, introT / 2.6);
+      const e = 1 - Math.pow(1 - k, 3);
+      camera.position.lerpVectors(camStart, camEnd, e);
+      if (k >= 1) { introPhase = 1; introT = 0; }
+    } else {
+      const k = Math.min(1, introT / settleDur);
+      const e = 1 - Math.pow(1 - k, 3);
+      const th = settleTheta0 + settleSweep * e;
+      camera.position.set(
+        settleR * Math.sin(settlePhi) * Math.cos(th),
+        settleR * Math.cos(settlePhi),
+        settleR * Math.sin(settlePhi) * Math.sin(th)
+      );
+      camera.lookAt(0, 0, 0);
+      if (k >= 1) { intro = false; controls.enabled = true; }
+    }
+  }
+  if (!reduceMotion) {
+    orbit.rotation.y = t * 0.05;
+    hub.rotation.y = t * 0.12;
+    shell.rotation.y = -t * 0.08; shell.rotation.x = t * 0.05;
+    rings.forEach(r => r.rotation.z += r.userData.speed);
+    hubGlow.material.opacity = 0.75 + Math.sin(t * 1.6) * 0.2;
+    bots.forEach((b, i) => {
+      const u = b.userData;
+      u.body.position.y = Math.sin(t * 0.8 + u.phase) * 0.14;
+      u.body.rotation.x += 0.01; u.body.rotation.y += 0.014;
+      u.wire.rotation.y -= 0.008; u.wire.rotation.x += 0.005;
+      const p = (t * 0.22 + u.phase) % 1;
+      u.pulse.position.set(radii[i] * p, 0, 0);
+      u.pulse.material.opacity = 0.95 * (1 - p);
+    });
+    /* AI operators idle loop */
+    operators.forEach((op, oi) => {
+      const ph = op.phase + oi * 1.3;
+      op.head.rotation.y = Math.sin(t * 0.35 + ph) * 0.55 + 0.25;
+      op.head.position.y = 1.95 + Math.sin(t * 0.7 + ph) * 0.02;
+      op.headRing.material.color.setHSL(0.075 + Math.sin(t * 1.1 + ph) * 0.02, 1, 0.55);
+      op.chestLight.material.color.setHSL((oi === 1 ? 0.72 : 0.42) + Math.sin(t * 1.4 + ph) * 0.05, 1, 0.55);
+      op.armL.rotation.z = -0.06 + Math.sin(t * 0.9 + ph) * 0.09;
+      op.armR.rotation.x = Math.sin(t * 0.6 + ph + 1.5) * 0.05;
+      op.visor.material.opacity = 0.7 + Math.sin(t * 2.2 + ph) * 0.25;
+    });
+  }
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+setInterval(() => { $('#clock').textContent = new Date().toISOString().slice(11, 19); }, 1000);
+loadData(true);
+setInterval(loadData, 15000);
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
