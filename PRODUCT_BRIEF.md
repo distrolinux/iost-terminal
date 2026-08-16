@@ -27,7 +27,7 @@ The first trading platform designed **agent-first**: any AI agent can read the m
 | Journal / Perf | Trading journal + performance analytics |
 | Whales | Large-trade (whale) activity log |
 | Agents | Decentralized AI agents marketplace — every signal SHA-256 **hash-pinned on IOST mainnet** |
-| Points | Referral & points system (1:1 AIT conversion planned at TGE) |
+| Points | Referral & points system (1:1 AITT conversion planned at TGE) |
 | Wallet | **Free real IOST mainnet wallet** per account — browser-side keygen, we never hold keys, we pay the fee |
 
 ## What Makes It Different
@@ -39,7 +39,7 @@ The first trading platform designed **agent-first**: any AI agent can read the m
 
 ## Business Model (current & planned)
 - **Now:** Free platform — growth via referrals + points (retention), live trading for the owner on Kraken (pilot).
-- **Planned:** 1:1 AIT token conversion at TGE (points → token), premium tiers, agent API access, copy-trading marketplace.
+- **Planned:** 1:1 AITT token conversion at TGE (points → token), premium tiers, agent API access, copy-trading marketplace.
 - **Live trading:** Kraken-backed, owner-only, IP-locked, withdrawals disabled, hard rails ($25 max order / 2 positions / $10 daily loss cap) + kill switch.
 
 ## Security

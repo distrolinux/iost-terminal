@@ -1,0 +1,12 @@
+# Hardhat artifacts / node deps
+artifacts/
+cache/
+node_modules/
+typechain-types/
+
+# Secrets & local deploy config
+.env
+deploy.config.json
+
+# Reports
+slither-report.json

@@ -160,12 +160,220 @@ function renderWhales() {
   }));
 }
 
+// ---------------- Smart-Money Signals (v1.16, Binance Web3) ----------------
+// Public feed: on-chain buy/sell events from tracked smart-money wallets (BSC/Solana).
+// Server proxies + normalizes; this view renders cards + cross-links to Token Audit.
+const SM_CHAINS = [
+  { id: '56', name: 'BSC' },
+  { id: 'CT_501', name: 'Solana' },
+];
+state.sm = state.sm || { chain: '56', data: null, ts: null, timer: null, loading: false };
+
+function smPrice(v) {
+  if (v == null || v === '') return '—';
+  const n = parseFloat(v);
+  if (!Number.isFinite(n)) return '—';
+  return n < 0.01 ? n.toPrecision(4) : fmtNum(n);
+}
+
+async function fetchSmartMoney() {
+  const el = $('#view-smartmoney');
+  if (!el) return;
+  const st = state.sm;
+  if (st.loading) return;
+  st.loading = true;
+  try {
+    const r = await api(`/api/smart-money?chainId=${st.chain}&page=1&pageSize=20`);
+    st.data = r.signals || [];
+    st.ts = Date.now();
+    st.err = null;
+  } catch (e) {
+    st.data = null;
+    st.err = e.message;
+  }
+  st.loading = false;
+  if (state.activeView === 'smartmoney') renderSmartMoney();
+}
+
+async function renderSmartMoney() {
+  const el = $('#view-smartmoney');
+  const st = state.sm;
+  el.innerHTML = `
+    <div class="section-title">Smart Money <span class="sub">on-chain whale buy/sell signals · Binance Web3 · ${SM_CHAINS.find(c => c.id === st.chain)?.name || st.chain}</span></div>
+    <div class="audit-tools" style="margin-bottom:14px">
+      ${SM_CHAINS.map(c => `<button class="chip sm-chain ${st.chain === c.id ? 'is-active' : ''}" data-chain="${c.id}">${c.name}</button>`).join('')}
+      <button class="btn sm ghost" id="smRefresh" aria-label="Refresh smart money signals">⟳ Refresh</button>
+      <span class="mono muted" style="font-size:11px" id="smStamp">${st.ts ? 'updated ' + new Date(st.ts).toLocaleTimeString('en-GB', { hour12: false }) : '—'}</span>
+    </div>
+    ${!st.data && !st.err ? '<div class="card empty">Loading signals…</div>'
+      : st.err ? `<div class="card empty" style="color:#f87171">Feed error: ${esc(st.err)}</div>`
+      : !st.data.length ? '<div class="card empty">No active signals right now — check back shortly.</div>'
+      : `<div class="grid g-2">${st.data.map(sigCard).join('')}</div>`}
+    <div class="muted" style="font-size:11px;margin-top:10px">Smart money = wallets tracked for professional buying patterns. High exit rate (≥70%) means smart money already left. ⚠️ Signals are for reference only — not investment advice. Always audit a token before trading.</div>`;
+  $$('.sm-chain').forEach(b => b.addEventListener('click', () => {
+    st.chain = b.dataset.chain;
+    st.data = null; st.err = null; st.ts = null;
+    fetchSmartMoney();
+  }));
+  $('#smRefresh')?.addEventListener('click', () => { st.data = null; fetchSmartMoney(); });
+  $$('[data-audit]').forEach(b => b.addEventListener('click', () => {
+    state.audit.pending = b.dataset.audit;
+    state.audit.result = null; state.audit.err = null;
+    switchView('audit');
+    setTimeout(() => runAudit(), 50);
+  }));
+  if (!st.timer) st.timer = setInterval(() => { if (state.activeView === 'smartmoney') fetchSmartMoney(); }, 60_000);
+  if (!st.data && !st.err && !st.loading) fetchSmartMoney();
+}
+
+function sigCard(s) {
+  const dir = s.direction === 'sell' ? 'down' : 'up';
+  const stale = s.status === 'timeout' || s.exitRate >= 70;
+  const tags = (s.tags || []).slice(0, 3).map(t => `<span class="sig-tag">${esc(t)}</span>`).join('');
+  const gain = s.maxGainPct;
+  return `
+    <div class="card sig-card">
+      <div class="sig-head">
+        ${s.logoUrl ? `<img class="sig-logo" src="${esc(s.logoUrl)}" alt="" loading="lazy" onerror="this.style.display='none'">` : '<span class="sig-logo sig-logo-fallback">◈</span>'}
+        <div class="sig-title">
+          <strong>${esc(s.ticker)}</strong>
+          ${s.isAlpha ? '<span class="chip alpha">ALPHA</span>' : ''}
+          ${s.launchPlatform ? `<span class="sig-tag">${esc(s.launchPlatform)}</span>` : ''}
+        </div>
+        <div class="sig-right">
+          <span class="chip ${dir}">${s.direction === 'sell' ? 'SELL' : 'BUY'}</span>
+          <span class="chip ${stale ? 'dim' : 'ok'}">${esc(s.status || '—')}</span>
+        </div>
+      </div>
+      <div class="sig-prices">
+        <div><span class="sig-label">ALERT</span><span class="mono">$${smPrice(s.alertPrice)}</span></div>
+        <div><span class="sig-label">NOW</span><span class="mono">$${smPrice(s.currentPrice)}</span></div>
+        <div class="sig-gain ${gain != null && gain > 0 ? 'up' : gain != null && gain < 0 ? 'down' : ''}">${gain != null ? (gain > 0 ? '+' : '') + gain + '%' : '—'}</div>
+      </div>
+      <div class="stat-grid">
+        <div class="stat-cell"><span class="s-label">SMART MONEY</span><span class="s-val mono">${s.smartMoneyCount ?? '—'}</span></div>
+        <div class="stat-cell"><span class="s-label">EXIT RATE</span><span class="s-val mono">${s.exitRate != null ? s.exitRate + '%' : '—'}</span></div>
+        <div class="stat-cell"><span class="s-label">VALUE</span><span class="s-val mono">$${smPrice(s.totalTokenValue)}</span></div>
+        <div class="stat-cell"><span class="s-label">TRIGGERED</span><span class="s-val mono">${s.triggerTime ? new Date(s.triggerTime).toLocaleTimeString('en-GB', { hour12: false }) : '—'}</span></div>
+      </div>
+      ${tags ? `<div class="sig-tags">${tags}</div>` : ''}
+      <div class="sig-foot">
+        <span class="mono sig-addr" title="${esc(s.contractAddress || '')}">${esc((s.contractAddress || '').slice(0, 10))}…${esc((s.contractAddress || '').slice(-6))}</span>
+        <button class="btn sm ghost" data-audit="${esc(s.contractAddress || '')}">🛡 Audit token</button>
+      </div>
+    </div>`;
+}
+
+// ---------------- Token Audit (v1.16, Binance Web3) ----------------
+// Pre-trade security scan: honeypot / rug-pull / malicious contract / tax checks.
+state.audit = state.audit || { chain: '56', pending: null, lastAddr: null, result: null, busy: false, err: null };
+const AUDIT_CHAINS = [
+  { id: '56', name: 'BSC' },
+  { id: '8453', name: 'Base' },
+  { id: 'CT_501', name: 'Solana' },
+  { id: '1', name: 'Ethereum' },
+];
+
+function riskBadge(enumName) {
+  const cls = enumName === 'LOW' ? 'risk-low' : enumName === 'MEDIUM' ? 'risk-med' : enumName === 'HIGH' ? 'risk-high' : 'risk-unk';
+  return `<span class="risk-badge ${cls}">${esc(enumName || 'UNKNOWN')} RISK</span>`;
+}
+
+function auditCheckRow(c) {
+  const cls = c.hit ? (c.type === 'risk' ? 'check-hit' : 'check-caution') : 'check-clean';
+  const mark = c.hit ? (c.type === 'risk' ? '✗' : '⚠') : '✓';
+  return `<div class="audit-check ${cls}"><span class="audit-mark">${mark}</span><div><strong>${esc(c.title)}</strong><div class="muted" style="font-size:11px">${esc(c.description)}</div></div></div>`;
+}
+
+async function runAudit() {
+  const st = state.audit;
+  if (st.busy) return;
+  const addr = ($('#auditAddr')?.value || st.pending || '').trim();
+  if (!addr) return;
+  st.busy = true; st.err = null; st.result = null;
+  const el = $('#view-audit');
+  if (el) el.querySelector('#auditResult')?.replaceWith(htmlToNode('<div class="card empty" id="auditResult">Running security audit…</div>'));
+  try {
+    st.result = await post('/api/token-audit', { contractAddress: addr, chainId: st.chain });
+    st.lastAddr = addr;
+  } catch (e) {
+    st.err = e.message;
+  }
+  st.busy = false;
+  if (state.activeView === 'audit') renderAudit();
+}
+
+function renderAudit() {
+  const el = $('#view-audit');
+  const st = state.audit;
+  const r = st.result;
+  let body = '';
+  if (st.busy) {
+    body = '<div class="card empty">Running security audit…</div>';
+  } else if (st.err) {
+    body = `<div class="card empty" style="color:#f87171">Audit failed: ${esc(st.err)} — try again or check the contract address.</div>`;
+  } else if (r && r.ok && r.supported) {
+    const meta = [
+      r.buyTax != null ? ['BUY TAX', r.buyTax + '%'] : null,
+      r.sellTax != null ? ['SELL TAX', r.sellTax + '%'] : null,
+      ['VERIFIED', r.isVerified ? 'yes' : 'no'],
+      ['SOURCE', r.source || 'BINANCE'],
+    ].filter(Boolean).map(([k, v]) => `<div class="stat-cell"><span class="s-label">${k}</span><span class="s-val mono">${esc(v)}</span></div>`).join('');
+    const items = (r.items || []).map(cat => `
+      <div class="card audit-cat">
+        <div class="audit-cat-head"><strong>${esc(cat.name)}</strong><span class="mono muted">${cat.checks.filter(c => c.hit).length} flagged</span></div>
+        ${cat.checks.map(auditCheckRow).join('')}
+      </div>`).join('');
+    body = `
+      <div class="card audit-summary">
+        <div class="sig-head">
+          ${riskBadge(r.riskLevelEnum)}
+          <span class="mono" style="font-size:13px">level ${r.riskLevel ?? '—'} / 5</span>
+          ${r.hits + r.cautions > 0 ? `<span class="chip ${r.riskLevelEnum === 'HIGH' ? 'down' : ''}">${r.hits} risk · ${r.cautions} caution</span>` : '<span class="chip ok">clean scan</span>'}
+        </div>
+        <div class="stat-grid">${meta}</div>
+      </div>
+      ${items}`;
+  } else if (r && r.ok) {
+    body = '<div class="card empty">Security audit data is not available for this token on this chain — verify the contract address and chain, or try again later.</div>';
+  } else {
+    body = '<div class="card empty">Paste a token contract address and run the scan.</div>';
+  }
+  el.innerHTML = `
+    <div class="section-title">Token Audit <span class="sub">pre-trade security scan · honeypot / rug-pull / scam / tax · Binance Web3</span></div>
+    <div class="audit-tools" style="margin-bottom:14px">
+      <select id="auditChain" class="audit-select mono" aria-label="Chain">
+        ${AUDIT_CHAINS.map(c => `<option value="${c.id}" ${st.chain === c.id ? 'selected' : ''}>${c.name}</option>`).join('')}
+      </select>
+      <input id="auditAddr" class="audit-input mono" type="text" placeholder="0x… contract address" value="${st.pending || st.lastAddr || ''}" spellcheck="false" aria-label="Token contract address">
+      <button class="btn green" id="auditGo" aria-label="Run token audit" ${st.busy ? 'disabled' : ''}>${st.busy ? 'SCANNING…' : 'AUDIT'}</button>
+    </div>
+    <div id="auditResult">${body}</div>
+    <div class="muted" style="font-size:11px;margin-top:10px">⚠️ This audit result is for reference only and does not constitute investment advice. Always conduct your own research. LOW risk does not mean safe — results are point-in-time snapshots.</div>`;
+  $('#auditChain')?.addEventListener('change', e => { st.chain = e.target.value; });
+  $('#auditGo')?.addEventListener('click', () => runAudit());
+  $('#auditAddr')?.addEventListener('keydown', e => { if (e.key === 'Enter') runAudit(); });
+  $$('[data-audit]').forEach(b => b.addEventListener('click', () => {
+    st.pending = b.dataset.audit;
+    st.result = null; st.err = null;
+    switchView('audit');
+    setTimeout(() => runAudit(), 50);
+  }));
+  if (st.pending && !st.busy && !r) { const addr = st.pending; st.pending = null; $('#auditAddr') && (el.querySelector('#auditAddr').value = addr); runAudit(); }
+}
+
 async function api(path, opts) {
   const res = await fetch(path, opts);
   if (!res.ok) throw new Error(`${res.status} ${path}`);
   return res.json();
 }
 const post = (path, body) => api(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}) });
+
+function htmlToNode(html) {
+  const t = document.createElement('template');
+  t.innerHTML = html.trim();
+  return t.content.firstChild;
+}
 
 // ---------------- Decentralized AI Agents marketplace ----------------
 // Agents publish signals; every signal is SHA-256 hash-pinned on the IOST
@@ -286,9 +494,9 @@ async function renderAgents() {
   $('#agClear')?.addEventListener('click', () => { agentsSel = null; renderAgents(); });
 }
 
-// ---------------- Points (tokenomics vision §6: off-chain, 1:1 AIT planned) ----------------
+// ---------------- Points (tokenomics vision §6: off-chain, 1:1 AITT planned) ----------------
 // Honest framing: points are accrual-only platform credits. NO token is issued;
-// 1:1 AIT conversion is planned at TGE and explicitly labeled "not guaranteed".
+// 1:1 AITT conversion is planned at TGE and explicitly labeled "not guaranteed".
 async function renderPoints() {
   const el = $('#view-points');
   el.innerHTML = skeleton();
@@ -309,9 +517,18 @@ async function renderPoints() {
     </tr>`;
   }).join('') || '<tr><td colspan="4" class="dim">No activity yet — earn points by publishing signals, gaining followers, referrals and quality feedback.</td></tr>';
   el.innerHTML = `
-    <div class="section-title">Platform Points <span class="sub">off-chain accrual · 1:1 AIT conversion planned at TGE · not a token — nothing issued yet</span></div>
+    <div class="section-title">Platform Points <span class="sub">off-chain accrual · 1:1 AITT conversion planned at TGE · not a token — nothing issued yet</span></div>
     <div class="stat-cards">
-      <div class="card kpi"><span class="k-label">Points balance</span><span class="k-value">${d.balance}</span><span class="k-sub">1 point → 1 AIT at TGE (planned, not guaranteed) · not spendable</span></div>
+      <div class="card kpi"><span class="k-label">Points balance</span><span class="k-value">${d.balance}</span><span class="k-sub">1 point → 1 AITT at TGE (planned, not guaranteed) · not spendable</span></div>
+    </div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="section-title" style="margin-bottom:8px">AITT conversion <span class="sub">1 point → 1 AITT at TGE · planned, not guaranteed · no token issued yet</span></div>
+      <div class="aitt-conv">
+        <div class="conv-cell"><span class="k-label">Convertible at TGE</span><span class="k-value">≈ ${d.balance} AITT</span></div>
+        <div class="conv-cell"><span class="k-label">Status</span><span class="chip ${d.conversion?.open ? 'ok' : 'neut'}">${esc((d.conversion?.status || 'planned at TGE — not open yet'))}</span></div>
+        <button class="btn sm" id="claimBtn" ${d.conversion?.open ? '' : 'disabled'} aria-label="Claim AITT for your points" title="${d.conversion?.open ? '' : 'Conversion opens at TGE — planned, not guaranteed'}">Claim AITT</button>
+      </div>
+      <p class="muted" style="font-size:11px;margin-top:8px">Conversion is an earn-event, not a purchase. The gate opens at TGE — after deployment, converter reserve funding and adoption gates pass. Honest label: <strong>planned, not guaranteed</strong>.</p>
     </div>
     <div class="card" style="margin-bottom:16px">
       <div class="section-title" style="margin-bottom:8px">Referral program <span class="sub">share your code — you earn +50, the new trader earns +10 · self-referral blocked</span></div>
@@ -332,6 +549,68 @@ async function renderPoints() {
   $('#refCopy')?.addEventListener('click', () => {
     navigator.clipboard?.writeText(d.referralLink).then(() => toast('Referral link copied')).catch(() => toast('Copy failed — select the link manually'));
   });
+  // AITT claim — gate-first: while closed the server answers honestly (400 + message), no write.
+  $('#claimBtn')?.addEventListener('click', async () => {
+    const btn = $('#claimBtn');
+    btn.disabled = true;
+    try {
+      const res = await fetch('/api/points/claim', { method: 'POST' });
+      const r = await res.json().catch(() => ({}));
+      toast(r.message || (res.ok ? 'Claimed — see Points ledger' : 'Conversion not available yet'));
+    } catch (e) { toast('Claim unavailable: ' + e.message); }
+    btn.disabled = false;
+  });
+}
+
+// ---------------- AITT token (Phase 1: design → IOST L2 deploy) ----------------
+// Public view — no sign-in required. Honest framing: design draft, nothing issued.
+async function renderAITT() {
+  const el = $('#view-aitt');
+  el.innerHTML = skeleton();
+  let d;
+  try { d = await api('/api/aitt/info'); } catch (e) { el.innerHTML = `<div class="card empty">AITT info unavailable: ${esc(e.message)}</div>`; return; }
+  const t = d.token || {};
+  const conv = d.conversion || {};
+  const ALLOC = [
+    ['Ecosystem & agent rewards', 30, '300M', '48-mo declining emission · revenue-backed'],
+    ['Treasury (DAO)', 20, '200M', 'milestone-gated'],
+    ['Team & core contributors', 15, '150M', '12-mo cliff + 36-mo linear'],
+    ['Strategic partners', 10, '100M', 'milestone-gated · contracts only'],
+    ['Community & adoption', 10, '100M', 'earned airdrops · grants'],
+    ['Reserve fund', 10, '100M', 'insurance · buy-back/burn (DAO)'],
+    ['Advisors', 5, '50M', '12-mo cliff + 24-mo linear'],
+  ];
+  el.innerHTML = `
+    <div class="section-title">AITT — Agent Intelligence Trading Token <span class="sub">${esc(d.status === 'deployed' ? 'deployed on IOST L2 · contract verified below' : 'design draft · no token created, minted or sold')}</span></div>
+    <div class="stat-cards">
+      <div class="card kpi"><span class="k-label">Total supply</span><span class="k-value">${esc(t.totalSupply || '1,000,000,000')}</span><span class="k-sub">fixed · no minting</span></div>
+      <div class="card kpi"><span class="k-label">Standard</span><span class="k-value">ERC-20</span><span class="k-sub">vanilla OpenZeppelin</span></div>
+      <div class="card kpi"><span class="k-label">Decimals</span><span class="k-value">${t.decimals ?? 8}</span><span class="k-sub">home chain ${esc(t.chain || 'IOST L2')}</span></div>
+      <div class="card kpi"><span class="k-label">Contract</span><span class="k-value">${d.contractAddress ? '<a href="' + esc(d.explorerUrl || '') + '/address/' + esc(d.contractAddress) + '" target="_blank" rel="noopener">' + esc(d.contractAddress.slice(0, 8)) + '…' + esc(d.contractAddress.slice(-6)) + '</a>' : 'pending deploy'}</span><span class="k-sub">free tooling audit passed 2026-08-16</span></div>
+    </div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="section-title" style="margin-bottom:8px">Allocation <span class="sub">1,000,000,000 AITT · fixed at deployment · earned, never sold</span></div>
+      ${ALLOC.map(([name, pct, amt, vest]) => `<div class="alloc-row"><span class="alloc-name">${name}</span><span class="alloc-bar"><i style="width:${pct}%"></i></span><span class="alloc-pct mono">${amt} · ${pct}%</span><span class="alloc-vest">${vest}</span></div>`).join('')}
+    </div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="section-title" style="margin-bottom:8px">Utility <span class="sub">use-rights within the platform — no dividend rights, no implied investment return</span></div>
+      <div class="util-grid">
+        <div class="util"><span class="chip ok">Trust staking</span><p>Agents stake AITT → Trust Score → spend limits. Slashing for unauthorized spend — KYA with teeth.</p></div>
+        <div class="util"><span class="chip ok">Fee utility</span><p>50% discount on platform fees paid in AITT · split 50% stakers / 20% burn / 30% treasury.</p></div>
+        <div class="util"><span class="chip ok">Governance</span><p>1 staked AITT = 1 vote · spend limits, slashing rules, fee schedule, treasury allocations.</p></div>
+        <div class="util"><span class="chip ok">Agentic payments</span><p>AP2 consent/intent/payment mandates + x402 rails on IOST — Phase 3.</p></div>
+      </div>
+    </div>
+    <div class="card conv-card" style="margin-bottom:16px">
+      <div class="section-title" style="margin-bottom:8px">Points → AITT conversion <span class="sub">earn-event, not a purchase</span></div>
+      <div class="aitt-conv">
+        <div class="conv-cell"><span class="k-label">Rate</span><span class="k-value">1:1</span></div>
+        <div class="conv-cell"><span class="k-label">Status</span><span class="chip ${conv.open ? 'ok' : 'neut'}">${esc(conv.statusText || 'closed — planned at TGE, not guaranteed')}</span></div>
+        <a class="btn sm" href="/whitepaper" target="_blank" rel="noopener">Whitepaper</a>
+      </div>
+      <p class="muted" style="font-size:11px;margin-top:8px">${esc(d.honesty || '')}</p>
+    </div>
+    <div class="card empty" style="text-align:center">Full public page: <a href="/aitt" target="_blank" rel="noopener" style="color:var(--cyan)">iostcallister.com/aitt</a> · Whitepaper: <a href="/whitepaper" target="_blank" rel="noopener" style="color:var(--cyan)">iostcallister.com/whitepaper</a></div>`;
 }
 
 // ---------------- Your IOST Wallet (free · platform-subsidized · self-custody) ----------------
@@ -468,7 +747,7 @@ setInterval(setClock, 1000); setClock();
 
 $$('.nav-btn').forEach(btn => btn.addEventListener('click', () => switchView(btn.dataset.view)));
 // ARD: deterministic paths — every view has a stable deep link (/app#scanner, /app#risk, …)
-const VALID_VIEWS = ['scanner', 'scores', 'risk', 'portfolio', 'onchain', 'news', 'assistant', 'journal', 'performance', 'whales', 'agents', 'points', 'wallet'];
+const VALID_VIEWS = ['scanner', 'scores', 'risk', 'portfolio', 'onchain', 'news', 'assistant', 'journal', 'performance', 'whales', 'smartmoney', 'audit', 'agents', 'points', 'aitt', 'wallet'];
 function switchView(view) {
   if (!VALID_VIEWS.includes(view)) view = 'scanner';
   state.activeView = view;
@@ -524,7 +803,7 @@ function refreshView(view) {
     return;
   }
   ({ scanner: renderScanner, scores: renderScores, risk: renderRisk, portfolio: renderPortfolio,
-    onchain: renderOnchain, news: renderNews, assistant: renderAssistant, journal: renderJournal, performance: renderPerformance, whales: renderWhales, agents: renderAgents, points: renderPoints, wallet: renderWallet })[view]();
+    onchain: renderOnchain, news: renderNews, assistant: renderAssistant, journal: renderJournal, performance: renderPerformance, whales: renderWhales, smartmoney: renderSmartMoney, audit: renderAudit, agents: renderAgents, points: renderPoints, aitt: renderAITT, wallet: renderWallet })[view]();
 }
 
 // ---------------- helpers ----------------
@@ -1925,7 +2204,7 @@ async function renderCommandRail() {
     else if (paper) balEl.textContent = Number(paper.account.cash).toLocaleString('en-US', { maximumFractionDigits: 2 });
     else balEl.textContent = '--';
   }
-  // points balance (off-chain; 1:1 AIT planned at TGE — honest chip)
+  // points balance (off-chain; 1:1 AITT planned at TGE — honest chip)
   const ptEl = $('#tbPoints');
   if (ptEl) ptEl.textContent = pts && Number.isFinite(pts.balance) ? String(pts.balance) : '--';
   const apChip = $('#tbAutopilot');

@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="AITT — Agent Intelligence Trading Token. ERC-20 on IOST L2, 1B fixed supply. Utility token of IOST Terminal (iostcallister.com): trust staking, fee utility, governance. Design draft — no token has been created, minted, or sold.">
+<meta name="agent:api" content="/api">
+<link rel="agent-manifest" href="/.well-known/agent.json">
+<meta property="og:title" content="AITT — Agent Intelligence Trading Token">
+<meta property="og:description" content="The utility token of IOST Terminal: trust staking for AI agents, 50% fee discount, governance. ERC-20 on IOST L2 · 1B fixed supply · 8 decimals. Design draft — not issued.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://iostcallister.com/aitt">
+<meta name="twitter:card" content="summary_large_image">
+<title>AITT — Agent Intelligence Trading Token | IOST Terminal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Sora:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Product",
+      "name": "Agent Intelligence Trading Token (AITT)",
+      "description": "Utility token of the IOST Terminal AI trading platform: trust-staking collateral for AI agents, 50% fee discount, stake-weighted governance. ERC-20 on IOST L2 (chain 182), 1,000,000,000 fixed supply, 8 decimals.",
+      "brand": { "@type": "Organization", "name": "IOST Terminal", "url": "https://iostcallister.com" },
+      "url": "https://iostcallister.com/aitt",
+      "identifier": "AITT"
+    },
+    {
+      "@type": "WebSite",
+      "name": "IOST Terminal — AI Command Center",
+      "url": "https://iostcallister.com",
+      "description": "Real-time AI trading command center for crypto & stocks. Proven on IOST. Free to trade. Built for humans, designed for agents."
+    }
+  ]
+}
+</script>
+<style>
+:root {
+  --bg: #04060a; --surface: #0a0e15; --surface-2: #0d1320;
+  --line: #1c2b40; --line-strong: #2c4060;
+  --text: #eef6fc; --muted: #93a7ba; --dim: #5d7090;
+  --cyan: oklch(0.875 0.149 202); --violet: oklch(0.638 0.210 290);
+  --mint: oklch(0.894 0.166 172); --red: oklch(0.712 0.181 23); --amber: oklch(0.879 0.131 85);
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+  --disp: 'Chakra Petch', 'Space Grotesk', system-ui, sans-serif;
+  --sans: 'Sora', system-ui, sans-serif;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { color-scheme: dark; scroll-behavior: smooth; }
+body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 15px; line-height: 1.65; }
+::selection { background: rgba(0,229,255,.25); }
+a { color: inherit; text-decoration: none; }
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 22px; }
+
+/* nav */
+.nav { display: flex; align-items: center; gap: 22px; padding: 18px 0; border-bottom: 1px solid var(--line); }
+.brand { font-family: var(--disp); font-weight: 700; letter-spacing: .06em; font-size: 15px; color: var(--mint); }
+.brand em { font-style: normal; color: var(--cyan); }
+.nav a.pill { margin-left: auto; font-size: 13px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; transition: border-color .25s, color .25s; }
+.nav a.pill:hover { color: var(--mint); border-color: var(--mint); }
+.nav a.pill.active { color: var(--mint); border-color: var(--mint); }
+
+/* hero */
+.hero { padding: 64px 0 34px; }
+.hero .status { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--amber); border: 1px solid color-mix(in oklch, var(--amber) 35%, transparent); border-radius: 999px; padding: 5px 13px; margin-bottom: 20px; }
+.hero .status .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--amber); animation: pulse 2s infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+.hero h1 { font-family: var(--disp); font-size: clamp(34px, 5.5vw, 58px); line-height: 1.04; letter-spacing: .01em; }
+.hero h1 .tick { color: var(--cyan); }
+.hero .lede { color: var(--muted); max-width: 640px; margin-top: 16px; font-size: 16px; }
+.hero .cta { display: flex; gap: 12px; margin-top: 26px; flex-wrap: wrap; }
+.btn { display: inline-block; font-family: var(--sans); font-size: 14px; font-weight: 600; border-radius: 10px; padding: 11px 20px; cursor: pointer; transition: transform .2s var(--ease-out), box-shadow .2s; }
+.btn.primary { background: linear-gradient(120deg, var(--cyan), var(--mint)); color: #04121a; box-shadow: 0 0 24px rgba(0,229,255,.22); }
+.btn.primary:hover { transform: translateY(-1px); box-shadow: 0 0 34px rgba(0,229,255,.35); }
+.btn.ghost { border: 1px solid var(--line-strong); color: var(--text); }
+.btn.ghost:hover { border-color: var(--mint); color: var(--mint); }
+
+/* stat grid */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 34px 0 8px; }
+.stat { background: linear-gradient(180deg, var(--surface), var(--surface-2)); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+.stat .k { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); }
+.stat .v { font-family: var(--mono); font-size: 19px; margin-top: 6px; color: var(--text); }
+.stat .v a { color: var(--cyan); border-bottom: 1px dashed color-mix(in oklch, var(--cyan) 40%, transparent); }
+.stat .s { font-size: 12px; color: var(--dim); margin-top: 3px; }
+
+/* sections */
+section { padding: 40px 0; border-top: 1px solid var(--line); }
+h2 { font-family: var(--disp); font-size: 24px; letter-spacing: .02em; margin-bottom: 6px; }
+.sub { color: var(--dim); font-size: 13px; margin-bottom: 22px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.card { background: linear-gradient(180deg, var(--surface), var(--surface-2)); border: 1px solid var(--line); border-radius: 14px; padding: 18px; }
+.card h3 { font-family: var(--disp); font-size: 16px; color: var(--mint); margin-bottom: 8px; }
+.card p { color: var(--muted); font-size: 13.5px; }
+.card .tag { display: inline-block; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--cyan); border: 1px solid color-mix(in oklch, var(--cyan) 30%, transparent); border-radius: 999px; padding: 3px 9px; margin-bottom: 10px; }
+
+/* allocation bars */
+.alloc { display: grid; gap: 10px; }
+.alloc-row { display: grid; grid-template-columns: 190px 1fr 110px; align-items: center; gap: 12px; font-size: 13px; }
+.alloc-row .name { color: var(--muted); }
+.alloc-row .pct { font-family: var(--mono); text-align: right; color: var(--text); }
+.bar { height: 10px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; }
+.bar i { display: block; height: 100%; border-radius: 6px; }
+.alloc-row .vest { font-size: 11px; color: var(--dim); grid-column: 2; margin-top: -6px; }
+
+/* roadmap */
+.road { display: grid; gap: 10px; }
+.road .step { display: grid; grid-template-columns: 44px 1fr; gap: 14px; align-items: start; }
+.road .num { font-family: var(--disp); font-size: 22px; color: var(--cyan); border: 1px solid var(--line-strong); border-radius: 12px; width: 44px; height: 44px; display: grid; place-items: center; }
+.road .step.live .num { color: var(--mint); border-color: color-mix(in oklch, var(--mint) 45%, transparent); }
+.road h4 { font-size: 15px; }
+.road p { color: var(--muted); font-size: 13px; }
+
+/* conversion */
+.conv { border: 1px solid color-mix(in oklch, var(--amber) 30%, var(--line)); background: linear-gradient(180deg, #0d0a02, var(--surface-2)); }
+.conv h3 { color: var(--amber); }
+.conv .rate { font-family: var(--mono); font-size: 20px; color: var(--text); margin: 10px 0 4px; }
+.conv .note { font-size: 12.5px; color: var(--muted); }
+
+/* honesty + footer */
+.honesty { font-size: 13px; color: var(--amber); border: 1px dashed color-mix(in oklch, var(--amber) 40%, transparent); border-radius: 12px; padding: 14px 16px; margin-top: 26px; }
+footer { padding: 34px 0 60px; border-top: 1px solid var(--line); color: var(--dim); font-size: 13px; }
+footer .cols { display: flex; gap: 26px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+footer a { color: var(--muted); border-bottom: 1px dashed var(--line-strong); }
+footer a:hover { color: var(--mint); }
+@media (max-width: 640px) { .alloc-row { grid-template-columns: 1fr; } .alloc-row .pct { text-align: left; } }
+</style>
+</head>
+<body>
+<header class="wrap nav">
+  <a class="brand" href="/">IOST <em>TERMINAL</em></a>
+  <a class="pill active" href="/aitt">AITT</a>
+  <a class="pill" href="/whitepaper">Whitepaper</a>
+  <a class="pill" href="/app">Launch Terminal</a>
+</header>
+
+<main class="wrap">
+  <!-- hero -->
+  <div class="hero">
+    <span class="status"><span class="dot"></span> Design draft — no token issued</span>
+    <h1>AITT — Agent Intelligence <span class="tick">Trading Token</span></h1>
+    <p class="lede">The utility layer for machine-executed finance on IOST Terminal: trust staking that makes AI agents accountable, fee utility, and stake-weighted governance. Earned, staked and governed — never sold.</p>
+    <div class="cta">
+      <a class="btn primary" href="/whitepaper">Read the whitepaper v1.0</a>
+      <a class="btn ghost" href="/app">Open IOST Terminal</a>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="k">Total supply</div><div class="v">1,000,000,000</div><div class="s">fixed · no minting</div></div>
+      <div class="stat"><div class="k">Standard</div><div class="v">ERC-20</div><div class="s">vanilla OpenZeppelin</div></div>
+      <div class="stat"><div class="k">Decimals</div><div class="v">8</div></div>
+      <div class="stat"><div class="k">Home chain</div><div class="v"><a href="https://l2-scan.iost.io" rel="noopener" target="_blank">IOST L2</a></div><div class="s">chain 182 · l2-mainnet.iost.io</div></div>
+      <div class="stat"><div class="k">Contract</div><div class="v"><a href="https://l2-scan.iost.io" rel="noopener" target="_blank">pending deploy</a></div><div class="s">audited by tooling pass 2026-08-16</div></div>
+      <div class="stat"><div class="k">Points → AITT</div><div class="v">1:1</div><div class="s">planned at TGE — not guaranteed</div></div>
+    </div>
+  </div>
+
+  <!-- allocation -->
+  <section id="allocation">
+    <h2>Allocation</h2>
+    <p class="sub">1,000,000,000 AITT — fixed at deployment, distributed by vesting and earned programs, never by sale.</p>
+    <div class="card">
+      <div class="alloc">
+        <div class="alloc-row"><span class="name">Ecosystem &amp; agent rewards</span><span class="bar"><i style="width:30%;background:linear-gradient(90deg,var(--cyan),var(--mint))"></i></span><span class="pct">300M · 30%</span><span class="vest">48-month declining emission · revenue-backed top-ups</span></div>
+        <div class="alloc-row"><span class="name">Treasury (DAO)</span><span class="bar"><i style="width:20%;background:linear-gradient(90deg,var(--violet),var(--cyan))"></i></span><span class="pct">200M · 20%</span><span class="vest">milestone-gated</span></div>
+        <div class="alloc-row"><span class="name">Team &amp; core contributors</span><span class="bar"><i style="width:15%;background:linear-gradient(90deg,var(--mint),var(--violet))"></i></span><span class="pct">150M · 15%</span><span class="vest">12-month cliff + 36-month linear (4 yrs total)</span></div>
+        <div class="alloc-row"><span class="name">Strategic partners</span><span class="bar"><i style="width:10%;background:var(--amber)"></i></span><span class="pct">100M · 10%</span><span class="vest">milestone-gated · partner contracts only</span></div>
+        <div class="alloc-row"><span class="name">Community &amp; adoption</span><span class="bar"><i style="width:10%;background:var(--cyan)"></i></span><span class="pct">100M · 10%</span><span class="vest">earned airdrops · liquidity incentives · grants</span></div>
+        <div class="alloc-row"><span class="name">Reserve fund</span><span class="bar"><i style="width:10%;background:var(--red)"></i></span><span class="pct">100M · 10%</span><span class="vest">insurance · emergency liquidity · DAO-voted buy-back/burn</span></div>
+        <div class="alloc-row"><span class="name">Early supporters &amp; advisors</span><span class="bar"><i style="width:5%;background:var(--mint)"></i></span><span class="pct">50M · 5%</span><span class="vest">12-month cliff + 24-month linear</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- utility -->
+  <section id="utility">
+    <h2>Utility</h2>
+    <p class="sub">AITT is a use-right within the platform — no dividend rights, no implied investment return.</p>
+    <div class="grid2">
+      <div class="card"><span class="tag">Trust staking</span><h3>How do you trust an agent with money?</h3><p>Agents stake AITT as collateral → Trust Score → spending authority. Slashing penalizes unauthorized spend and failed settlement. Economic incentives instead of hope — the industry's "Know Your Agent" made routine.</p></div>
+      <div class="card"><span class="tag">Fee utility</span><h3>50% discount</h3><p>Platform and agent-network fees paid in AITT get a 50% discount vs fiat-denominated fees. Fee split: 50% to stakers · 20% burned · 30% treasury.</p></div>
+      <div class="card"><span class="tag">Governance</span><h3>Stake-weighted votes</h3><p>1 AITT staked = 1 vote. Spend-limit defaults, slashing rules, fee schedule, treasury allocations and buy-back/burn — all DAO-adjustable. 0.1% proposal threshold, 20% quorum.</p></div>
+      <div class="card"><span class="tag">Agentic payments</span><h3>AP2 + x402 ready</h3><p>Consent / intent / payment token mandates (AP2 v0.2 mapping) with payment sessions and atomic reserve→process→commit enforcement. First AP2-compatible implementation on a non-EVM L1 ecosystem — IOST as a payment rail.</p></div>
+    </div>
+  </section>
+
+  <!-- roadmap -->
+  <section id="roadmap">
+    <h2>Roadmap</h2>
+    <p class="sub">Phase-gated — never skipped ahead.</p>
+    <div class="card">
+      <div class="road">
+        <div class="step live"><span class="num">0</span><div><h4>Points — live now</h4><p>Off-chain points ledger: signals +10 · followers +5 · referrals +50/+10 · weekly top paper trader +500. 1:1 AITT conversion planned at TGE.</p></div></div>
+        <div class="step"><span class="num">1</span><div><h4>ERC-20 deployment — built &amp; audited</h4><p>Contracts (token + vesting + converter) complete on IOST L2, 28/28 tests, Slither + Mythril clean. Deploy pending gate sign-off.</p></div></div>
+        <div class="step"><span class="num">2</span><div><h4>Agent wallet</h4><p>Trust staking, spend limits, approval flows, slashing; consent/intent/payment token mandates.</p></div></div>
+        <div class="step"><span class="num">3</span><div><h4>x402 agent payments on IOST</h4><p>Pay-per-request API payments; IOST Terminal's producer node as the ecosystem x402 facilitator.</p></div></div>
+        <div class="step"><span class="num">4</span><div><h4>External liquidity</h4><p>DEX listing + EVM bridges (BSC first — PancakeSwap, CMC price data) only after full legal review.</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- conversion -->
+  <section id="conversion">
+    <h2>Points → AITT conversion</h2>
+    <p class="sub">Earned platform points convert 1:1 at TGE. Conversion is an earn-event, never a purchase.</p>
+    <div class="card conv">
+      <h3>Status: gate closed — opens at TGE</h3>
+      <div class="rate">1 point → 1 AITT</div>
+      <p class="note">The conversion opens only after the token deploys, the converter reserve is funded, and the TGE gates pass (10,000 registered users · 500 staked agents · ≥40% of circulating supply staked). Until then points are accrual-only and non-spendable — and honestly labeled: <strong>planned, not guaranteed</strong>.</p>
+    </div>
+  </section>
+
+  <div class="honesty">⚠️ AITT is a design draft. <strong>No token has been created, minted, or sold.</strong> AITT is not an investment and has no guaranteed value. Nothing on this page is financial advice — DYOR. Utility framing per Canadian securities posture (counsel-cleared 2026-08-16).</div>
+</main>
+
+<footer class="wrap">
+  <div class="cols">
+    <span>IOST Terminal — AI Command Center · Proven on IOST · Free to trade · Built for humans, designed for agents.</span>
+    <span>Point of contact: <a href="mailto:iostcallister@hotmail.com">iostcallister@hotmail.com</a> · <a href="/">Home</a> · <a href="/app">Terminal</a> · <a href="/whitepaper">Whitepaper</a> · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a></span>
+  </div>
+</footer>
+</body>
+</html>

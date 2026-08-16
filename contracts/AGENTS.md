@@ -1,0 +1,29 @@
+# AGENTS.md — iost-terminal/contracts (AITT Phase 1)
+
+## Purpose
+Solidity build for the AITT token (Phase 1 of the roadmap in `docs/TOKENOMICS.md`):
+AITT ERC-20, allocation vesting, points→AITT converter, deploy + verify scripts.
+
+## Ownership
+- Owner: PROJECT OWNER (final sign-off on any deployment or design change)
+- Scope: this folder only. Design decisions live in `../docs/TOKENOMICS.md` (source of truth).
+
+## Local Contracts (locked — do not change without PROJECT OWNER)
+- Token: vanilla OpenZeppelin ERC-20, **1B fixed supply, 8 decimals, NO mint/burn**
+- Vesting: cliff + linear (team 12-mo cliff + 36-mo linear · advisors 12-mo cliff + 24-mo linear)
+- Converter: 1:1 points→AITT, operator-approved snapshots, reserve-funded, pausable
+- Allocation (sums to 1,000,000,000): ecosystem 300M · treasury 200M · team 150M · partners 100M · community 100M · reserve 100M · advisors 50M. Points-conversion reserve draws from the ecosystem pool.
+- Audit gate: free tooling pass DONE (2026-08-16); **mid-tier external audit required before Phase 2 moves real value**. Never present the tooling pass as an external audit.
+- Network: IOST L2, chain 182 (`https://l2-mainnet.iost.io`), gas = BNB, explorer `https://l2-scan.iost.io`.
+
+## Work Guidance
+- Secrets never live here: `deploy.config.json` (addresses only) and `.env` are gitignored.
+- Deploying needs PROJECT OWNER's explicit go-ahead; runbook: `../docs/PHASE1_SPEC.md`.
+- Design-doc edits (supply, allocations, schedules) must stay in sync with `../docs/TOKENOMICS.md` AND `../docs/AITT-Whitepaper-v1.0.md` (identical copies — edit TOKENOMICS, then cp).
+
+## Verification
+- `npx hardhat test` — 28 tests, all must pass before any deploy/PR.
+- `npx hardhat run scripts/deploy.js --network iostL2` then `scripts/verify.js` (with AITT_ADDRESS) — allocation checks must read OK.
+
+## Child DOX Index
+None — this folder has no child AGENTS.md files.

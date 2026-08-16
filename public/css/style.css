@@ -561,3 +561,62 @@ body.cmd .ticker-wrap { background: rgba(6, 10, 17, .9); border-color: rgba(0, 2
 .wallet-check input { accent-color: var(--accent); width: 16px; height: 16px; }
 .btn[disabled] { opacity: .45; cursor: not-allowed; }
 .btn[disabled]:hover { filter: none; }
+
+/* ---------- v1.16 Binance Web3 data (Smart-Money Signals + Token Audit) ---------- */
+.sm-chain { cursor: pointer; opacity: .55; }
+.sm-chain.is-active { opacity: 1; border-color: var(--accent); color: var(--accent); box-shadow: 0 0 12px rgba(77,214,255,.18); }
+.sig-card { display: flex; flex-direction: column; gap: 10px; }
+.sig-head { display: flex; align-items: center; gap: 10px; }
+.sig-logo { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; background: #111; flex: 0 0 auto; }
+.sig-logo-fallback { display: inline-flex; align-items: center; justify-content: center; color: var(--accent); font-size: 15px; }
+.sig-title { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.sig-title strong { font-family: var(--disp); letter-spacing: .04em; }
+.sig-right { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.sig-prices { display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; }
+.sig-prices .mono { font-size: 15px; }
+.sig-label { font-size: 9px; letter-spacing: .14em; color: var(--dim); display: block; font-weight: 600; }
+.sig-gain { font-family: var(--mono); font-weight: 700; font-size: 17px; margin-left: auto; }
+.sig-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.sig-tag { font-size: 10px; letter-spacing: .05em; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 2px 7px; }
+.sig-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; border-top: 1px solid var(--border); padding-top: 9px; }
+.sig-addr { font-size: 11px; color: var(--dim); }
+.chip.ok { color: var(--up); border-color: var(--up-dim); }
+.chip.alpha { color: var(--accent); border-color: var(--accent-dim); }
+.stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+@media (max-width: 900px) { .stat-grid { grid-template-columns: repeat(2, 1fr); } }
+.stat-cell { background: rgba(255,255,255,.02); border: 1px solid var(--border); border-radius: var(--radius); padding: 7px 10px; }
+.audit-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.audit-select, .audit-input { background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; font-size: 13px; }
+.audit-input { min-width: 280px; flex: 1; }
+.audit-input:focus, .audit-select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-dim); }
+.risk-badge { display: inline-block; padding: 4px 12px; border-radius: var(--radius); font-weight: 700; letter-spacing: .1em; font-size: 12px; }
+.risk-low { color: var(--up); background: var(--up-dim); border: 1px solid rgba(47,255,208,.35); }
+.risk-med { color: var(--warn); background: rgba(255,208,106,.10); border: 1px solid rgba(255,208,106,.35); }
+.risk-high { color: var(--down); background: var(--down-dim); border: 1px solid rgba(255,97,87,.4); }
+.risk-unk { color: var(--muted); background: rgba(150,167,184,.10); border: 1px solid var(--border); }
+.audit-summary { display: flex; flex-direction: column; gap: 12px; }
+.audit-cat { display: flex; flex-direction: column; gap: 8px; }
+.audit-cat-head { display: flex; justify-content: space-between; align-items: center; }
+.audit-check { display: flex; gap: 9px; align-items: flex-start; padding: 7px 9px; border-radius: var(--radius); font-size: 12.5px; }
+.audit-mark { font-family: var(--mono); font-weight: 700; }
+.check-hit { color: var(--down); background: var(--down-dim); }
+.check-caution { color: var(--warn); background: rgba(255,208,106,.07); }
+.check-clean { color: rgba(238,246,252,.55); }
+
+/* ================= AITT token + points conversion (v2.10, 2026-08-16) ================= */
+.aitt-conv { display: flex; gap: 26px; align-items: center; flex-wrap: wrap; }
+.conv-cell { display: flex; flex-direction: column; gap: 4px; }
+.conv-cell .k-value { font-family: var(--mono); font-size: 17px; }
+.aitt-conv .btn.sm { min-width: 130px; }
+.aitt-conv .btn.sm:disabled { opacity: .45; cursor: not-allowed; }
+.conv-card { border-color: rgba(255,208,106,.28); }
+.alloc-row { display: grid; grid-template-columns: 190px 1fr 120px; gap: 6px 14px; align-items: center; padding: 7px 0; border-bottom: 1px solid rgba(28,43,64,.5); }
+.alloc-row:last-child { border-bottom: none; }
+.alloc-name { font-size: 13px; color: var(--muted); }
+.alloc-bar { height: 9px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; }
+.alloc-bar i { display: block; height: 100%; border-radius: 6px; background: linear-gradient(90deg, var(--cyan), var(--mint)); }
+.alloc-pct { font-size: 12px; text-align: right; color: var(--text); }
+.alloc-vest { grid-column: 2; font-size: 11px; color: var(--dim); margin-top: -4px; }
+.util-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.util p { font-size: 12.5px; color: var(--muted); margin-top: 6px; line-height: 1.55; }
+@media (max-width: 640px) { .alloc-row { grid-template-columns: 1fr; } .alloc-pct { text-align: left; } .alloc-vest { grid-column: 1; } }

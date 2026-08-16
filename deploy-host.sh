@@ -25,9 +25,10 @@ fi
 echo "==> removing any previous iost-terminal container..."
 docker rm -f iost-terminal > /dev/null 2>&1 || true
 
-echo "==> starting iost-terminal (node:20, restart unless-stopped)..."
+echo "==> starting iost-terminal (node:20, restart unless-stopped, runs as data-owner uid)..."
 docker run -d --name iost-terminal --restart unless-stopped \
   --network "$NET" \
+  --user "$(stat -c '%u:%g' "$APP")" \
   -v "$APP:/app" -w /app \
   --label traefik.enable=true \
   --label "traefik.http.routers.iost.rule=Host(\`iostcallister.com\`) || Host(\`www.iostcallister.com\`)" \

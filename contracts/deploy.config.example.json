@@ -1,0 +1,15 @@
+{
+  "network": "iostL2",
+  "comment": "Fill every 0x... address before deploying. Addresses are public — never put private keys here. Amounts are in base units (8 decimals): 100000000000000000 = 1 AITT.",
+  "allocations": {
+    "ecosystemPool": "0x0000000000000000000000000000000000000000",
+    "treasury": "0x0000000000000000000000000000000000000000",
+    "teamBeneficiary": "0x0000000000000000000000000000000000000000",
+    "partners": "0x0000000000000000000000000000000000000000",
+    "community": "0x0000000000000000000000000000000000000000",
+    "reserve": "0x0000000000000000000000000000000000000000",
+    "advisorBeneficiary": "0x0000000000000000000000000000000000000000"
+  },
+  "pointsConversionReserve": "0",
+  "operator": "0x0000000000000000000000000000000000000000"
+}

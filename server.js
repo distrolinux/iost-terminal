@@ -3,7 +3,7 @@ import express from 'express';
 import { createServer } from 'node:http';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getTicker, WATCHLIST } from './lib/market.js';
+import { getTicker, getKlines, WATCHLIST } from './lib/market.js';
 import { getGlobalMetrics, getTopMovers, getMarketExtras } from './lib/marketdata.js';
 import { scanAll, analyzeSymbol } from './lib/scanner.js';
 import { computeScores } from './lib/score.js';
@@ -24,12 +24,14 @@ import { probabilityOf, recordProbability, getProbHistory, getOrderBook, getCont
 import * as chain from './lib/chain.js';
 import * as signals from './lib/signals.js';
 import * as points from './lib/points.js';
+import * as aitt from './lib/aitt.js';
 import * as iostAccounts from './lib/iost-accounts.js';
 import * as agentKeys from './lib/agent-keys.js';
 import * as liveProposals from './lib/live-proposals.js';
 import * as management from './lib/management.js';
 import * as triggers from './lib/triggers.js';
 import { runBacktest, describeRule } from './lib/backtest.js';
+import { auditToken, smartMoney, AUDIT_CHAINS, SIGNAL_CHAINS } from './lib/binance-data.js';
 import session from 'express-session';
 import { FileSessionStore } from './lib/session-store.js';
 import { authRouter, authLimiter } from './lib/auth-routes.js';
@@ -201,7 +203,7 @@ app.use((req, res, next) => {
 //   prices, scores, on-chain state and execution CTAs are in the first response.
 
 const PAGES = {};
-for (const f of ['index.html', 'hub.html', 'app.html']) {
+for (const f of ['index.html', 'hub.html', 'app.html', 'token.html']) {
   PAGES[f] = readFileSync(join(ROOT, 'public', f), 'utf8');
 }
 
@@ -482,6 +484,17 @@ function renderPage(name) {
 app.get('/', (req, res) => { res.set('Cache-Control', 'no-store'); res.send(renderPage('index.html')); });
 app.get('/hub', (req, res) => { res.set('Cache-Control', 'no-store'); res.send(renderPage('hub.html')); });
 app.get('/app', (req, res) => { res.set('Cache-Control', 'no-store'); res.send(renderPage('app.html')); });
+// AITT token page — public, SSR (CMC-ready: crawlers get full content, no JS required)
+app.get(['/aitt', '/token'], (req, res) => { res.set('Cache-Control', 'no-store'); res.send(renderPage('token.html')); });
+// Whitepaper (markdown distribution copy of TOKENOMICS.md — kept in sync)
+app.get('/whitepaper', (req, res) => {
+  try {
+    res.type('text/markdown; charset=utf-8');
+    res.send(readFileSync(join(ROOT, 'docs', 'AITT-Whitepaper-v1.0.md'), 'utf8'));
+  } catch {
+    res.status(404).json({ error: 'whitepaper not available yet' });
+  }
+});
 app.use(express.static(join(ROOT, 'public')));
 
 // ---- legal pages (draft — PROJECT OWNER reviews before publishing) ----
@@ -494,7 +507,7 @@ app.get('/privacy', (req, res) => { res.set('Cache-Control', 'no-store'); res.se
 app.get('/risk-disclosure', (req, res) => { res.set('Cache-Control', 'no-store'); res.send(LEGAL_PAGES['risk-disclosure.html']); });
 
 // ---- sitemap.xml ----
-const SITEMAP_URLS = ['/', '/app', '/hub', '/terms', '/privacy', '/risk-disclosure'];
+const SITEMAP_URLS = ['/', '/app', '/hub', '/aitt', '/token', '/whitepaper', '/terms', '/privacy', '/risk-disclosure'];
 app.get('/sitemap.xml', (req, res) => {
   const lastmod = new Date().toISOString().slice(0, 10);
   const urls = SITEMAP_URLS
@@ -769,7 +782,7 @@ app.delete('/api/signals/:id/follow', requireUser, (req, res) => {
 });
 
 // ================= off-chain points (tokenomics vision §6) =================
-// No token is issued. Points are accrual-only; 1:1 AIT conversion is PLANNED
+// No token is issued. Points are accrual-only; 1:1 AITT conversion is PLANNED
 // at TGE (honest label in the UI). Ledger: data/points.json (atomic writes).
 
 // GET /api/points — balance + recent ledger + referral info (session user or X-API-Key)
@@ -781,7 +794,11 @@ app.get('/api/points', requireUser, (req, res) => {
   res.json({
     ok: true, ownerId, balance: points.getBalance(ownerId), ledger: points.getLedger(ownerId, 50),
     referralCode: code, referralLink: `${SITE_URL}/app?ref=${code}`,
-    conversion: { rate: '1:1', token: 'AIT', status: 'planned at TGE — not issued yet', spendable: false },
+    conversion: {
+      rate: '1:1', token: 'AITT', spendable: false,
+      status: aitt.getInfo().conversion.statusText,
+      open: aitt.getInfo().conversion.open,
+    },
   });
 });
 
@@ -824,6 +841,25 @@ app.get('/api/points/bounty/status', (req, res) => {
 app.post('/api/points/bounty/run', requireUser, (req, res) => {
   if (!req.agentKey && !isOwnerSession(req)) return res.status(403).json({ error: 'admin or agent key required' });
   res.json({ ok: true, ...points.runWeeklyBounty() });
+});
+
+// ================= AITT token (Phase 1: design → deployed on IOST L2) =================
+// Public metadata + points→AITT conversion gate. Honest by design: the gate is
+// CLOSED until the ERC-20 is deployed, the converter funded, and TGE gates pass.
+// No token has been created, minted, or sold (TOKENOMICS.md §10).
+
+// GET /api/aitt/info — public token info (identity, chain, status, gate state)
+app.get('/api/aitt/info', (req, res) => {
+  res.json(aitt.getInfo());
+});
+
+// POST /api/points/claim — attempt points→AITT conversion (1:1) for the current
+// principal. While the gate is closed it answers honestly and writes NOTHING.
+app.post('/api/points/claim', requireUser, (req, res) => {
+  const ident = signalIdentity(req);
+  if (!ident) return res.status(401).json({ error: 'auth required' });
+  const r = aitt.claim({ ownerId: ident.agentId });
+  res.status(r.ok ? 200 : 400).json(r);
 });
 
 // queue flush: boot + every 10 min — drains data/pending_pins.json when the key appears
@@ -1331,7 +1367,12 @@ const API_INDEX = {
   ],
   leaderboard: { path: '/api/leaderboard', method: 'GET', query: 'period=week|all', purpose: 'PUBLIC social proof: top paper traders by closed P&L (masked identities) — agents can read it too' },
   backtest: { path: '/api/backtest', method: 'POST', body: '{symbol,timeframe?:1d|4h|1h|15m,strategy:{name?,side,entry:{rule:ma-cross|rsi|breakout|ai-score,params},exit:{stopPct?,targetPct?,trailingPct?,maxBars?},sizePct?}}', purpose: 'PUBLIC backtesting (FXReplay methodology): objective rules vs historical bars → expectancy, profit factor, max drawdown, Sharpe, vs buy-and-hold + per-trade journal. Honest caveats included.' },
-  points: 'Off-chain points ledger (tokenomics vision §6): no token issued. signal +10 · follower +5 · referral +50/+10 · feedback +5 (author) · weekly top paper trader +500. 1:1 AIT conversion planned at TGE (not guaranteed). Ledger data/points.json (atomic writes).',
+  binanceData: [
+    { path: '/api/token-audit', method: 'POST', body: '{contractAddress, chainId?:56|8453|CT_501|1}', purpose: 'PUBLIC Binance Web3 token security audit (honeypot/rug-pull/scam/tax scan). No keys. Proxy of web3.binance.com — result normalized: riskLevel 1-5, taxes, verified flag, risk-item checks. NOT investment advice.' },
+    { path: '/api/smart-money', method: 'GET', query: 'chainId=56|CT_501&page=1&pageSize=20', purpose: 'PUBLIC Binance Web3 smart-money on-chain signals (BSC/Solana): buy/sell events from tracked whale wallets, trigger vs current price, max gain, exit rate, tags. 30s server cache. NOT investment advice.' },
+  ],
+  points: 'Off-chain points ledger (tokenomics vision §6): no token issued. signal +10 · follower +5 · referral +50/+10 · feedback +5 (author) · weekly top paper trader +500. 1:1 AITT conversion planned at TGE (not guaranteed — conversion gate closed until deploy + TGE gates). Ledger data/points.json (atomic writes).',
+  aitt: 'AITT — Agent Intelligence Trading Token (design draft, NOT issued): ERC-20 on IOST L2 (chain 182), 1B fixed supply, 8 decimals. Points→AITT 1:1 conversion planned at TGE (gate closed). Public info: /api/aitt/info · page /aitt · whitepaper /whitepaper. Config data/aitt-config.json.',
   freeIostWallet: 'Every registered user gets a subsidized IOST mainnet account (platform pays ~11 IOST). Keys are generated IN THE BROWSER — the server never sees private keys, only the base64 public key + account name; it broadcasts auth.iost/signUp (VERIFIED ABI: createAccount does not exist on mainnet) with the platform account. No IOST_PIN_KEY → requests queue (status "pending") and flush when the key appears. Store data/iost_accounts.json.',
   discover: [{ path: '/.well-known/agent.json', method: 'GET', purpose: 'agent discovery manifest' }],
   market: [
@@ -1382,6 +1423,13 @@ const API_INDEX = {
     { path: '/api/points/feedback', method: 'POST', body: '{signalId,rating(1-5),comment?}', purpose: 'rate a signal\'s quality — its AUTHOR gains +5 (capped 1 per rater per signal; rater gains nothing)' },
     { path: '/api/points/bounty/status', method: 'GET', purpose: 'weekly top-trader bounty state: current ISO week, last award, trailing-7d leaderboard' },
     { path: '/api/points/bounty/run', method: 'POST', purpose: 'admin/agent only — award +500 to the top paper trader of the trailing 7 days (once per ISO week)' },
+    { path: '/api/points/claim', method: 'POST', purpose: 'attempt points→AITT conversion (1:1, planned at TGE — not guaranteed). Gate closed until deploy + TGE gates: answers honestly, writes nothing' },
+  ],
+  aitt: [
+    { path: '/api/aitt/info', method: 'GET', purpose: 'public AITT token info: identity, supply, chain, contract/converter addresses, conversion gate state, honesty notice' },
+    { path: '/aitt', method: 'GET', purpose: 'public AITT token page (SSR — CMC-ready, no JS required)' },
+    { path: '/token', method: 'GET', purpose: 'alias of /aitt' },
+    { path: '/whitepaper', method: 'GET', purpose: 'AITT whitepaper v1.0 (markdown — identical to docs/TOKENOMICS.md)' },
   ],
   wallets: [
     { path: '/api/account/iost/status', method: 'GET', purpose: 'public honesty endpoint (no auth): subsidized?, fee (~11 IOST), platform funding configured?, account-name rules, explorer base' },
@@ -1407,7 +1455,7 @@ const API_INDEX = {
 };
 
 app.get('/.well-known/agent.json', (req, res) => {
-  res.json({ name: 'IOST Terminal', version: '1.11.0', machineReadable: true, api: '/api', index: '/api', meta: '/api/meta', uiState: '/api/ui-state', auth: '/api/auth', points: '/api/points', wallet: '/api/account/iost', contracts: API_INDEX });
+  res.json({ name: 'IOST Terminal', version: '1.11.0', machineReadable: true, api: '/api', index: '/api', meta: '/api/meta', uiState: '/api/ui-state', auth: '/api/auth', points: '/api/points', aitt: '/api/aitt/info', wallet: '/api/account/iost', contracts: API_INDEX });
 });
 app.get('/api', (req, res) => res.json(API_INDEX));
 app.get('/api/meta', async (req, res) => {
@@ -1629,6 +1677,41 @@ app.post('/api/backtest', async (req, res) => {
 
 // status endpoint — honest ARD: last sweep summary
 app.get('/api/management', requireUser, (req, res) => res.json({ ok: true, ...management.sweepStatus() }));
+
+// ---------- v1.16 Binance Web3 public data (Token Audit + Smart-Money Signals) ----------
+// Public + agent-accessible (ARD). No keys — proxies web3.binance.com public endpoints.
+// Token Audit: pre-trade safety scan (honeypot/rug-pull/scam/tax). Smart-Money: whale buy/sell feed.
+app.post('/api/token-audit', async (req, res) => {
+  const { contractAddress, chainId } = req.body || {};
+  if (!contractAddress || !/^[A-Za-z0-9]{32,44}$/.test(String(contractAddress).trim())) {
+    return res.status(400).json({ ok: false, error: 'valid contractAddress required' });
+  }
+  const cid = String(chainId || '56');
+  if (!AUDIT_CHAINS.some((c) => c.id === cid)) {
+    return res.status(400).json({ ok: false, error: `unsupported chainId ${cid} — use ${AUDIT_CHAINS.map((c) => c.id).join('|')}` });
+  }
+  try {
+    const r = await auditToken(contractAddress, cid);
+    res.json({ ok: true, chainId: cid, ...r });
+  } catch (e) {
+    res.status(502).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/smart-money', async (req, res) => {
+  const cid = String(req.query.chainId || '56');
+  if (!SIGNAL_CHAINS.some((c) => c.id === cid)) {
+    return res.status(400).json({ ok: false, error: `unsupported chainId ${cid} — use ${SIGNAL_CHAINS.map((c) => c.id).join('|')}` });
+  }
+  try {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const pageSize = Math.min(Math.max(1, parseInt(req.query.pageSize, 10) || 20), 100);
+    const r = await smartMoney({ chainId: cid, page, pageSize });
+    res.json({ ok: true, chainId: cid, page, pageSize, cached: Date.now() - r.ts < 1500, ...r });
+  } catch (e) {
+    res.status(502).json({ ok: false, error: e.message });
+  }
+});
 
 // update trailing/DCA config on an OPEN position
 app.post('/api/paper/:id/management', requireUser, (req, res) => {

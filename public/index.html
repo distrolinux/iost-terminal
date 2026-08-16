@@ -209,7 +209,7 @@ h2 .muted-line { color: var(--dim); }
 .visor-top { display: flex; justify-content: space-between; align-items: baseline; padding: 7px 9px 1px; }
 .visor-sym { font-family: var(--mono); font-size: 12px; font-weight: 700; color: #fff; letter-spacing: 1px; }
 .visor-score { font-family: var(--mono); font-size: 12px; font-weight: 700; color: #00ffd5; text-shadow: 0 0 8px rgba(0, 255, 213, .6); }
-.visor canvas { display: block; width: calc(100% - 14px); height: 26px; margin: 3px 7px 0; }
+.visor canvas { display: block; width: calc(100% - 14px); height: 36px; margin: 3px 7px 0; }
 .visor-tape { padding: 3px 9px 6px; font-family: var(--mono); font-size: 9px; letter-spacing: .5px; color: #7df3ff; white-space: nowrap; overflow: hidden; }
 @keyframes levitate { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
 .op-copy h2 { font-size: clamp(30px, 4.2vw, 52px); }
@@ -366,7 +366,7 @@ footer .links a:hover { color: var(--text); }
       </div>
       <div class="visor" aria-hidden="true">
         <div class="visor-top"><span class="visor-sym" id="vSym">IOST</span><span class="visor-score" id="vScore">--</span></div>
-        <canvas id="vChart" width="160" height="26"></canvas>
+        <canvas id="vChart"></canvas>
         <div class="visor-tape" id="vTape">SYNCING…</div>
       </div>
     </div>
@@ -900,6 +900,59 @@ $('#copyBtn').addEventListener('click', () => {
   });
 });
 
+/* visor chart: real 1m candles of the top symbol — the tape, not a doodle */
+// Size the backing store to the displayed size × devicePixelRatio so the
+// candles render crisp (a fixed 200px canvas stretched by CSS looks blurry).
+function sizeVisor(cv) {
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = cv.clientWidth || 200, cssH = cv.clientHeight || 36;
+  const W = Math.max(2, Math.round(cssW * dpr)), H = Math.max(2, Math.round(cssH * dpr));
+  if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+  const x = cv.getContext('2d');
+  x.setTransform(dpr, 0, 0, dpr, 0, 0);
+  x.clearRect(0, 0, cssW, cssH);
+  return { x, cssW, cssH };
+}
+
+async function drawVisorChart(cv, symbol) {
+  const { x, cssW: w, cssH: h } = sizeVisor(cv);
+  let bars = [];
+  try {
+    const r = await (await fetch(`/api/klines/${encodeURIComponent(symbol)}?bar=1m&limit=120`)).json();
+    if (Array.isArray(r)) bars = r.filter(b => b.c != null);
+  } catch { /* fall through to snapshot polyline */ }
+  if (bars.length < 3) return false;
+  let min = Infinity, max = -Infinity;
+  for (const b of bars) { if (b.l < min) min = b.l; if (b.h > max) max = b.h; }
+  const pad = (max - min) * 0.12 || 1;
+  min -= pad; max += pad;
+  const y = v => h - 3 - ((v - min) / (max - min)) * (h - 6);
+  // faint grid
+  x.strokeStyle = 'rgba(77,214,255,.10)'; x.lineWidth = 1;
+  for (let i = 1; i < 4; i++) { const gy = (h / 4) * i; x.beginPath(); x.moveTo(0, gy); x.lineTo(w, gy); x.stroke(); }
+  // candles sized to FILL the strip (dense tape look), crisp 1px wicks
+  const cw = Math.max(2, Math.min(6, (w - 10) / bars.length - 1));
+  const gap = cw + 1.5;
+  x.lineWidth = 1;
+  bars.forEach((b, i) => {
+    const px = 5 + i * gap;
+    const up = b.c >= b.o;
+    const col = up ? '#2fffd0' : '#ff6157';
+    x.strokeStyle = col; x.fillStyle = col;
+    x.beginPath(); x.moveTo(px + cw / 2, y(b.h)); x.lineTo(px + cw / 2, y(b.l)); x.stroke();
+    const yO = y(b.o), yC = y(b.c);
+    x.fillRect(px, Math.min(yO, yC), cw, Math.max(1.5, Math.abs(yC - yO)));
+  });
+  // last-close pulse dot with a neon glow
+  const last = bars[bars.length - 1];
+  const col = last.c >= last.o ? '#2fffd0' : '#ff6157';
+  x.shadowColor = col; x.shadowBlur = 5;
+  x.fillStyle = col;
+  x.beginPath(); x.arc(5 + (bars.length - 1) * gap + cw / 2, y(last.c), 1.8, 0, 7); x.fill();
+  x.shadowBlur = 0;
+  return true;
+}
+
 /* ---------- AI operator visor: the machine wears its live state ---------- */
 async function updateVisor() {
   let s;
@@ -910,15 +963,17 @@ async function updateVisor() {
   if (score) score.textContent = top.composite != null ? `${top.composite} ${top.grade || ''}` : '--';
   if (tape) tape.textContent = `TPS ${s.onchain?.tps ?? '—'} · HEAD ${s.onchain?.headBlock ? Number(s.onchain.headBlock).toLocaleString() : '—'} · ${s.account?.openPositions ?? 0} OPEN · ${s.account?.exposurePct ?? 0}% EXP`;
   if (cv) {
-    const x = cv.getContext('2d');
-    const k = (s.scanner || []).slice(0, 20).map(a => a.price).filter(v => typeof v === 'number');
-    x.clearRect(0, 0, cv.width, cv.height);
-    if (k.length > 2) {
-      const min = Math.min(...k), max = Math.max(...k), w = cv.width, h = cv.height;
-      x.strokeStyle = '#00ffd5'; x.lineWidth = 1.6; x.beginPath();
-      k.forEach((v, i) => { const px = i * (w / (k.length - 1)), py = h - 3 - ((v - min) / (max - min || 1)) * (h - 6); i ? x.lineTo(px, py) : x.moveTo(px, py); });
-      x.stroke();
-      x.fillStyle = 'rgba(0,255,213,.9)'; x.beginPath(); x.arc(w - 1, h - 3 - ((k[k.length - 1] - min) / (max - min || 1)) * (h - 6), 2, 0, 7); x.fill();
+    const drew = await drawVisorChart(cv, top.symbol);
+    if (!drew) { // fallback: snapshot polyline (klines unavailable)
+      const { x, cssW: w, cssH: h } = sizeVisor(cv);
+      const k = (s.scanner || []).slice(0, 20).map(a => a.price).filter(v => typeof v === 'number');
+      if (k.length > 2) {
+        const min = Math.min(...k), max = Math.max(...k);
+        x.strokeStyle = '#00ffd5'; x.lineWidth = 1.6; x.beginPath();
+        k.forEach((v, i) => { const px = i * (w / (k.length - 1)), py = h - 3 - ((v - min) / (max - min || 1)) * (h - 6); i ? x.lineTo(px, py) : x.moveTo(px, py); });
+        x.stroke();
+        x.fillStyle = 'rgba(0,255,213,.9)'; x.beginPath(); x.arc(w - 1, h - 3 - ((k[k.length - 1] - min) / (max - min || 1)) * (h - 6), 2, 0, 7); x.fill();
+      }
     }
   }
   /* ARD: machine-readable page state — any agent can read the exact live state from the DOM */

@@ -5,6 +5,8 @@
 > off-chain **points system** (see mapping below) with zero securities exposure.
 > Revisit only after: real users, real trading fees, and legal counsel sign-off.
 
+> **Superseded by `docs/TOKENOMICS.md` (v1.0). Decisions 2026-08-16: symbol locked to AITT (verified free — "AIT" taken by AIT Protocol, AiMalls, AICHAIN, AI Trader); name changed from "AIgent Intelligence Trading Token" to "Agent Intelligence Trading Token" (trademark conflict — "AIgent" registered by Ubiquity Global Services, USPTO 2020, actively enforced). This file is a historical record.**
+
 ## 1. Token Overview
 - **Name:** AIgent Intelligence Trading Token
 - **Symbol:** AIT *(⚠️ verify ticker collision — "AIT" likely taken by existing projects)*
