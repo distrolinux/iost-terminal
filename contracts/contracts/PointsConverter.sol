@@ -50,6 +50,7 @@ contract PointsConverter is Ownable, Pausable, ReentrancyGuard {
     error NothingToClaim();
     error InsufficientReserve();
     error AlreadyClaimed();
+    error CannotReduceApproval();
 
     modifier onlyOperator() {
         if (msg.sender != operator) revert NotOperator();
@@ -96,6 +97,9 @@ contract PointsConverter is Ownable, Pausable, ReentrancyGuard {
             if (user == address(0)) revert ZeroAddress();
             uint256 amount = amounts[i];
             uint256 claimedUser = claimed[user];
+            // Never allow an approval below what the user already claimed: it would
+            // brick convert()/claimable() via underflow (approved - claimed reverts).
+            if (amount < claimedUser) revert CannotReduceApproval();
             uint256 oldOutstanding = approved[user] > claimedUser ? approved[user] - claimedUser : 0;
             uint256 newOutstanding = amount > claimedUser ? amount - claimedUser : 0;
             totalOutstanding = totalOutstanding - oldOutstanding + newOutstanding;
@@ -121,7 +125,7 @@ contract PointsConverter is Ownable, Pausable, ReentrancyGuard {
 
     /// @notice Remaining claimable amount for a user.
     function claimable(address user) external view returns (uint256) {
-        return approved[user] - claimed[user];
+        return approved[user] > claimed[user] ? approved[user] - claimed[user] : 0;
     }
 
     /// @notice Owner withdraws unused reserve once the conversion window closes

@@ -1,9 +1,12 @@
-# AITT Tokenomics — Professional Design Draft (v1.0)
+# AITT Tokenomics — Professional Design Draft (v1.3)
 
 > **Status: DESIGN DRAFT — no token has been created, minted, or sold.**
 > Supersedes `docs/tokenomics-vision.md` (v0.1) in design intent; that file remains as historical record.
 > This draft incorporates the Hermes review notes: 1B supply, revenue-backed incentives, legal-first sequencing, utility framing.
 > **Go-live gate:** real user base + real fee revenue + legal counsel sign-off (Canada/CSA review). No TGE before that.
+> v1.1 (2026-08-16): IOST 3.0 tokenomics-alignment pass — Growth Acceleration Pool (§5), fair-ordering/MEV commitment (§4.2), community-first ratio (§1, §3).
+> v1.2 (2026-08-17): diligence-pass appendix (§15) — Agent Cards/DIDs identity layer, FinOps circuit breakers, KYA/AML posture. Doc-only; no locked mechanics changed (pre-launch freeze).
+> v1.3 (2026-08-17): **burn cap locked (owner decision)** — cumulative burn (fee-burn + DAO buy-back/burn) capped at 200M → 800M supply floor; post-cap the 20% fee share redirects to stakers (70/30 split). Guarantees agent-operable supply.
 
 ---
 
@@ -16,8 +19,9 @@ AITT powers the platform's **agentic payments economy**: it is the trust, fee, a
 - **Standard:** **ERC-20 on IOST L2** (fully EVM-compatible, OP Stack rollup; IOST's official recommendation for high-frequency/low-cost scenarios — MetaMask, OpenZeppelin, x402/AP2 SDKs compatible). IOST L1 remains home to the platform's producer node (`iost_4_life`) as the payments facilitator/verifier.
 - **Total supply:** 1,000,000,000 (1B) — fixed, no uncapped minting
 - **Core roles:** Trust staking collateral · fee utility · rewards · governance
-- **Value drivers:** real fee revenue (50% to stakers, 20% burn, 30% treasury) + staking lock-up + discretionary buy-back/burn
+- **Value drivers:** real fee revenue (50% to stakers, 20% burn — capped at 200M, 30% treasury) + staking lock-up + discretionary buy-back/burn (same cap)
 - **Emission discipline:** rewards funded by revenue first; emission pool releases on a 48-month declining schedule; team fully vested over 4 years
+- **Community-first:** 70% of supply is community/DAO-controlled (30% ecosystem rewards + 10% community + 10% reserve + 20% DAO treasury) vs 30% insider (team, partners, advisors)
 
 ---
 
@@ -33,7 +37,7 @@ AITT powers the platform's **agentic payments economy**: it is the trust, fee, a
 | Home chain | IOST L2 (network ID 182, `l2-mainnet.iost.io`); L1 node as facilitator · BSC bridge for liquidity in Phase 4 |
 | Contract | OpenZeppelin-standard ERC-20 on IOST L2 (subject to final audit) |
 | Inflation | None — rewards drawn from allocation pools + real revenue |
-| Deflation | 20% of all AITT-denominated fees burned; DAO-voted buy-back/burn from treasury |
+| Deflation | 20% of all AITT-denominated fees burned, **capped at 200M cumulative (800M supply floor)**; DAO-voted buy-back/burn from treasury shares the same 200M cap; post-cap the burn share redirects to stakers |
 | Initial circulating | ≈10% at TGE (earned points conversion + ecosystem seed); remainder vesting/locked |
 
 **Design rationale for 1B:** supply is modeled from platform economics (fee volume, staking demand, reward budget), not round-number marketing. 21B (v0.1) was rejected as retail-bait.
@@ -55,6 +59,7 @@ AITT powers the platform's **agentic payments economy**: it is the trust, fee, a
 - No founder/team tokens are tradable before month 12.
 - No category may be reallocated except by supermajority DAO vote (>66% of staked AITT).
 - Unallocated/unearned rewards at end of emission schedule return to Treasury.
+- **Community-first ratio:** community/DAO-controlled pools total 70% (30% Ecosystem + 10% Community + 10% Reserve + 20% Treasury) vs 30% insider — the honest analog of IOST 3.0's 97/3 community-first framing for its Growth Reserve.
 
 ---
 
@@ -74,8 +79,11 @@ Agents and agent-operators stake AITT as **collateral** to obtain a **Trust Scor
 
 ### 4.2 Fee Utility
 - Platform and agent-network fees paid in AITT receive a **50% discount** vs fiat-denominated fees
-- Fee split: **50% stakers / 20% burn / 30% treasury**
+- Fee split: **50% stakers / 20% burn / 30% treasury** until the burn cap (below) is reached; thereafter **70% stakers / 30% treasury**
 - AITT-denominated fees create ongoing demand + deflation
+- **Burn mechanism (how the 20% is executed):** the AITT contract has **no burn function** — zero privileged functions by design (§2), so no one holds "burn power." The burn happens at the fee-settlement layer: 20% of every AITT-denominated fee is sent to the canonical null address (`0x0000…dEaD`), permanently destroying those tokens. The effect is identical to a contract burn — total supply visibly decreases on-chain — without granting any admin authority. DAO-voted buy-back/burn from treasury (§5) uses the same mechanism.
+- **Burn cap — 200M cumulative / 800M supply floor (locked 2026-08-17):** cumulative destruction across ALL burn sources (the 20% fee-burn AND DAO-voted buy-back/burn) is capped at **200M AITT** = 20% of total supply, so total supply can never fall below **800M** — agents always retain a working token supply. Enforced at the fee-settlement layer; verifiable on-chain for free, since the null-address balance itself IS the running counter. Once 200M is reached: (1) the 20% fee share stops going to the null address and redirects to stakers (split becomes 70/30); (2) DAO buy-back/burn stops burning — further buy-backs are held or redistributed, never destroyed. Reaching the cap requires 1B AITT in cumulative fees — far beyond any near-term volume — so the floor is insurance, not a constraint.
+- **Fair ordering (no MEV):** as facilitator/sequencer-adjacent operator, the platform never exploits private order flow; any MEV-like surplus from transaction ordering accrues to burn. Fair ordering is part of the trust contract — slashing-enforced (IOST 3.0's MEV-redistribution principle, adapted).
 
 ### 4.3 Rewards
 - Signal providers earn AITT per quality-verified signal (existing hash-pinned-on-IOST mechanic)
@@ -136,14 +144,18 @@ Live off-chain points (per the v0.1 mapping: signals +10, followers +5, referral
                              │
           ┌─────────┬────────┴────────┬─────────┐
           ▼         ▼                 ▼         ▼
-     50% Stakers  20% BURN         30% Treasury
+     50% Stakers  20% BURN*        30% Treasury
      (fee share)  (deflation)      (DAO: dev, liquidity, buy-back/burn)
+
+  * Burn capped at 200M cumulative (fee-burn + buy-back/burn) → 800M supply floor; post-cap the 20% redirects to stakers (70/30).
 
   Agent stakes AITT ──► Trust Score ──► Spend limits ──► Settles in USD credits/stablecoin
   Slashing events  ──► reduce stake + score (misbehavior penalty)
 ```
 
 **Accrual summary:** demand from fee discount + trust staking + rewards; supply pressure from burn, vesting locks, and staking lock-up; no naked inflation.
+
+**Growth Acceleration Pool:** the DAO-controlled Treasury runs a named program funding bridge-liquidity support (Phase 4), developer grants, merchant-adoption incentives, and the security-audit fund — allocations DAO-voted, mirroring IOST 3.0's Growth Reserve priorities.
 
 ---
 
@@ -161,7 +173,7 @@ Live off-chain points (per the v0.1 mapping: signals +10, followers +5, referral
 
 ### 6.2 Fee split (locked)
 - **50% → stakers** — participants who secure the network with AITT staking receive the majority share (revenue-backed, never minted)
-- **20% → burned** — deflation benefiting all holders equally
+- **20% → burned** — deflation benefiting all holders equally; capped at 200M cumulative (800M supply floor); post-cap this share redirects to stakers (70/30 split)
 - **30% → treasury** — development + DAO-voted buy-back/burn; transparent on-chain
 
 ### 6.3 Fairness commitments (why costs stay low for everyone)
@@ -239,7 +251,7 @@ Live off-chain points (per the v0.1 mapping: signals +10, followers +5, referral
 | **1 — ERC-20 deployment** | AITT ERC-20 on IOST L2, allocations + vesting contracts, points→AITT conversion tool | Contract audit *(legal ✓ 08-16, ticker ✓ 08-16)* |
 | **2 — Agent wallet** | Trust staking, spend limits, approval flows, slashing; consent/intent/payment tokens (AP2-style layered mandates) | Phase 1 stable + ≥X agents onboarded |
 | **3 — x402-style agent payments on IOST** | Pay-per-request API payments in stablecoin, AITT as fee/trust layer; payment sessions with 3-phase atomic budget enforcement (reserve→process→commit/rollback); AP2-compatible open/closed checkout + payment mandates (SD-JWT VDCs); IOST x402 facilitator (verify + settle, batch settlement) | Platform agent traffic + IOST ecosystem fit confirmed |
-| **4 — External liquidity** | DEX listing + EVM bridges (BSC first — PancakeSwap liquidity, CMC price data) — only after full legal review | Demand + compliance path exists |
+| **4 — External liquidity** | DEX listing + EVM bridges (BSC first — PancakeSwap liquidity, CMC price data) — only after full legal review. **CEX listings (e.g., Crypto.com) explicitly out of scope.** | Demand + compliance path exists |
 
 ---
 
@@ -277,11 +289,39 @@ Live off-chain points (per the v0.1 mapping: signals +10, followers +5, referral
 - [x] Name trademark-checked — 2026-08-16: "AIgent" dropped (registered USPTO by Ubiquity Global Services, enforced); renamed "Agent Intelligence Trading Token"
 - [ ] Supply/allocation modeled on real fee + staking projections (post Phase 1 data)
 - [x] Canadian legal counsel review — CLEARED 2026-08-16 (counsel: "good to go")
-- [x] **Phase 1 contracts BUILT + free tooling audit DONE 2026-08-16** — `contracts/` (AITT + vesting + converter), 28/28 tests, Slither 0 High/Medium, Mythril clean. Runbook: `docs/PHASE1_SPEC.md`
+- [x] **Phase 1 contracts BUILT + free tooling audit DONE 2026-08-16** — `contracts/` (AITT + vesting + converter), 29/29 tests, Slither 0 High/Medium, Mythril clean. Runbook: `docs/PHASE1_SPEC.md`
 - [ ] Mid-tier external audit (≈$3–8k) — required BEFORE Phase 2 moves real value (not yet scheduled; tooling pass is NOT an external audit)
 - [x] **Points→AITT conversion mechanics BUILT 2026-08-16** (rate 1:1 locked · claim endpoint + Points UI with honesty labels "planned, not guaranteed" · gate closed until deploy + TGE gates · reserve = live points-ledger snapshot via `data/aitt-config.json`) — public AITT page `/aitt` + `/whitepaper` live (CMC-ready infra)
+- [x] **Burn cap locked 2026-08-17 (owner decision)** — 200M cumulative cap across fee-burn + DAO buy-back/burn → 800M supply floor; post-cap 20% redirects to stakers (70/30)
 - [ ] Community/DAO charter drafted
-- [ ] Final version controlled with date + version + owner (PROJECT OWNER)
+- [ ] **Agent Cards + DID identity layer spec'd (diligence appendix §15.1)** — Phase 2 scope
+- [ ] **FinOps circuit-breaker thresholds modeled (diligence appendix §15.2)** — Phase 2/3 scope
+- [ ] **KYA/AML posture drafted into §10 (diligence appendix §15.3)** — before Phase 2
+- [ ] Final version controlled with date + version
+
+---
+
+## 15. Diligence Appendix — Agent-Platform Blueprint Review (2026-08-17)
+
+> Scope note: folded in as design intent for later phases; **no locked mechanics changed** (pre-launch freeze respected). Source: general agent-platform blueprint (multi-agent architecture, A2A/Agent Cards, token/identity/reputation, security & governance, regulation). ≈80% of it was already covered in this doc; the delta is below.
+
+### 15.1 Agent Cards & DID-based Identity (Phase 2–3)
+- Agents publish a machine-readable **Agent Card**: capabilities, constraints, identity (DID), and on-chain reputation — enabling dynamic discovery and peer selection (agents choose counterparts by score).
+- Extends §4.1: the Trust Score becomes portable reputation bound to the agent's DID, not only a platform-internal number.
+- **Differentiator:** pair with the IOST Signet Ring RWA identity stack — agent DIDs issued under the same identity layer. No other agentic-payments project pairs RWA identity with agent identity.
+- Formalizes the §13 risk-table line "agent identity attestation at registration" into a first-class identity layer.
+
+### 15.2 FinOps Circuit Breakers (Phase 2–3)
+- Beyond static spend limits (§4.1) and payment sessions (§4.7): continuous anomaly detection on agent spend — velocity spikes, category shifts, failed-settlement clusters — **revokes payment permissions mid-flight** until human review.
+- Ex-ante complement to slashing (ex-post); answers Accenture's machine-speed fraud vector.
+- Implementation: session-level tripwires + DAO-configurable thresholds (§4.4 governance already owns policy parameters).
+
+### 15.3 KYA/AML Posture (legal extension)
+- §10 covers CSA utility framing; this adds explicit **KYA** (Know Your Agent, FIDO-standardized) and AML responsibility language: agent operators (principals) are the accountable parties; the chain of intent (mandates + on-chain audit trail) is the evidence trail for KYC/AML inquiries.
+- Positions existing mechanics in the regulatory vocabulary of 2026 agentic commerce. No new mechanism.
+
+### Deferred to Phase 3 (operational, not token design)
+- **A2A protocol** (Google A2A / ASAP — task-handoff beside AP2's payment mandates) and **semantic firewalls** (prompt-injection defense) — product-layer work for when the agent network exists.
 
 ---
 

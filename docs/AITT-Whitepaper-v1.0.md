@@ -1,9 +1,10 @@
-# AITT Tokenomics — Professional Design Draft (v1.0)
+# AITT Tokenomics — Professional Design Draft (v1.1)
 
 > **Status: DESIGN DRAFT — no token has been created, minted, or sold.**
 > Supersedes `docs/tokenomics-vision.md` (v0.1) in design intent; that file remains as historical record.
 > This draft incorporates the Hermes review notes: 1B supply, revenue-backed incentives, legal-first sequencing, utility framing.
 > **Go-live gate:** real user base + real fee revenue + legal counsel sign-off (Canada/CSA review). No TGE before that.
+> v1.1 (2026-08-17): burn cap sync with TOKENOMICS.md v1.3 — cumulative burn (fee-burn + DAO buy-back/burn) capped at 200M → 800M supply floor; post-cap the 20% fee share redirects to stakers (70/30 split).
 
 ---
 
@@ -16,7 +17,7 @@ AITT powers the platform's **agentic payments economy**: it is the trust, fee, a
 - **Standard:** **ERC-20 on IOST L2** (fully EVM-compatible, OP Stack rollup; IOST's official recommendation for high-frequency/low-cost scenarios — MetaMask, OpenZeppelin, x402/AP2 SDKs compatible). IOST L1 remains home to the platform's producer node (`iost_4_life`) as the payments facilitator/verifier.
 - **Total supply:** 1,000,000,000 (1B) — fixed, no uncapped minting
 - **Core roles:** Trust staking collateral · fee utility · rewards · governance
-- **Value drivers:** real fee revenue (50% to stakers, 20% burn, 30% treasury) + staking lock-up + discretionary buy-back/burn
+- **Value drivers:** real fee revenue (50% to stakers, 20% burn — capped at 200M, 30% treasury) + staking lock-up + discretionary buy-back/burn (same cap)
 - **Emission discipline:** rewards funded by revenue first; emission pool releases on a 48-month declining schedule; team fully vested over 4 years
 
 ---
@@ -33,7 +34,7 @@ AITT powers the platform's **agentic payments economy**: it is the trust, fee, a
 | Home chain | IOST L2 (network ID 182, `l2-mainnet.iost.io`); L1 node as facilitator · BSC bridge for liquidity in Phase 4 |
 | Contract | OpenZeppelin-standard ERC-20 on IOST L2 (subject to final audit) |
 | Inflation | None — rewards drawn from allocation pools + real revenue |
-| Deflation | 20% of all AITT-denominated fees burned; DAO-voted buy-back/burn from treasury |
+| Deflation | 20% of all AITT-denominated fees burned, **capped at 200M cumulative (800M supply floor)**; DAO-voted buy-back/burn from treasury shares the same 200M cap; post-cap the burn share redirects to stakers |
 | Initial circulating | ≈10% at TGE (earned points conversion + ecosystem seed); remainder vesting/locked |
 
 **Design rationale for 1B:** supply is modeled from platform economics (fee volume, staking demand, reward budget), not round-number marketing. 21B (v0.1) was rejected as retail-bait.
@@ -74,8 +75,10 @@ Agents and agent-operators stake AITT as **collateral** to obtain a **Trust Scor
 
 ### 4.2 Fee Utility
 - Platform and agent-network fees paid in AITT receive a **50% discount** vs fiat-denominated fees
-- Fee split: **50% stakers / 20% burn / 30% treasury**
+- Fee split: **50% stakers / 20% burn / 30% treasury** until the burn cap (below) is reached; thereafter **70% stakers / 30% treasury**
 - AITT-denominated fees create ongoing demand + deflation
+- **Burn mechanism (how the 20% is executed):** the AITT contract has **no burn function** — zero privileged functions by design (§2), so no one holds "burn power." The burn happens at the fee-settlement layer: 20% of every AITT-denominated fee is sent to the canonical null address (`0x0000…dEaD`), permanently destroying those tokens. The effect is identical to a contract burn — total supply visibly decreases on-chain — without granting any admin authority. DAO-voted buy-back/burn from treasury (§5) uses the same mechanism.
+- **Burn cap — 200M cumulative / 800M supply floor (locked 2026-08-17):** cumulative destruction across ALL burn sources (the 20% fee-burn AND DAO-voted buy-back/burn) is capped at **200M AITT** = 20% of total supply, so total supply can never fall below **800M** — agents always retain a working token supply. Enforced at the fee-settlement layer; verifiable on-chain for free, since the null-address balance itself IS the running counter. Once 200M is reached: (1) the 20% fee share stops going to the null address and redirects to stakers (split becomes 70/30); (2) DAO buy-back/burn stops burning — further buy-backs are held or redistributed, never destroyed. Reaching the cap requires 1B AITT in cumulative fees — far beyond any near-term volume — so the floor is insurance, not a constraint.
 
 ### 4.3 Rewards
 - Signal providers earn AITT per quality-verified signal (existing hash-pinned-on-IOST mechanic)
@@ -136,8 +139,10 @@ Live off-chain points (per the v0.1 mapping: signals +10, followers +5, referral
                              │
           ┌─────────┬────────┴────────┬─────────┐
           ▼         ▼                 ▼         ▼
-     50% Stakers  20% BURN         30% Treasury
+     50% Stakers  20% BURN*        30% Treasury
      (fee share)  (deflation)      (DAO: dev, liquidity, buy-back/burn)
+
+  * Burn capped at 200M cumulative (fee-burn + buy-back/burn) → 800M supply floor; post-cap the 20% redirects to stakers (70/30).
 
   Agent stakes AITT ──► Trust Score ──► Spend limits ──► Settles in USD credits/stablecoin
   Slashing events  ──► reduce stake + score (misbehavior penalty)
@@ -161,7 +166,7 @@ Live off-chain points (per the v0.1 mapping: signals +10, followers +5, referral
 
 ### 6.2 Fee split (locked)
 - **50% → stakers** — participants who secure the network with AITT staking receive the majority share (revenue-backed, never minted)
-- **20% → burned** — deflation benefiting all holders equally
+- **20% → burned** — deflation benefiting all holders equally; capped at 200M cumulative (800M supply floor); post-cap this share redirects to stakers (70/30 split)
 - **30% → treasury** — development + DAO-voted buy-back/burn; transparent on-chain
 
 ### 6.3 Fairness commitments (why costs stay low for everyone)
@@ -277,11 +282,12 @@ Live off-chain points (per the v0.1 mapping: signals +10, followers +5, referral
 - [x] Name trademark-checked — 2026-08-16: "AIgent" dropped (registered USPTO by Ubiquity Global Services, enforced); renamed "Agent Intelligence Trading Token"
 - [ ] Supply/allocation modeled on real fee + staking projections (post Phase 1 data)
 - [x] Canadian legal counsel review — CLEARED 2026-08-16 (counsel: "good to go")
-- [x] **Phase 1 contracts BUILT + free tooling audit DONE 2026-08-16** — `contracts/` (AITT + vesting + converter), 28/28 tests, Slither 0 High/Medium, Mythril clean. Runbook: `docs/PHASE1_SPEC.md`
+- [x] **Phase 1 contracts BUILT + free tooling audit DONE 2026-08-16** — `contracts/` (AITT + vesting + converter), 29/29 tests, Slither 0 High/Medium, Mythril clean. Runbook: `docs/PHASE1_SPEC.md`
 - [ ] Mid-tier external audit (≈$3–8k) — required BEFORE Phase 2 moves real value (not yet scheduled; tooling pass is NOT an external audit)
 - [x] **Points→AITT conversion mechanics BUILT 2026-08-16** (rate 1:1 locked · claim endpoint + Points UI with honesty labels "planned, not guaranteed" · gate closed until deploy + TGE gates · reserve = live points-ledger snapshot via `data/aitt-config.json`) — public AITT page `/aitt` + `/whitepaper` live (CMC-ready infra)
+- [x] **Burn cap locked 2026-08-17 (owner decision)** — 200M cumulative cap across fee-burn + DAO buy-back/burn → 800M supply floor; post-cap 20% redirects to stakers (70/30) — synced with TOKENOMICS.md v1.3
 - [ ] Community/DAO charter drafted
-- [ ] Final version controlled with date + version + owner (PROJECT OWNER)
+- [ ] Final version controlled with date + version
 
 ---
 

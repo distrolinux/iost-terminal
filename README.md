@@ -76,7 +76,7 @@ and the autopilot executes trades with zero human intervention.
 
 **Auth & audit**
 
-- Optional `X-API-Key` header; keys configured via `AGENT_KEYS` env (default `demo-agent-key`)
+- Optional `X-API-Key` header; keys configured via `AGENT_KEYS` env (required — no default; API keys fail closed when unset)
 - `GET /api/audit` — every API call logged (method, path, key, status)
 
 **Autonomy (no human in the loop)**

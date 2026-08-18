@@ -25,6 +25,7 @@ contract AITT is ERC20, Ownable {
         ERC20("Agent Intelligence Trading Token", "AITT")
         Ownable(initialOwner)
     {
+        require(initialOwner != address(0), "AITT: zero initial owner");
         _mint(initialOwner, TOTAL_SUPPLY);
     }
 }

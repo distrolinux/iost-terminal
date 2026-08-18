@@ -47,6 +47,7 @@ contract AITTVesting is Ownable, ReentrancyGuard {
         uint256 duration_,
         uint256 totalAllocated_
     ) Ownable(msg.sender) {
+        require(address(token_) != address(0), "AITTVesting: zero token");
         require(beneficiary_ != address(0), "AITTVesting: zero beneficiary");
         require(duration_ > 0, "AITTVesting: zero duration");
         require(totalAllocated_ > 0, "AITTVesting: zero allocation");

@@ -71,18 +71,29 @@ describe("PointsConverter (points → AITT 1:1)", function () {
     ).to.be.revertedWithCustomError(conv, "NotOperator");
   });
 
-  it("re-approval recomputes outstanding precisely (incl. downgrades)", async function () {
+  it("re-approval recomputes outstanding precisely (incl. downgrades above claimed)", async function () {
     // Approve alice 100, bob 100 -> outstanding 200
     await conv.connect(operator).approveClaims([alice.address, bob.address], [100n * TOKEN, 100n * TOKEN]);
     expect(await conv.totalOutstanding()).to.equal(200n * TOKEN);
     // alice converts her full 100 (convert() claims everything claimable) -> outstanding 100
     await conv.connect(alice).convert();
     expect(await conv.totalOutstanding()).to.equal(100n * TOKEN);
-    // Re-approve: alice 50 (below her 100 already claimed → outstanding 0),
-    // bob 100 (unchanged), owner 200 → outstanding 100 + 200 = 300
-    await conv.connect(operator).approveClaims([alice.address, bob.address, owner.address], [50n * TOKEN, 100n * TOKEN, 200n * TOKEN]);
-    expect(await conv.totalOutstanding()).to.equal(300n * TOKEN);
-    expect(await conv.approved(alice.address)).to.equal(50n * TOKEN);
+    // Downgrades stay allowed down to the claimed amount: bob 100 → 60 (claimed 0),
+    // owner 0 → 200 ⇒ outstanding 100 − 40 + 200 = 260
+    await conv.connect(operator).approveClaims([bob.address, owner.address], [60n * TOKEN, 200n * TOKEN]);
+    expect(await conv.totalOutstanding()).to.equal(260n * TOKEN);
+    expect(await conv.approved(bob.address)).to.equal(60n * TOKEN);
+  });
+
+  it("rejects re-approval below what a user already claimed (underflow guard)", async function () {
+    await conv.connect(operator).approveClaims([alice.address], [100n * TOKEN]);
+    await conv.connect(alice).convert(); // claims all 100
+    await expect(
+      conv.connect(operator).approveClaims([alice.address], [50n * TOKEN])
+    ).to.be.revertedWithCustomError(conv, "CannotReduceApproval");
+    // alice's claim and the accounting are untouched by the failed call
+    expect(await conv.claimable(alice.address)).to.equal(0n);
+    expect(await conv.totalOutstanding()).to.equal(0n);
   });
 
   it("claimable() reflects approved minus claimed", async function () {

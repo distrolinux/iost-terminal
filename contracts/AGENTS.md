@@ -19,10 +19,10 @@ AITT ERC-20, allocation vesting, points→AITT converter, deploy + verify script
 ## Work Guidance
 - Secrets never live here: `deploy.config.json` (addresses only) and `.env` are gitignored.
 - Deploying needs PROJECT OWNER's explicit go-ahead; runbook: `../docs/PHASE1_SPEC.md`.
-- Design-doc edits (supply, allocations, schedules) must stay in sync with `../docs/TOKENOMICS.md` AND `../docs/AITT-Whitepaper-v1.0.md` (identical copies — edit TOKENOMICS, then cp).
+- Design-doc edits (supply, allocations, schedules, burn mechanics) must stay in sync with `../docs/TOKENOMICS.md` AND `../docs/AITT-Whitepaper-v1.0.md` (same mechanics; the public whitepaper is a condensed copy that omits the internal §15 appendix — edit TOKENOMICS first, then mirror public-facing changes).
 
 ## Verification
-- `npx hardhat test` — 28 tests, all must pass before any deploy/PR.
+- `npx hardhat test` — 29 tests, all must pass before any deploy/PR.
 - `npx hardhat run scripts/deploy.js --network iostL2` then `scripts/verify.js` (with AITT_ADDRESS) — allocation checks must read OK.
 
 ## Child DOX Index

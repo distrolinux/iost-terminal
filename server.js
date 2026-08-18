@@ -25,6 +25,13 @@ import * as chain from './lib/chain.js';
 import * as signals from './lib/signals.js';
 import * as points from './lib/points.js';
 import * as aitt from './lib/aitt.js';
+import * as wallets from './lib/wallets.js';
+import * as limits from './lib/limits.js';
+import * as freeze from './lib/freeze.js';
+import * as stakes from './lib/stakes.js';
+import * as slashes from './lib/slashes.js';
+import * as trust from './lib/trust.js';
+import * as pacts from './lib/pacts.js';
 import * as iostAccounts from './lib/iost-accounts.js';
 import * as agentKeys from './lib/agent-keys.js';
 import * as liveProposals from './lib/live-proposals.js';
@@ -35,6 +42,7 @@ import { auditToken, smartMoney, AUDIT_CHAINS, SIGNAL_CHAINS } from './lib/binan
 import session from 'express-session';
 import { FileSessionStore } from './lib/session-store.js';
 import { authRouter, authLimiter } from './lib/auth-routes.js';
+import rateLimit from 'express-rate-limit';
 import * as auth from './lib/auth.js';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
@@ -120,9 +128,9 @@ app.use(session({
 }));
 
 // ---------- machine-first agent layer ----------
-// API keys (optional; agents SHOULD authenticate). Set AGENT_KEYS="k1,k2" or default demo key.
+// API keys (optional; agents SHOULD authenticate). Set AGENT_KEYS="k1,k2" — no default (fail closed).
 // Registered BEFORE all routes so every protected route can see a valid key.
-const AGENT_KEYS = new Set((process.env.AGENT_KEYS || 'demo-agent-key').split(',').map(s => s.trim()).filter(Boolean));
+const AGENT_KEYS = new Set((process.env.AGENT_KEYS || '').split(',').map(s => s.trim()).filter(Boolean));
 app.use((req, res, next) => {
   const key = req.get('x-api-key') || '';
   req.agentKey = key && AGENT_KEYS.has(key) ? key : null;
@@ -136,6 +144,16 @@ app.use((req, res, next) => {
     if (ua) { req.userAgent = ua; agentKeys.touch(ua.keyId); }
   }
   next();
+});
+// shared public-API limiter for resource-heavy endpoints (upstream calls / CPU work).
+// Defined before any route uses it (TDZ-safe): scanner/risk/assistant register earlier in the file.
+const PUBLIC_LIMIT = Number.parseInt(process.env.PUBLIC_RATE_LIMIT || '60', 10) || 60;
+const publicLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: PUBLIC_LIMIT,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'too many requests — slow down' },
 });
 // scope guard for per-user agent keys — platform keys & sessions are unaffected
 function userAgentHas(req, scope) {
@@ -538,7 +556,7 @@ app.get('/api/health', (req, res) => res.json({ ok: true, name: 'IOST Terminal',
 
 app.get('/api/watchlist', (req, res) => res.json(WATCHLIST));
 
-app.get('/api/scanner', async (req, res) => {
+app.get('/api/scanner', publicLimiter, async (req, res) => {
   try {
     const scan = await scanAll({ force: !!req.query.force });
     // enrich crypto assets with rank + market cap (keyless CoinGecko, cached)
@@ -554,17 +572,17 @@ app.get('/api/scanner', async (req, res) => {
 });
 
 // ---- market-wide data (keyless: CoinGecko + Fear & Greed) ----
-app.get('/api/market/global', async (req, res) => {
+app.get('/api/market/global', publicLimiter, async (req, res) => {
   try { res.json({ ok: true, ...(await getGlobalMetrics()) }); }
   catch (e) { res.status(502).json({ error: e.message }); }
 });
 
-app.get('/api/market/movers', async (req, res) => {
+app.get('/api/market/movers', publicLimiter, async (req, res) => {
   try { res.json({ ok: true, ...(await getTopMovers()) }); }
   catch (e) { res.status(502).json({ error: e.message }); }
 });
 
-app.get('/api/analyze/:symbol', async (req, res) => {
+app.get('/api/analyze/:symbol', publicLimiter, async (req, res) => {
   try { res.json(await analyzeSymbol(req.params.symbol.toUpperCase(), { force: true })); }
   catch (e) { res.status(502).json({ error: e.message }); }
 });
@@ -582,12 +600,12 @@ async function allScores() {
   return results.sort((a, b) => b.composite - a.composite);
 }
 
-app.get('/api/scores', async (req, res) => {
+app.get('/api/scores', publicLimiter, async (req, res) => {
   try { res.json(await allScores()); }
   catch (e) { res.status(502).json({ error: e.message }); }
 });
 
-app.get('/api/klines/:symbol', async (req, res) => {
+app.get('/api/klines/:symbol', publicLimiter, async (req, res) => {
   try {
     const bar = /^(1m|5m|15m|1h|4h|1d)$/.test(req.query.bar || '') ? req.query.bar : '15m';
     res.json(await getKlines(req.params.symbol.toUpperCase(), bar, Math.min(+req.query.limit || 300, 300)));
@@ -595,42 +613,42 @@ app.get('/api/klines/:symbol', async (req, res) => {
 });
 
 // ---------- probabilistic clarity layer (v1.4) ----------
-app.get('/api/probability', (req, res) => {
+app.get('/api/probability', publicLimiter, (req, res) => {
   if (!ssrState) return res.json([]);
   res.json(ssrState.scores.map((x) => probFor(x.symbol)).filter(Boolean));
 });
-app.get('/api/probability/:symbol/history', (req, res) => {
+app.get('/api/probability/:symbol/history', publicLimiter, (req, res) => {
   res.json({ symbol: req.params.symbol.toUpperCase(), samples: getProbHistory(req.params.symbol.toUpperCase()) });
 });
-app.get('/api/orderbook/:symbol', async (req, res) => {
+app.get('/api/orderbook/:symbol', publicLimiter, async (req, res) => {
   const b = await getOrderBook(req.params.symbol.toUpperCase()).catch(() => null);
   if (!b) return res.status(404).json({ error: 'no order book for this symbol (crypto only, OKX)' });
   res.json(b);
 });
-app.get('/api/contracts/:symbol', async (req, res) => {
+app.get('/api/contracts/:symbol', publicLimiter, async (req, res) => {
   const c = await getContractSpec(req.params.symbol.toUpperCase()).catch(() => null);
   if (!c) return res.status(404).json({ error: 'no contract spec for this symbol (crypto only, OKX)' });
   res.json(c);
 });
 
-app.get('/api/score/:symbol', async (req, res) => {
+app.get('/api/score/:symbol', publicLimiter, async (req, res) => {
   try {
     const a = await analyzeSymbol(req.params.symbol.toUpperCase(), { force: true });
     res.json(computeScores(a, getAssetSentiment(a.symbol)));
   } catch (e) { res.status(502).json({ error: e.message }); }
 });
 
-app.get('/api/news', async (req, res) => {
+app.get('/api/news', publicLimiter, async (req, res) => {
   try { res.json(await getNews(!!req.query.force)); }
   catch (e) { res.status(502).json({ error: e.message }); }
 });
 
-app.get('/api/onchain', async (req, res) => {
+app.get('/api/onchain', publicLimiter, async (req, res) => {
   try { res.json(await getChainSnapshot(!!req.query.force)); }
   catch (e) { res.status(502).json({ error: e.message }); }
 });
 
-app.post('/api/risk', (req, res) => {
+app.post('/api/risk', publicLimiter, (req, res) => {
   const r = calculateRisk(req.body || {});
   res.json(r);
 });
@@ -661,8 +679,24 @@ app.get('/api/paper', requireUser, async (req, res) => {
 
 app.post('/api/paper/open', requireUser, async (req, res) => {
   if (req.userAgent && !userAgentHas(req, 'trade-paper')) return res.status(403).json({ error: 'scope: this key cannot trade (missing trade-paper)' });
-  try { res.json(await getBroker('paper').placeOrder({ ...(req.body || {}), accountId: accountFor(req).accountId })); }
-  catch (e) { res.status(502).json({ error: e.message }); }
+  // Phase 2 opt-in rails: enforce agent wallet spend limits when configured
+  const entry = Number(req.body?.entry || 0);
+  const size = Number(req.body?.size || 0);
+  const notionalMinor = entry > 0 && size > 0 ? Math.trunc(entry * size * 100) : 0;
+  const gate = agentSpendGate(req, notionalMinor);
+  if (!gate.ok) return res.status(402).json({ error: gate.message, reason: gate.reason });
+  req.agentReserveId = gate.reserveId;
+  try {
+    const r = await getBroker('paper').placeOrder({ ...(req.body || {}), accountId: accountFor(req).accountId });
+    if (req.agentReserveId) {
+      if (r.ok) limits.commitReserve({ walletId: gate.walletId, reserveId: req.agentReserveId });
+      else limits.releaseReserve({ walletId: gate.walletId, reserveId: req.agentReserveId });
+    }
+    res.json(r);
+  } catch (e) {
+    if (req.agentReserveId) limits.releaseReserve({ walletId: gate.walletId, reserveId: req.agentReserveId });
+    res.status(502).json({ error: e.message });
+  }
 });
 
 app.post('/api/paper/close', requireUser, async (req, res) => {
@@ -687,7 +721,11 @@ app.post('/api/paper/reset', requireUser, (req, res) => {
 });
 app.post('/api/paper/account', requireUser, (req, res) => {
   if (req.userAgent && !userAgentHas(req, 'trade-paper')) return res.status(403).json({ error: 'scope: this key cannot trade (missing trade-paper)' });
-  res.json(setAccountSize(+req.body?.accountSize || 100000, accountFor(req).accountId));
+  const raw = req.body?.accountSize;
+  const size = raw == null || raw === '' ? 100000 : Math.trunc(Number(raw));
+  if (!Number.isFinite(size) || size <= 0) return res.status(400).json({ error: 'account size must be a positive number' });
+  if (size > 1_000_000_000) return res.status(400).json({ error: 'account size too large (max 1,000,000,000)' });
+  res.json(setAccountSize(size, accountFor(req).accountId));
 });
 app.get('/api/paper/stats', requireUser, (req, res) => res.json(journalStats(accountFor(req).accountId)));
 
@@ -752,7 +790,8 @@ app.get('/api/signals/:id/trail', (req, res) => {
 
 // agent registry — provable track records (win rates from per-account journals)
 app.get('/api/agents', (req, res) => {
-  res.json({ ok: true, count: signals.listAgents().length, agents: signals.listAgents(), stats: signals.agentStats() });
+  const agents = signals.listAgents().map((a) => ({ ...a, name: looksLikeEmail(a.name) ? maskEmail(a.name) : a.name }));
+  res.json({ ok: true, count: agents.length, agents, stats: signals.agentStats() });
 });
 
 // chain trust-layer status for the UI badge
@@ -839,7 +878,7 @@ app.get('/api/points/bounty/status', (req, res) => {
 // trader of the trailing 7 days (realized PnL from per-account journals).
 // Guard: once per ISO week. Manual trigger for now (cron in phase 2).
 app.post('/api/points/bounty/run', requireUser, (req, res) => {
-  if (!req.agentKey && !isOwnerSession(req)) return res.status(403).json({ error: 'admin or agent key required' });
+  if (!isOwnerSession(req)) return res.status(403).json({ error: 'owner only' });
   res.json({ ok: true, ...points.runWeeklyBounty() });
 });
 
@@ -861,6 +900,237 @@ app.post('/api/points/claim', requireUser, (req, res) => {
   const r = aitt.claim({ ownerId: ident.agentId });
   res.status(r.ok ? 200 : 400).json(r);
 });
+
+// ================= Phase 2 — agent wallet engine (off-chain first) =================
+// Design: docs/PHASE2_SPEC.md. Works before the token deploys; on-chain escrow in
+// Phase 3. Permissive default: no wallet ⇒ no enforcement (existing flows unchanged).
+// All money in INTEGER MINOR UNITS (cents) unless stated.
+
+const h = (fn) => (req, res) => { try { fn(req, res); } catch (e) { res.status(400).json({ ok: false, error: e.message }); } };
+
+// POST /api/wallets — create an agent wallet (child of the caller's user wallet)
+app.post('/api/wallets', requireUser, h((req, res) => {
+  const ident = signalIdentity(req);
+  if (!ident) return res.status(401).json({ error: 'auth required' });
+  const { name, limits: lim, capabilities, regions, approvalRequired } = req.body || {};
+  const w = wallets.createAgentWallet({
+    ownerId: ident.agentId, name, limits: lim, capabilities, regions, approvalRequired,
+  });
+  res.json({ ok: true, wallet: { walletId: w.walletId, kind: w.kind, name: w.name, limits: w.limits, capabilities: w.capabilities, regions: w.regions, approvalRequired: w.approvalRequired, status: w.status, balanceMinor: w.balances.USD } });
+}));
+
+// GET /api/wallets — wallet tree (parent + agent children) with balances
+app.get('/api/wallets', requireUser, h((req, res) => {
+  const ident = signalIdentity(req);
+  if (!ident) return res.status(401).json({ error: 'auth required' });
+  const tree = wallets.walletTree(ident.agentId);
+  const parent = tree.parent ? { walletId: tree.parent.walletId, balanceMinor: tree.parent.balances?.USD || 0, status: tree.parent.status } : null;
+  res.json({ ok: true, parent, agents: tree.agents.map((w) => ({ ...w, balanceMinor: wallets.balanceOf(w.walletId) })), stats: wallets.stats() });
+}));
+
+// PATCH /api/wallets/:id/policies — update limits/capabilities/regions/approvalRequired
+app.patch('/api/wallets/:id/policies', requireUser, h((req, res) => {
+  const ident = signalIdentity(req);
+  const w = wallets.getWallet(req.params.id);
+  if (!w) return res.status(404).json({ ok: false, error: 'wallet not found' });
+  if (w.ownerId !== ident.agentId && !isOwnerSession(req)) return res.status(403).json({ ok: false, error: 'not your wallet' });
+  const updated = wallets.updatePolicies(w.walletId, req.body || {});
+  res.json({ ok: true, wallet: { walletId: updated.walletId, limits: updated.limits, capabilities: updated.capabilities, regions: updated.regions, approvalRequired: updated.approvalRequired } });
+}));
+
+// POST /api/wallets/:id/fund — fund agent wallet from parent (internal, no fees)
+app.post('/api/wallets/:id/fund', requireUser, h((req, res) => {
+  const ident = signalIdentity(req);
+  const w = wallets.getWallet(req.params.id);
+  if (!w) return res.status(404).json({ ok: false, error: 'wallet not found' });
+  if (w.ownerId !== ident.agentId && !isOwnerSession(req)) return res.status(403).json({ ok: false, error: 'not your wallet' });
+  const r = wallets.fundAgentWallet({ walletId: w.walletId, amountMinor: req.body?.amountMinor });
+  res.json({ ok: true, ...r });
+}));
+
+// POST /api/wallets/:id/credit — credit the USER wallet (platform onboarding funds; owner only)
+app.post('/api/wallets/credit', requireUser, h((req, res) => {
+  if (!isOwnerSession(req)) return res.status(403).json({ ok: false, error: 'owner only' });
+  const ident = signalIdentity(req);
+  const bal = wallets.creditUserWallet(ident.agentId, req.body?.amountMinor || 0);
+  res.json({ ok: true, balanceMinor: bal });
+}));
+
+// POST /api/wallets/:id/suspend | /reactivate
+app.post('/api/wallets/:id/suspend', requireUser, h((req, res) => {
+  const w = wallets.getWallet(req.params.id);
+  if (!w) return res.status(404).json({ ok: false, error: 'wallet not found' });
+  if (!isOwnerSession(req) && w.ownerId !== signalIdentity(req)?.agentId) return res.status(403).json({ ok: false, error: 'not your wallet' });
+  res.json({ ok: true, wallet: wallets.setWalletStatus(w.walletId, 'suspended') });
+}));
+app.post('/api/wallets/:id/reactivate', requireUser, h((req, res) => {
+  const w = wallets.getWallet(req.params.id);
+  if (!w) return res.status(404).json({ ok: false, error: 'wallet not found' });
+  if (!isOwnerSession(req) && w.ownerId !== signalIdentity(req)?.agentId) return res.status(403).json({ ok: false, error: 'not your wallet' });
+  res.json({ ok: true, wallet: wallets.setWalletStatus(w.walletId, 'active') });
+}));
+
+// GET /api/wallets/:id/usage — limits usage snapshot (daily/weekly windows)
+app.get('/api/wallets/:id/usage', requireUser, h((req, res) => {
+  const gate = walletOwnedBy(req, req.params.id);
+  if (gate) return res.status(gate.status).json({ ok: false, error: gate.error });
+  const w = wallets.getWallet(req.params.id);
+  if (!w) return res.status(404).json({ ok: false, error: 'wallet not found' });
+  res.json({ ok: true, walletId: w.walletId, usage: limits.usageSnapshot(w.walletId), limits: w.limits?.USD || {} });
+}));
+
+// POST /api/stake — create a stake {amountMinor (8-dec AITT units), lockDays}
+app.post('/api/stake', requireUser, h((req, res) => {
+  const ident = signalIdentity(req);
+  if (!ident) return res.status(401).json({ ok: false, error: 'auth required' });
+  const s = stakes.createStake({ ownerId: ident.agentId, amountMinor: req.body?.amountMinor, lockDays: req.body?.lockDays });
+  res.json({ ok: true, stake: s });
+}));
+// POST /api/stake/unstake {stakeId} — start 7-day cooldown
+app.post('/api/stake/unstake', requireUser, h((req, res) => {
+  const ident = signalIdentity(req);
+  const s = stakes.requestUnstake(req.body?.stakeId);
+  if (s.ownerId !== ident.agentId) return res.status(403).json({ ok: false, error: 'not your stake' });
+  res.json({ ok: true, stake: s });
+}));
+// POST /api/stake/withdraw {stakeId} — after cooldown
+app.post('/api/stake/withdraw', requireUser, h((req, res) => {
+  const ident = signalIdentity(req);
+  const s = stakes.withdraw(req.body?.stakeId);
+  if (s.ownerId !== ident.agentId) return res.status(403).json({ ok: false, error: 'not your stake' });
+  res.json({ ok: true, stake: s });
+}));
+
+// GET /api/trust/score — derived Trust Score + credit line (owner)
+app.get('/api/trust/score', requireUser, h((req, res) => {
+  const ident = signalIdentity(req);
+  if (!ident) return res.status(401).json({ ok: false, error: 'auth required' });
+  res.json({ ok: true, ...trust.computeTrust(ident.agentId) });
+}));
+
+// POST /api/slashes — owner/admin creates a slash (unauthorized-spend | failed-settlement)
+app.post('/api/slashes', requireUser, h((req, res) => {
+  if (!isOwnerSession(req)) return res.status(403).json({ ok: false, error: 'owner only' });
+  const r = slashes.createSlash({ ownerId: req.body?.ownerId, reason: req.body?.reason, evidence: req.body?.evidence || {} });
+  res.json({ ok: true, slash: r });
+}));
+// POST /api/slashes/:id/appeal {statement}
+app.post('/api/slashes/:id/appeal', requireUser, h((req, res) => {
+  const s = slashes.fileAppeal(req.params.id, req.body?.statement);
+  res.json({ ok: true, slash: s });
+}));
+// POST /api/slashes/:id/decide {decision: accepted|rejected} — owner only
+app.post('/api/slashes/:id/decide', requireUser, h((req, res) => {
+  if (!isOwnerSession(req)) return res.status(403).json({ ok: false, error: 'owner only' });
+  const r = slashes.decideAppeal({ slashId: req.params.id, decision: req.body?.decision, by: signalIdentity(req)?.agentId });
+  res.json({ ok: true, slash: r });
+}));
+// GET /api/slashes — my slash history
+app.get('/api/slashes', requireUser, h((req, res) => {
+  const ident = signalIdentity(req);
+  res.json({ ok: true, slashes: slashes.slashHistory(ident.agentId) });
+}));
+
+// POST /api/pacts — propose a pact (agent or owner)
+app.post('/api/pacts', requireUser, h((req, res) => {
+  const ident = signalIdentity(req);
+  if (!ident) return res.status(401).json({ ok: false, error: 'auth required' });
+  const p = pacts.proposePact({
+    ownerId: ident.agentId, agentWalletId: req.body?.agentWalletId, intent: req.body?.intent,
+    plan: req.body?.plan, policies: req.body?.policies, completion: req.body?.completion,
+  });
+  res.json({ ok: true, pact: p });
+}));
+// POST /api/pacts/:id/approve | /reject | /terminate — human control (owner)
+app.post('/api/pacts/:id/approve', requireUser, h((req, res) => {
+  if (!isOwnerSession(req)) return res.status(403).json({ ok: false, error: 'owner only' });
+  res.json({ ok: true, pact: pacts.approvePact(req.params.id, 'owner') });
+}));
+app.post('/api/pacts/:id/reject', requireUser, h((req, res) => {
+  if (!isOwnerSession(req)) return res.status(403).json({ ok: false, error: 'owner only' });
+  res.json({ ok: true, pact: pacts.rejectPact(req.params.id, 'owner') });
+}));
+app.post('/api/pacts/:id/terminate', requireUser, h((req, res) => {
+  if (!isOwnerSession(req)) return res.status(403).json({ ok: false, error: 'owner only' });
+  res.json({ ok: true, pact: pacts.terminatePact(req.params.id, 'owner') });
+}));
+// GET /api/pacts — my pacts
+app.get('/api/pacts', requireUser, h((req, res) => {
+  const ident = signalIdentity(req);
+  res.json({ ok: true, pacts: pacts.listPacts(ident.agentId) });
+}));
+
+// POST /api/freeze {on:true, reason?} | {on:false} — emergency freeze (owner)
+app.post('/api/freeze', requireUser, h((req, res) => {
+  if (!isOwnerSession(req)) return res.status(403).json({ ok: false, error: 'owner only' });
+  const on = !!req.body?.on;
+  const state = freeze.setFrozen(on, { reason: req.body?.reason, by: 'owner' });
+  res.json({ ok: true, ...state });
+}));
+// GET /api/freeze — freeze state (public)
+app.get('/api/freeze', (req, res) => res.json({ ok: true, ...freeze.freezeState() }));
+
+// ---- spend enforcement boundary (rails): check → reserve → act → commit/release ----
+// Agents call these; the engine (not agent code) enforces limits atomically.
+app.post('/api/spend/check', requireUser, h((req, res) => {
+  const { walletId, amountMinor, purpose } = req.body || {};
+  const gate = walletOwnedBy(req, walletId);
+  if (gate) return res.status(gate.status).json({ ok: false, error: gate.error });
+  res.json(limits.checkSpend({ walletId, amountMinor, purpose }));
+}));
+app.post('/api/spend/reserve', requireUser, h((req, res) => {
+  const { walletId, amountMinor, purpose } = req.body || {};
+  const gate = walletOwnedBy(req, walletId);
+  if (gate) return res.status(gate.status).json({ ok: false, error: gate.error });
+  res.json(limits.reserveSpend({ walletId, amountMinor, purpose }));
+}));
+app.post('/api/spend/commit', requireUser, h((req, res) => {
+  const { walletId, reserveId, pactId } = req.body || {};
+  const gate = walletOwnedBy(req, walletId);
+  if (gate) return res.status(gate.status).json({ ok: false, error: gate.error });
+  // commitReserve returns the settled amount; captured BEFORE the reserve record is cleared
+  const r = limits.commitReserve({ walletId, reserveId });
+  if (r.ok) {
+    // debit the wallet ledger; record against a pact when provided
+    const debit = wallets.debitWallet(walletId, r.amount);
+    if (pactId) {
+      try { pacts.recordPactSpend(pactId, r.amount); } catch { /* pact gone — audit still holds */ }
+    }
+    res.json({ ok: true, debit });
+  } else {
+    res.status(400).json(r);
+  }
+}));
+app.post('/api/spend/release', requireUser, h((req, res) => {
+  const { walletId, reserveId } = req.body || {};
+  const gate = walletOwnedBy(req, walletId);
+  if (gate) return res.status(gate.status).json({ ok: false, error: gate.error });
+  res.json(limits.releaseReserve({ walletId, reserveId }));
+}));
+// ownership gate for wallet-scoped routes (mirrors /api/wallets/:id/* checks)
+function walletOwnedBy(req, walletId) {
+  const w = wallets.getWallet(walletId);
+  if (!w) return { status: 404, error: 'wallet not found' };
+  const ident = signalIdentity(req);
+  if (!ident) return { status: 401, error: 'auth required' };
+  if (w.ownerId !== ident.agentId && !isOwnerSession(req)) return { status: 403, error: 'not your wallet' };
+  return null;
+}
+
+// Opt-in execution-rail hook (AGENT_SPEND_ENFORCE=1): for agent-key callers WITH an
+// agent wallet, check+reserve notional spend before the order lands. No wallet or
+// env off ⇒ permissive (existing behavior unchanged). Notional only when entry
+// price is known — otherwise the caller uses /api/spend/* explicitly.
+const AGENT_SPEND_ENFORCE = process.env.AGENT_SPEND_ENFORCE === '1';
+function agentSpendGate(req, notionalMinor) {
+  if (!AGENT_SPEND_ENFORCE || !notionalMinor || notionalMinor <= 0) return { ok: true };
+  if (!req.agentKey) return { ok: true }; // human session = the approver
+  const ident = signalIdentity(req);
+  const w = ident && wallets.findWallet(ident.agentId, 'agent');
+  if (!w) return { ok: true }; // no wallet ⇒ permissive default
+  const r = limits.reserveSpend({ walletId: w.walletId, amountMinor: notionalMinor, purpose: req.path });
+  return r.ok ? { ok: true, reserveId: r.reserveId, walletId: w.walletId } : r;
+}
 
 // queue flush: boot + every 10 min — drains data/pending_pins.json when the key appears
 async function flushPinQueue() {
@@ -1281,7 +1551,7 @@ app.get('/api/performance', requireUser, (req, res) => {
   });
 });
 
-app.post('/api/assistant', async (req, res) => {
+app.post('/api/assistant', publicLimiter, async (req, res) => {
   try {
     const q = (req.body?.question || '').trim();
     if (!q) return res.status(400).json({ error: 'question required' });
@@ -1315,26 +1585,40 @@ function accountFor(req) {
   return null;
 }
 
+// mask an email for public display (t***@domain) — never leak the full address
+const maskEmail = (email) => {
+  const s = String(email || '');
+  const at = s.indexOf('@');
+  if (at <= 1) return '***';
+  return `${s.slice(0, 1)}***${s.slice(at)}`;
+};
+const looksLikeEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || ''));
+
 // Decentralized agents identity: session user → 'user:<id>' (human),
 // user agent key → 'agent:key:<keyId>' (customer's AI agent),
-// platform X-API-Key → 'agent:<key>' (platform AI agent). Stable per principal.
+// platform X-API-Key → 'agent:<hash>' (platform AI agent; raw key never exposed). Stable per principal.
 function signalIdentity(req) {
   if (req.session?.userId) {
     const u = auth.findById(req.session.userId);
-    if (u) return { agentId: `user:${u.id}`, name: u.email, kind: 'human' };
+    if (u) return { agentId: `user:${u.id}`, name: maskEmail(u.email), kind: 'human' };
   }
   if (req.userAgent) return { agentId: `agent:key:${req.userAgent.keyId}`, name: req.userAgent.name, kind: 'ai' };
-  if (req.agentKey) return { agentId: `agent:${req.agentKey}`, name: `agent ${req.agentKey}`, kind: 'ai' };
+  if (req.agentKey) {
+    // NEVER put the raw platform key in the public identity — it is served by
+    // /api/agents and every signal feed row. Hash it instead.
+    const h = crypto.createHash('sha256').update(req.agentKey).digest('hex');
+    return { agentId: `agent:${h.slice(0, 16)}`, name: `agent-${h.slice(0, 8)}`, kind: 'ai' };
+  }
   return null;
 }
 
 // /api/auth/* — rate-limited (~10/min/IP), session management, 2FA, password reset
-app.use('/api/auth', authLimiter, authRouter());
+app.use('/api/auth', authLimiter, authRouter(SITE_URL));
 
 const API_INDEX = {
   name: 'IOST Terminal Agent API',
   version: '1.15.0',
-  auth: 'X-API-Key header. Two key types: (1) platform keys via AGENT_KEYS env (default: demo-agent-key) → shared "default" account; (2) per-user "connect your AI agent" keys (itk_…, created in-app at /api/agent-keys) → bound to ONE user account with scopes: read / trade-paper / trade-live. Sensitive routes also accept a browser session (/api/auth/*).',
+  auth: 'X-API-Key header. Two key types: (1) platform keys via AGENT_KEYS env (required — no default, fail closed) → shared "default" account; (2) per-user "connect your AI agent" keys (itk_…, created in-app at /api/agent-keys) → bound to ONE user account with scopes: read / trade-paper / trade-live. Sensitive routes also accept a browser session (/api/auth/*).',
   accounts: 'Per-user paper accounts (v1.8): session users get their own cash/positions/journal; platform X-API-Key agents share the "default" account; per-user agent keys trade the account of the user who created them. Autopilot trades the default account.',
   decentralizedAgents: 'Phase 1 trust layer + marketplace: signals are SHA-256 hash-pinned on the IOST mainnet (token.iost transfer memo, verified via getTxReceiptByTxHash); without IOST_PIN_KEY pins queue off-chain ("pending-onchain"). Agents publish, humans follow (paper copy, 5-position cap).',
   agentKeys: [
@@ -1373,6 +1657,7 @@ const API_INDEX = {
   ],
   points: 'Off-chain points ledger (tokenomics vision §6): no token issued. signal +10 · follower +5 · referral +50/+10 · feedback +5 (author) · weekly top paper trader +500. 1:1 AITT conversion planned at TGE (not guaranteed — conversion gate closed until deploy + TGE gates). Ledger data/points.json (atomic writes).',
   aitt: 'AITT — Agent Intelligence Trading Token (design draft, NOT issued): ERC-20 on IOST L2 (chain 182), 1B fixed supply, 8 decimals. Points→AITT 1:1 conversion planned at TGE (gate closed). Public info: /api/aitt/info · page /aitt · whitepaper /whitepaper. Config data/aitt-config.json.',
+  agentWallet: 'Phase 2 agent wallet engine (off-chain first): parent-child wallets with spend limits (per-tx/daily/weekly, integer minor units), trust staking + slashing + appeals, derived Trust Score + credit line, task-scoped Pacts with auto-expiry, emergency freeze. Design: docs/PHASE2_SPEC.md. Permissive default — no wallet ⇒ no enforcement. Capabilities: finance.* / wallet.* / trade.* / mandate.sign.',
   freeIostWallet: 'Every registered user gets a subsidized IOST mainnet account (platform pays ~11 IOST). Keys are generated IN THE BROWSER — the server never sees private keys, only the base64 public key + account name; it broadcasts auth.iost/signUp (VERIFIED ABI: createAccount does not exist on mainnet) with the platform account. No IOST_PIN_KEY → requests queue (status "pending") and flush when the key appears. Store data/iost_accounts.json.',
   discover: [{ path: '/.well-known/agent.json', method: 'GET', purpose: 'agent discovery manifest' }],
   market: [
@@ -1431,6 +1716,24 @@ const API_INDEX = {
     { path: '/token', method: 'GET', purpose: 'alias of /aitt' },
     { path: '/whitepaper', method: 'GET', purpose: 'AITT whitepaper v1.0 (markdown — identical to docs/TOKENOMICS.md)' },
   ],
+  agentWallet: [
+    { path: '/api/wallets', method: 'GET', purpose: 'my wallet tree: parent (user) wallet + agent child wallets with balances, limits, capabilities, status' },
+    { path: '/api/wallets', method: 'POST', body: '{name, limits:{USD:{maxPerTxMinor,dailyCapMinor,weeklyCapMinor}}, capabilities[], regions[], approvalRequired}', purpose: 'create an agent wallet as a child of my wallet (limits enforced server-side; 0 = unlimited)' },
+    { path: '/api/wallets/:id/policies', method: 'PATCH', body: '{limits?, capabilities?, regions?, approvalRequired?}', purpose: 'update wallet limits/capabilities/regions (owner)' },
+    { path: '/api/wallets/:id/fund', method: 'POST', body: '{amountMinor}', purpose: 'fund agent wallet from parent wallet (internal transfer, no fees)' },
+    { path: '/api/wallets/credit', method: 'POST', body: '{amountMinor}', purpose: 'owner only — credit the user wallet (onboarding funds)' },
+    { path: '/api/wallets/:id/suspend | /reactivate', method: 'POST', purpose: 'suspend/reactivate an agent wallet' },
+    { path: '/api/wallets/:id/usage', method: 'GET', purpose: 'daily/weekly spend usage snapshot vs limits' },
+    { path: '/api/spend/check|reserve|commit|release', method: 'POST', purpose: 'rails enforcement: check → reserve (atomic) → act → commit or release. Limits never enforced by agent code' },
+    { path: '/api/stake', method: 'POST', body: '{amountMinor (8-dec AITT), lockDays 7|30|90|365}', purpose: 'create trust stake (min 1,000 AITT)' },
+    { path: '/api/stake/unstake | /withdraw', method: 'POST', body: '{stakeId}', purpose: 'start 7-day cooldown / withdraw after cooldown' },
+    { path: '/api/trust/score', method: 'GET', purpose: 'derived Trust Score + credit line + components (never stored)' },
+    { path: '/api/slashes', method: 'POST', body: '{ownerId, reason: unauthorized-spend|failed-settlement}', purpose: 'owner only — slash (unauthorized −10% + score reset · failed settlement −5%)' },
+    { path: '/api/slashes/:id/appeal | /decide', method: 'POST', purpose: '14-day appeal window; decide = owner/DAO review' },
+    { path: '/api/pacts', method: 'GET|POST', purpose: 'task-scoped Pacts: intent + plan + policies + completion (time/budget/goal) with auto-expiry' },
+    { path: '/api/pacts/:id/approve | /reject | /terminate', method: 'POST', purpose: 'human control over pacts (owner)' },
+    { path: '/api/freeze', method: 'POST', body: '{on:true, reason?} | {on:false}', purpose: 'owner only — emergency freeze: stops ALL agent operations instantly' },
+  ],
   wallets: [
     { path: '/api/account/iost/status', method: 'GET', purpose: 'public honesty endpoint (no auth): subsidized?, fee (~11 IOST), platform funding configured?, account-name rules, explorer base' },
     { path: '/api/account/iost', method: 'POST', body: '{publicKey (base64 of 32-byte Ed25519 public key), accountName?}', purpose: 'request a free platform-subsidized IOST mainnet wallet for the signed-in user — the browser generates the Ed25519 keypair and the server only ever receives the PUBLIC key; creation is broadcast via auth.iost/signUp with the platform funded account, or queued (status pending) until funding is configured' },
@@ -1455,7 +1758,7 @@ const API_INDEX = {
 };
 
 app.get('/.well-known/agent.json', (req, res) => {
-  res.json({ name: 'IOST Terminal', version: '1.11.0', machineReadable: true, api: '/api', index: '/api', meta: '/api/meta', uiState: '/api/ui-state', auth: '/api/auth', points: '/api/points', aitt: '/api/aitt/info', wallet: '/api/account/iost', contracts: API_INDEX });
+  res.json({ name: 'IOST Terminal', version: '1.11.0', machineReadable: true, api: '/api', index: '/api', meta: '/api/meta', uiState: '/api/ui-state', auth: '/api/auth', points: '/api/points', aitt: '/api/aitt/info', agentWallet: '/api/wallets', wallet: '/api/account/iost', contracts: API_INDEX });
 });
 app.get('/api', (req, res) => res.json(API_INDEX));
 app.get('/api/meta', async (req, res) => {
@@ -1522,13 +1825,17 @@ app.get('/api/autopilot', requireUser, (req, res) => {
   const s = getAutopilot();
   res.json({ enabled: s.enabled, startedAt: s.startedAt, ticks: s.ticks, lastTick: s.lastTick, config: s.config, actions: s.actions.slice(0, 25), proposals: getProposals(), liveGate: anyLiveEnabled() });
 });
-app.post('/api/autopilot/start', requireUser, (req, res) => { startAutopilot(req.body?.config || null); res.json(getAutopilot()); });
-app.post('/api/autopilot/stop', requireUser, (req, res) => { stopAutopilot(); res.json(getAutopilot()); });
-app.post('/api/autopilot/config', requireUser, (req, res) => res.json(setAutopilotConfig(req.body || {})));
-app.post('/api/autopilot/tick', requireUser, async (req, res) => res.json(await tickAutopilot())); // manual tick for agents/testing
+const autopilotOwner = (req, res, next) => {
+  if (!isOwnerSession(req)) return res.status(403).json({ error: 'owner only' });
+  next();
+};
+app.post('/api/autopilot/start', requireUser, autopilotOwner, (req, res) => { startAutopilot(req.body?.config || null); res.json(getAutopilot()); });
+app.post('/api/autopilot/stop', requireUser, autopilotOwner, (req, res) => { stopAutopilot(); res.json(getAutopilot()); });
+app.post('/api/autopilot/config', requireUser, autopilotOwner, (req, res) => res.json(setAutopilotConfig(req.body || {})));
+app.post('/api/autopilot/tick', requireUser, autopilotOwner, async (req, res) => res.json(await tickAutopilot())); // manual tick for owner/testing
 app.get('/api/autopilot/proposals', requireUser, (req, res) => res.json({ pending: getProposals() })); // ARD: human-in-the-loop queue
-app.post('/api/autopilot/proposals/:id/approve', requireUser, async (req, res) => res.json(await approveProposal(req.params.id))); // override: execute now
-app.post('/api/autopilot/proposals/:id/reject', requireUser, (req, res) => res.json(rejectProposal(req.params.id))); // override: block this entry
+app.post('/api/autopilot/proposals/:id/approve', requireUser, autopilotOwner, async (req, res) => res.json(await approveProposal(req.params.id))); // override: execute now
+app.post('/api/autopilot/proposals/:id/reject', requireUser, autopilotOwner, (req, res) => res.json(rejectProposal(req.params.id))); // override: block this entry
 
 // autonomy loop: 60s cadence, no human needed
 setInterval(() => { tickAutopilot().catch(() => {}); }, 60_000);
@@ -1664,7 +1971,7 @@ app.get('/api/leaderboard', (req, res) => {
 // Reports expectancy, profit factor, max drawdown, Sharpe, vs buy-and-hold —
 // win rate alone is the least informative metric. Honesty is part of the
 // result (sample-size caveat, assumptions, past ≠ future).
-app.post('/api/backtest', async (req, res) => {
+app.post('/api/backtest', publicLimiter, async (req, res) => {
   const { symbol, timeframe, strategy } = req.body || {};
   if (!symbol || !strategy?.entry?.rule) return res.status(400).json({ error: 'symbol and strategy.entry.rule required' });
   try {
@@ -1681,7 +1988,7 @@ app.get('/api/management', requireUser, (req, res) => res.json({ ok: true, ...ma
 // ---------- v1.16 Binance Web3 public data (Token Audit + Smart-Money Signals) ----------
 // Public + agent-accessible (ARD). No keys — proxies web3.binance.com public endpoints.
 // Token Audit: pre-trade safety scan (honeypot/rug-pull/scam/tax). Smart-Money: whale buy/sell feed.
-app.post('/api/token-audit', async (req, res) => {
+app.post('/api/token-audit', publicLimiter, async (req, res) => {
   const { contractAddress, chainId } = req.body || {};
   if (!contractAddress || !/^[A-Za-z0-9]{32,44}$/.test(String(contractAddress).trim())) {
     return res.status(400).json({ ok: false, error: 'valid contractAddress required' });
@@ -1698,7 +2005,7 @@ app.post('/api/token-audit', async (req, res) => {
   }
 });
 
-app.get('/api/smart-money', async (req, res) => {
+app.get('/api/smart-money', publicLimiter, async (req, res) => {
   const cid = String(req.query.chainId || '56');
   if (!SIGNAL_CHAINS.some((c) => c.id === cid)) {
     return res.status(400).json({ ok: false, error: `unsupported chainId ${cid} — use ${SIGNAL_CHAINS.map((c) => c.id).join('|')}` });
@@ -1729,7 +2036,7 @@ app.get('/api/events', (req, res) => {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
     Connection: 'keep-alive',
-    'Access-Control-Allow-Origin': '*',
+
     ...SECURITY_HEADERS, // writeHead replaces set headers — keep security headers on SSE too
   });
   res.write(`event: hello\ndata: ${JSON.stringify({ ts: Date.now() })}\n\n`);
