@@ -128,6 +128,7 @@ Live off-chain points (per the v0.1 mapping: signals +10, followers +5, referral
 - **Pricing modes:** fixed price · authorize-max-settle-actual (the §4.7 reserve→process→commit escrow in protocol terms) · **deferred/batch settlement** — batch-settle many micro-payments to cut tx count and cost on high-frequency flows.
 - **The facilitator role:** a trusted party verifies + settles on the seller's behalf. IOST Terminal runs a producer node — the natural x402 facilitator for the IOST ecosystem; facilitator fees are a monetization layer beyond platform fees (node infrastructure → facilitator infrastructure).
 - **Agentic accounts:** give agents their own funded account to pay for x402 services — the Phase 2 agent wallet, in Coinbase's vocabulary.
+- **Open standard (2026):** x402 is now governed by the **x402 Foundation** with reference SDKs (`@x402/core` + `@x402/evm`/`@x402/svm`, framework adapters for express/fastify/hono/next, Python, Go). Phase 3 integrates the standard — and contributes **IOST as a supported (scheme, network) pair**: the first non-EVM/Solana network in the ecosystem. Coinbase's org is a development fork of the standard, not the gatekeeper.
 
 ---
 
@@ -250,7 +251,7 @@ Live off-chain points (per the v0.1 mapping: signals +10, followers +5, referral
 | **0 — Points (LIVE)** | Off-chain points ledger, referral + rewards | Done — in production |
 | **1 — ERC-20 deployment** | AITT ERC-20 on IOST L2, allocations + vesting contracts, points→AITT conversion tool | Contract audit *(legal ✓ 08-16, ticker ✓ 08-16)* |
 | **2 — Agent wallet** | Trust staking, spend limits, approval flows, slashing; consent/intent/payment tokens (AP2-style layered mandates) | Phase 1 stable + ≥X agents onboarded |
-| **3 — x402-style agent payments on IOST** | Pay-per-request API payments in stablecoin, AITT as fee/trust layer; payment sessions with 3-phase atomic budget enforcement (reserve→process→commit/rollback); AP2-compatible open/closed checkout + payment mandates (SD-JWT VDCs); IOST x402 facilitator (verify + settle, batch settlement) | Platform agent traffic + IOST ecosystem fit confirmed |
+| **3 — x402-style agent payments on IOST** | Pay-per-request API payments in stablecoin, AITT as fee/trust layer; payment sessions with 3-phase atomic budget enforcement (reserve→process→commit/rollback); AP2-compatible open/closed checkout + payment mandates (SD-JWT VDCs); IOST x402 facilitator (verify + settle, batch settlement). **Integrates the x402 open standard (x402 Foundation, `@x402/*` SDKs) and contributes IOST as a supported network** — not a from-scratch implementation | Platform agent traffic + IOST ecosystem fit confirmed |
 | **4 — External liquidity** | DEX listing + EVM bridges (BSC first — PancakeSwap liquidity, CMC price data) — only after full legal review. **CEX listings (e.g., Crypto.com) explicitly out of scope.** | Demand + compliance path exists |
 
 ---

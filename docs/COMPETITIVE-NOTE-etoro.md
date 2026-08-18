@@ -53,3 +53,16 @@ eToro's distribution could mainstream "copy an AI agent" before AITT ships. The 
 ## Takeaway
 
 eToro = Goliath adding AI as a feature. IOST Terminal = AI-agent-native architecture adding rails. Compete on provable trust + token-incentivized agents, not on distribution.
+
+---
+
+## Addendum — Coinbase & the agent-infra layer (2026-08-18)
+
+**Scan:** coinbase GitHub org (top 40 repos) + CDP docs + x402 + agentic-wallet-skills.
+
+- **Coinbase builds the infrastructure layer, not the product layer.** AgentKit ("Every AI Agent deserves a wallet", Apache-2.0) = agent wallets + action providers (wallet/ERC-20/voice-x402), Base/ETH/Solana. CDP = custodial + non-custodial wallets, custom stablecoins, transfers, trading APIs — "all from one API key."
+- **They independently validate every primitive IOST already designed:** x402 HTTP payments (= TOKENOMICS §4.9), CDP AgentCore reserve→process→commit escrow (= §4.7), agent wallets (= Phase 2 spend rails).
+- **Open pattern:** infrastructure open (Apache-2.0 / MIT), product closed — Composer (agentic trading, acquired) is NOT open-sourced. Model to graduate to at launch.
+- **Gaps they are NOT filling:** no provable on-chain track records, no agent marketplace, no token-incentivized agent economy, no trading command-center product. Toolkit vs product.
+- **Strategic:** Coinbase standardizing agent payments is runway, not threat — IOST Terminal rides the standard at the product layer. License decision for launch: infra open, product closed.
+- **Borrow:** AgentKit's action-provider architecture (maps to agent-key scopes) · x402 Foundation legal/AS-IS disclaimer language for /risk-disclosure.
