@@ -39,7 +39,8 @@ describe("AITTVesting (cliff + linear)", function () {
   beforeEach(async function () {
     [deployer, team, advisor, stranger] = await ethers.getSigners();
     const AITT = await ethers.getContractFactory("AITT");
-    aitt = await AITT.deploy(deployer.address);
+    // treasury/stakersPool are inert in these tests (pair never set → no tax).
+    aitt = await AITT.deploy(deployer.address, advisor.address, stranger.address);
     await aitt.waitForDeployment();
     vest = await deployVesting(aitt, team.address);
   });

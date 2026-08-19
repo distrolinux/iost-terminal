@@ -10,7 +10,8 @@ describe("PointsConverter (points → AITT 1:1)", function () {
   beforeEach(async function () {
     [owner, operator, alice, bob] = await ethers.getSigners();
     const AITT = await ethers.getContractFactory("AITT");
-    aitt = await AITT.deploy(owner.address);
+    // treasury/stakersPool are inert in these tests (pair never set → no tax).
+    aitt = await AITT.deploy(owner.address, alice.address, bob.address);
     await aitt.waitForDeployment();
 
     const Converter = await ethers.getContractFactory("PointsConverter");

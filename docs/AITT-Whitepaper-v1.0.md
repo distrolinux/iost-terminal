@@ -5,6 +5,7 @@
 > This draft incorporates the Hermes review notes: 1B supply, revenue-backed incentives, legal-first sequencing, utility framing.
 > **Go-live gate:** real user base + real fee revenue + legal counsel sign-off (Canada/CSA review). No TGE before that.
 > v1.1 (2026-08-17): burn cap sync with TOKENOMICS.md v1.3 — cumulative burn (fee-burn + DAO buy-back/burn) capped at 200M → 800M supply floor; post-cap the 20% fee share redirects to stakers (70/30 split).
+> v1.2 (2026-08-19): swap tax sync with TOKENOMICS.md v1.4 — 3% buy/sell tax on AMM-pair swaps only (1.8% burn / 0.8% stakers / 0.4% treasury); 0% on wallet-to-wallet, staking, airdrops, platform transfers. Burn share feeds the same 200M cap; post-cap redirects to stakers (70/30). Platform-fee split (50/20/30) unchanged.
 
 ---
 
@@ -17,7 +18,7 @@ AITT powers the platform's **agentic payments economy**: it is the trust, fee, a
 - **Standard:** **ERC-20 on IOST L2** (fully EVM-compatible, OP Stack rollup; IOST's official recommendation for high-frequency/low-cost scenarios — MetaMask, OpenZeppelin, x402/AP2 SDKs compatible). IOST L1 remains home to the platform's producer node (`iost_4_life`) as the payments facilitator/verifier.
 - **Total supply:** 1,000,000,000 (1B) — fixed, no uncapped minting
 - **Core roles:** Trust staking collateral · fee utility · rewards · governance
-- **Value drivers:** real fee revenue (50% to stakers, 20% burn — capped at 200M, 30% treasury) + staking lock-up + discretionary buy-back/burn (same cap)
+- **Value drivers:** real fee revenue (50% stakers / 20% burn / 30% treasury — burn capped at 200M) + staking lock-up + discretionary buy-back/burn (same cap) + 3% DEX buy/sell swap tax (1.8% burn / 0.8% stakers / 0.4% treasury, same cap)
 - **Emission discipline:** rewards funded by revenue first; emission pool releases on a 48-month declining schedule; team fully vested over 4 years
 
 ---
@@ -34,7 +35,7 @@ AITT powers the platform's **agentic payments economy**: it is the trust, fee, a
 | Home chain | IOST L2 (network ID 182, `l2-mainnet.iost.io`); L1 node as facilitator · BSC bridge for liquidity in Phase 4 |
 | Contract | OpenZeppelin-standard ERC-20 on IOST L2 (subject to final audit) |
 | Inflation | None — rewards drawn from allocation pools + real revenue |
-| Deflation | 20% of all AITT-denominated fees burned, **capped at 200M cumulative (800M supply floor)**; DAO-voted buy-back/burn from treasury shares the same 200M cap; post-cap the burn share redirects to stakers |
+| Deflation | Burn sources share one **200M cumulative cap (800M supply floor)**: (1) 20% of all AITT-denominated platform fees, (2) 1.8% of AITT buy/sell swap volume (3% swap tax, Phase 4 DEX), (3) DAO-voted buy-back/burn from treasury. Post-cap, all burn shares redirect to stakers (70/30) |
 | Initial circulating | ≈10% at TGE (earned points conversion + ecosystem seed); remainder vesting/locked |
 
 **Design rationale for 1B:** supply is modeled from platform economics (fee volume, staking demand, reward budget), not round-number marketing. 21B (v0.1) was rejected as retail-bait.
@@ -76,9 +77,10 @@ Agents and agent-operators stake AITT as **collateral** to obtain a **Trust Scor
 ### 4.2 Fee Utility
 - Platform and agent-network fees paid in AITT receive a **50% discount** vs fiat-denominated fees
 - Fee split: **50% stakers / 20% burn / 30% treasury** until the burn cap (below) is reached; thereafter **70% stakers / 30% treasury**
+- **Swap tax (Phase 4, DEX):** 3% on AMM-pair buy/sell only — 1.8% burn / 0.8% stakers / 0.4% treasury. 0% on wallet-to-wallet, staking, airdrops, and platform transfers. Implemented in the token contract via an `_update` override gated on the AMM pair address (one-time lock at setup; no privileged functions after)
 - AITT-denominated fees create ongoing demand + deflation
-- **Burn mechanism (how the 20% is executed):** the AITT contract has **no burn function** — zero privileged functions by design (§2), so no one holds "burn power." The burn happens at the fee-settlement layer: 20% of every AITT-denominated fee is sent to the canonical null address (`0x0000…dEaD`), permanently destroying those tokens. The effect is identical to a contract burn — total supply visibly decreases on-chain — without granting any admin authority. DAO-voted buy-back/burn from treasury (§5) uses the same mechanism.
-- **Burn cap — 200M cumulative / 800M supply floor (locked 2026-08-17):** cumulative destruction across ALL burn sources (the 20% fee-burn AND DAO-voted buy-back/burn) is capped at **200M AITT** = 20% of total supply, so total supply can never fall below **800M** — agents always retain a working token supply. Enforced at the fee-settlement layer; verifiable on-chain for free, since the null-address balance itself IS the running counter. Once 200M is reached: (1) the 20% fee share stops going to the null address and redirects to stakers (split becomes 70/30); (2) DAO buy-back/burn stops burning — further buy-backs are held or redistributed, never destroyed. Reaching the cap requires 1B AITT in cumulative fees — far beyond any near-term volume — so the floor is insurance, not a constraint.
+- **Burn mechanism:** two paths, neither granting admin "burn power": (1) **Platform-fee burn** at the settlement layer — 20% of every AITT-denominated fee is sent to the canonical null address (`0x0000…dEaD`), permanently destroyed (no privileged function); (2) **Swap-tax burn** — the 3% buy/sell tax (v1.2) is burned inside the token contract by immutable protocol logic in `_update` (hardcoded split; no key can change it). DAO-voted buy-back/burn from treasury (§5) uses mechanism (1).
+- **Burn cap — 200M cumulative / 800M supply floor (locked 2026-08-17; swap tax added 2026-08-19):** cumulative destruction across ALL burn sources (20% platform-fee burn + 1.8% swap-tax burn + DAO buy-back/burn) is capped at **200M AITT** = 20% of total supply, so total supply never falls below **800M** — agents always retain a working token supply. On-chain enforcement for contract burns (swap tax) = direct supply-floor check; null-address burns (platform fees) are enforced at the settlement layer, where the null-address balance IS the running counter. Once 200M is reached: (1) every burn share redirects to stakers (70/30); (2) DAO buy-back/burn stops destroying — further buy-backs are held or redistributed. The floor is insurance, not a constraint.
 
 ### 4.3 Rewards
 - Signal providers earn AITT per quality-verified signal (existing hash-pinned-on-IOST mechanic)

@@ -30,6 +30,9 @@ function loadConfig() {
     if (!v || v === zero) throw new Error(`deploy.config.json: allocations.${k} is not set`);
   }
   if (!cfg.operator || cfg.operator === zero) throw new Error("deploy.config.json: operator is not set");
+  if (!cfg.stakersPool || cfg.stakersPool === zero) {
+    throw new Error("deploy.config.json: stakersPool is not set (swap-tax staker share recipient)");
+  }
   return cfg;
 }
 
@@ -42,11 +45,23 @@ async function main() {
 
   const totalReserve = BigInt(cfg.pointsConversionReserve || "0");
 
-  // 1. Token
+  // 1. Token (swap tax per TOKENOMICS.md v1.4: 3% buy/sell only —
+  //    1.8% burn / 0.8% stakers / 0.4% treasury)
   const AITT = await ethers.getContractFactory("AITT");
-  const aitt = await AITT.deploy(deployer.address);
+  const aitt = await AITT.deploy(deployer.address, A.treasury, cfg.stakersPool);
   await aitt.waitForDeployment();
   console.log(`AITT             @ ${await aitt.getAddress()}`);
+  console.log(`  swap tax: 3% on AMM buy/sell (1.8% burn / 0.8% stakers / 0.4% treasury), 0% wallet-to-wallet`);
+
+  // 1b. Lock the taxed AMM pair — only possible after the DEX pair exists
+  //     (createPair), so this is a manual one-time step. Optional in config;
+  //     can also be run later: npx hardhat run scripts/setAmmPair.js --network iostL2
+  if (cfg.ammPair && cfg.ammPair !== zero) {
+    await (await aitt.setAmmPair(cfg.ammPair)).wait();
+    console.log(`  -> AMM pair locked: ${cfg.ammPair}`);
+  } else {
+    console.log(`  -> AMM pair NOT set (set it via setAmmPair once liquidity is created)`);
+  }
 
   // 2. Vesting contracts (team: 12-mo cliff + 36-mo linear; advisors: 12-mo cliff + 24-mo linear)
   const Vesting = await ethers.getContractFactory("AITTVesting");
