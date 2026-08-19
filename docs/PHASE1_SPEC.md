@@ -80,7 +80,7 @@ npx hardhat run scripts/verify.js --network iostL2
 ## Re-running the free audit pass
 ```bash
 cd /opt/data/iost-terminal/contracts
-npx hardhat test                                   # 28 tests
+npx hardhat test                                   # 36 tests
 # Slither (needs solc 0.8.24 on PATH; venv at /opt/data/venvs/audit)
 slither . --solc-remaps "@openzeppelin/=node_modules/@openzeppelin/" \
   --filter-paths "node_modules|test" --exclude naming-convention,solc-version,pragma,assembly,low-level-calls,constable-states,immutable-states

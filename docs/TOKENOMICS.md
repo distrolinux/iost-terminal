@@ -295,7 +295,7 @@ Live off-chain points (per the v0.1 mapping: signals +10, followers +5, referral
 - [x] Name trademark-checked — 2026-08-16: "AIgent" dropped (registered USPTO by Ubiquity Global Services, enforced); renamed "Agent Intelligence Trading Token"
 - [ ] Supply/allocation modeled on real fee + staking projections (post Phase 1 data)
 - [x] Canadian legal counsel review — CLEARED 2026-08-16 (counsel: "good to go")
-- [x] **Phase 1 contracts BUILT + free tooling audit DONE 2026-08-16** — `contracts/` (AITT + vesting + converter), 29/29 tests, Slither 0 High/Medium, Mythril clean. Runbook: `docs/PHASE1_SPEC.md`
+- [x] **Phase 1 contracts BUILT + free tooling audit DONE 2026-08-16** (re-run 2026-08-19 after swap tax: **36/36 tests**, Slither 0 High/Medium, Mythril clean) — `contracts/` (AITT + vesting + converter). Runbook: `docs/PHASE1_SPEC.md`
 - [ ] Mid-tier external audit (≈$3–8k) — required BEFORE Phase 2 moves real value (not yet scheduled; tooling pass is NOT an external audit)
 - [x] **Points→AITT conversion mechanics BUILT 2026-08-16** (rate 1:1 locked · claim endpoint + Points UI with honesty labels "planned, not guaranteed" · gate closed until deploy + TGE gates · reserve = live points-ledger snapshot via `data/aitt-config.json`) — public AITT page `/aitt` + `/whitepaper` live (CMC-ready infra)
 - [x] **Burn cap locked 2026-08-17 (owner decision)** — 200M cumulative cap across fee-burn + DAO buy-back/burn → 800M supply floor; post-cap 20% redirects to stakers (70/30)
