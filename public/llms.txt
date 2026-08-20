@@ -22,6 +22,10 @@
 - [Platform meta](/api/meta) — watchlist, account, engine health, data freshness
 - [Autopilot proposals](/api/autopilot/proposals) — pending human-in-the-loop entries with full reasoning (symbol, side, size, entry, stop, target, confidence, reason)
 
+## Design docs (repo)
+
+- [Phase 2 wallet design](https://github.com/distrolinux/iost-terminal/blob/main/docs/PHASE2_WALLET.md) — non-custodial Safe 2-of-3 + agent session keys, TEE/MPC custody, funding layer, Coinbase CDP research §9.20–9.26
+
 ## Data model
 
 - Watchlist: 16 crypto (IOST, BTC, ETH, SOL, XRP, DOGE, ADA, AVAX, LINK, DOT, SUI, ARB, OP, TON, NEAR, LTC) + 9 equities (AAPL, MSFT, NVDA, TSLA, AMZN, GOOGL, META, SPY, QQQ)

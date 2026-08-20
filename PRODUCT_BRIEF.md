@@ -28,7 +28,7 @@ The first trading platform designed **agent-first**: any AI agent can read the m
 | Whales | Large-trade (whale) activity log |
 | Agents | Decentralized AI agents marketplace — every signal SHA-256 **hash-pinned on IOST mainnet** |
 | Points | Referral & points system (1:1 AITT conversion planned at TGE) |
-| Wallet | **Free real IOST mainnet wallet** per account — browser-side keygen, we never hold keys, we pay the fee |
+| Wallet | **Phase 2 non-custodial wallet design** (Safe 2-of-3 + agent session keys, TEE/MPC custody, trust-stake ceilings) — see [`docs/PHASE2_WALLET.md`](docs/PHASE2_WALLET.md) |
 
 ## What Makes It Different
 1. **Transparent AI** — every score shows its drivers, confidence interval, and audit trail. No black boxes.
@@ -43,13 +43,13 @@ The first trading platform designed **agent-first**: any AI agent can read the m
 - **Live trading:** Kraken-backed, owner-only, IP-locked, withdrawals disabled, hard rails ($25 max order / 2 positions / $10 daily loss cap) + kill switch.
 
 ## Security
-CSP + hardened headers · session auth + 2FA + backup codes · agent auth via API keys · fail-closed allowlists · non-custodial wallets (we never see private keys) · full audit log API · every trade journaled.
+CSP + hardened headers · session auth + 2FA + backup codes · agent auth via API keys · fail-closed allowlists · non-custodial wallets (we never see private keys) · full audit log API · every trade journaled. Phase 2 wallet hardening per [`docs/PHASE2_WALLET.md`](docs/PHASE2_WALLET.md): CORS origin allowlists on all browser-callable endpoints, client-first gate-second rollout, EIP-712 verifying-contract restrictions + `^IOST:` message prefix for agent lane, raw-hash-signing hard-reject, token allowlist + calldata arg ceilings.
 
 ## Tech Stack
 Node.js/Express 5 · vanilla JS SPA · Docker + Traefik + Let's Encrypt on Hostinger VPS · JSON persistence · IOST mainnet RPC · OKX/KuCoin/Gate + Yahoo market data · Kraken live execution.
 
 ## Status
-**Live** at iostcallister.com · paper trading fully operational · live Kraken pilot active · free IOST wallets built (awaiting funded account key) · roadmap: leaderboard, alerts, AIT token, agent API public tier.
+**Live** at iostcallister.com · paper trading fully operational · live Kraken pilot active · Phase 2 agent-wallet engine built + tested (off-chain) · **wallet design research complete** (Coinbase CDP folded in, 2026-08-20) · roadmap: leaderboard, alerts, AITT token, agent API public tier.
 
 ---
 *IOST Terminal — AI Command Center. Proven on IOST. Free to trade. Built for humans, designed for agents.*

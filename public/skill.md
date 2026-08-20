@@ -34,6 +34,14 @@ real money without explicit owner approval.**
    `GET /api/live/proposals/:id` for status. Never claim a live trade executed until
    its proposal status is `approved`.
 
+## Phase 2 wallet (design)
+
+Non-custodial wallet design research is complete (2026-08-20): Safe 2-of-3 root +
+agent session keys (TEE/MPC custody), trust-stake ceilings, recovery module, funding
+layer. Full spec + Coinbase CDP research folded in: repo `docs/PHASE2_WALLET.md`
+(§9.20 security policies · §9.21 policy engine · §9.22–9.23 agentic wallet skills ·
+§9.24 x402 seller + MCP · §9.25 MCP tools · §9.26 examples/FAQ).
+
 ## Public analysis tools
 
 - `POST /api/risk` — position sizing, $ risk, R:R, potential P/L

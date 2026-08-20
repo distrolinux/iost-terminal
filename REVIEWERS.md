@@ -30,6 +30,8 @@ node server.js         # http://localhost:8787
 | `public/js/app.js` | View renderers + interactions (~2K lines) |
 | `public/js/auth.js` | Auth UI (login/signup/2FA/reset/backup codes) |
 | `public/css/style.css` | Design tokens (OKLCH palette, spacing, motion) |
+| `docs/PHASE2_WALLET.md` | Phase 2 non-custodial wallet design (Safe 2-of-3 + agent session keys, TEE/MPC custody, funding layer, Coinbase CDP research §9.20–9.26) |
+| `docs/PHASE2_SPEC.md` | Phase 2 agent-wallet engine spec (trust staking, spend limits, approvals) — engine built + tested |
 
 ## Key flows worth reviewing
 
@@ -53,3 +55,9 @@ triggers, payments. `LIVE_EMAIL_ALLOWLIST` in `.env` is the live-trading allowli
   machine-readable page state in the DOM (`#agent-state`).
 - Motion: custom cubic-bezier easings, `:focus-visible` outlines, hover gating for
   pointer-fine devices, modal enter/exit asymmetry, reduced-motion respected.
+- Wallet layer (Phase 2, `docs/PHASE2_WALLET.md`): non-custodial by design — Safe 2-of-3
+  root, agent keys as revocable scoped session signers, human lane at every money
+  boundary. Research-derived hard rules: CORS origin allowlists (never `*`, no localhost
+  in prod), client-first gate-second rollout, EIP-712 verifying-contract restriction +
+  `^IOST:` message prefix for agent lane, raw-hash-signing hard-reject, fail-secure
+  policy engine (first-match, no-match = reject).
