@@ -532,7 +532,14 @@ function renderPage(name) {
 // HTML SSR uses — an agent with zero JS still gets live values.
 function acceptsMarkdown(req) {
   const accept = req.headers.accept || '';
-  return accept.includes('text/markdown') || accept.includes('text/x-markdown') || /markdown/i.test(accept.split(',')[0]);
+  return accept.includes('text/markdown') || accept.includes('text/x-markdown') || /markdown/i.test(accept.split(',')[0]) || /text\/plain/i.test(accept);
+}
+// JSON negotiation: an explicit Accept: application/json (never */* alone) gets
+// the machine state payload instead of HTML. Browsers never send this for
+// navigation, so human pages are unaffected.
+function acceptsJson(req) {
+  const accept = req.headers.accept || '';
+  return accept.includes('application/json') && !accept.includes('text/html');
 }
 function mdTable(rows) {
   if (!rows || !rows.length) return '_no data yet_';
@@ -601,6 +608,10 @@ function setAgentHeaders(res) {
 function sendPage(req, res, name) {
   res.set('Cache-Control', 'no-store');
   res.set('Vary', 'Accept');
+  if (acceptsJson(req)) {
+    res.type('application/json; charset=utf-8');
+    return res.json(statePayload() ?? { ok: false, error: 'state not ready yet' });
+  }
   if (acceptsMarkdown(req)) {
     res.type('text/markdown; charset=utf-8');
     return res.send(markdownFor(name));
@@ -2591,9 +2602,11 @@ async function pushTick() {
 setInterval(pushTick, 20_000);
 
 // ---------- serve ----------
-// JSON 404 for API paths (agents get machine-readable errors); plain 404 elsewhere
+// JSON 404 for API paths AND any path where the client prefers JSON
+// (agents get machine-readable errors); plain 404 elsewhere
 app.use((req, res) => {
-  if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'not found' });
+  const wantsJson = req.path.startsWith('/api/') || (req.headers.accept || '').includes('application/json');
+  if (wantsJson) return res.status(404).json({ error: 'not found' });
   res.status(404).type('text/plain').send('Not Found');
 });
 // JSON error handler: never leak stack traces / HTML error pages to clients
