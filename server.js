@@ -732,12 +732,14 @@ app.get('/.well-known/oauth-authorization-server', (req, res) => {
     service_documentation: `${SITE_URL}/auth.md`,
     agent_auth: {
       register_uri: `${SITE_URL}/auth.md`,
-      identity_types: ['api_key', 'oauth_client_credentials'],
-      credential_types: ['api_key', 'access_token'],
+      skill: `${SITE_URL}/auth.md`,
+      // anonymous registration method — truthful for autonomous agents holding
+      // a scoped itk_ key / OAuth bearer token (no per-user identity assertion)
+      identity_types_supported: ['anonymous'],
+      anonymous: { credential_types_supported: ['access_token'] },
       claim_uri: `${SITE_URL}/api/meta`,
       revocation_uri: `${SITE_URL}/oauth/revoke`,
       revocation_endpoint: `${SITE_URL}/oauth/revoke`,
-      skill: `${SITE_URL}/auth.md`,
     },
   });
 });
