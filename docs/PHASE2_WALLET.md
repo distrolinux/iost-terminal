@@ -943,6 +943,45 @@ toolset — 8 tools total, and the money actions are human-only.**
   bootstrap, bazaar trust signals (score + tx count), docs-before-pay ordering,
   limit-breach → human-approval escalation, and NO arbitrary-send tool for agents.
 
+### 9.26 MCP examples + FAQ (docs 2026-08-20) — cost-transparency UX + the custody contrast
+Two docs: Example Workflows, FAQ. The workflow examples are the product UX we should
+mirror; the FAQ settles the custody question and confirms the boundary rules.
+
+- **Cost transparency in every agent answer (Examples) — adopt:** every example
+  workflow ends with a spend line ("Total: $0.02 USDC"; news digest "Total: $0.03 USDC";
+  token analysis "Total: $0.04 USDC"). The agent reports exactly what it paid, broken
+  out per service. **Our agent loop should do the same: every trade/signal report shows
+  the cost line** — pairs with our hash-pinned track records (provable outcome + provable
+  cost). This is the trust UX that makes spend rails visible instead of scary.
+- **Multi-service composition (Examples):** agents compose 2-3 paid services per task
+  (CoinGecko + Twitter; Gloria AI + TechCrunch + aggregator; CoinGecko + Twitter Intel +
+  RootData), each $0.01-0.02, score + tx count shown per source. That's our future bazaar
+  shape: per-service price + trust signals, agent composes, total reported.
+- **Custody answer (FAQ) — note the contrast:** "Is this custodial? No. You control your
+  embedded wallet through email/OTP." — but the CLI security page said "private keys stay
+  in Coinbase infrastructure." Either way the weak point is: **wallet is tied to the
+  email — "lose access to your email → work with your email provider."** Ours is strictly
+  stronger: Safe 2-of-3 + Recovery Module guardians (24-48h cancelable delay) — no single
+  email as the root of failure. Differentiator to keep in the competitive note.
+- **Payment-fail semantics (FAQ):** "No funds are deducted" on failed payment (insufficient
+  balance / network / service unavailable); agent notifies and can retry. Adopt in our
+  settlement flow: idempotent failure, never partial deduction, retry path with
+  notification. Refunds: x402 is instant/onchain — refunds depend on the service provider,
+  contact them directly (matches §9.24 irreversibility; our AITT services should define a
+  refund policy explicitly, they punt to the provider).
+- **Cost model (FAQ):** MCP free, wallet creation free, **gas sponsored**, x402 service
+  calls vary, onramp standard fees. = our model exactly (free platform, sponsored L2 gas
+  via paymaster §9.4, fees only at fiat on/off-ramp).
+- **No API keys (FAQ):** auth = embedded wallet email/OTP. Ours differs deliberately:
+  scoped agent API keys (read/trade-paper/trade-live) ARE the auth for autonomous agents
+  — we keep both lanes (§9.25 boundary + human OTP lane).
+- **Troubleshooting patterns (FAQ):** `status` / `install --force` / `--verbose` /
+  reinstall ladder; security = HackerOne + SECURITY.md. Copy: a SECURITY.md + private
+  disclosure path in the iost-terminal repo (we're PUBLIC-no-license — a disclosure path
+  is table stakes).
+- **Verdict:** examples/FAQ close the MCP story — adopt cost-transparency lines, idempotent
+  no-deduction failure, explicit AITT refund policy, and a SECURITY.md disclosure path.
+
 ## 8. Open items before build
 
 **Wallet core (§1-7):**
@@ -1012,3 +1051,7 @@ toolset — 8 tools total, and the money actions are human-only.**
       arbitrary-send for agents; agent-session auth-status bootstrap (§9.25)
 - [ ] Bazaar trust signals (price + quality score + tx count); docs-before-pay ordering
       in client flow; limit-breach → human-approval escalation (§9.25)
+- [ ] Cost-transparency line in every agent report (per-service + total spend); idempotent
+      no-deduction payment failure + retry; explicit AITT refund policy (§9.26)
+- [ ] SECURITY.md + private disclosure path in iost-terminal repo (public repo = table
+      stakes) (§9.26)
