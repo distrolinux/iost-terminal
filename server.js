@@ -745,7 +745,7 @@ app.get('/.well-known/oauth-protected-resource', (req, res) => {
   res.set('Access-Control-Allow-Origin', '*');
   res.type('application/json');
   res.json({
-    resource: [`${SITE_URL}/`, `${SITE_URL}/api/`],
+    resource: `${SITE_URL}/`,
     authorization_servers: [SITE_URL],
     scopes_supported: ['read', 'trade-paper', 'trade-live'],
     bearer_methods_supported: ['header'],
