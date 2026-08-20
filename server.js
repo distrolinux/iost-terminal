@@ -80,7 +80,17 @@ function loadSessionSecret() {
   return secret;
 }
 
+// defense-in-depth: data stores hold hashes / TOTP blobs / encrypted key
+// material — keep them owner-only at boot (tmp+rename writes reset perms).
+try {
+  for (const f of ['accounts.json', 'users.json', 'agent-keys.json', 'stakes.json', 'slashes.json', 'points.json', 'wallets.json', 'agent-audit.jsonl', 'live-audit.jsonl']) {
+    const p = join(ROOT, 'data', f);
+    if (existsSync(p)) chmodSync(p, 0o600);
+  }
+} catch { /* best effort */ }
+
 const app = express();
+app.disable('x-powered-by'); // no framework fingerprinting
 app.use(express.json({ limit: '200kb' }));
 
 // ---- launch readiness: security headers on EVERY response ----
@@ -225,7 +235,9 @@ app.use((req, res, next) => {
   res.on('finish', () => {
     const entry = {
       ts: new Date().toISOString(),
-      agentId: `agent:${req.agentKey}`,
+      // hashed identity — the raw platform key must NEVER reach the log
+      // (signalIdentity hashes platform keys; user agent keys are non-secret ids)
+      agentId: signalIdentity(req)?.agentId || 'anon',
       action: rule.action,
       endpoint: req.path,
       payloadHash: canonicalHash(payload),
@@ -1491,16 +1503,20 @@ app.post('/api/stake', requireUser, h((req, res) => {
 // POST /api/stake/unstake {stakeId} — start 7-day cooldown
 app.post('/api/stake/unstake', requireUser, h((req, res) => {
   const ident = signalIdentity(req);
-  const s = stakes.requestUnstake(req.body?.stakeId);
+  if (!ident) return res.status(401).json({ ok: false, error: 'auth required' });
+  const s = stakes.getStake(req.body?.stakeId);
+  if (!s) return res.status(404).json({ ok: false, error: 'stake not found' });
   if (s.ownerId !== ident.agentId) return res.status(403).json({ ok: false, error: 'not your stake' });
-  res.json({ ok: true, stake: s });
+  res.json({ ok: true, stake: stakes.requestUnstake(req.body?.stakeId) });
 }));
 // POST /api/stake/withdraw {stakeId} — after cooldown
 app.post('/api/stake/withdraw', requireUser, h((req, res) => {
   const ident = signalIdentity(req);
-  const s = stakes.withdraw(req.body?.stakeId);
+  if (!ident) return res.status(401).json({ ok: false, error: 'auth required' });
+  const s = stakes.getStake(req.body?.stakeId);
+  if (!s) return res.status(404).json({ ok: false, error: 'stake not found' });
   if (s.ownerId !== ident.agentId) return res.status(403).json({ ok: false, error: 'not your stake' });
-  res.json({ ok: true, stake: s });
+  res.json({ ok: true, stake: stakes.withdraw(req.body?.stakeId) });
 }));
 
 // GET /api/trust/score — derived Trust Score + credit line (owner)
@@ -1518,8 +1534,11 @@ app.post('/api/slashes', requireUser, h((req, res) => {
 }));
 // POST /api/slashes/:id/appeal {statement}
 app.post('/api/slashes/:id/appeal', requireUser, h((req, res) => {
-  const s = slashes.fileAppeal(req.params.id, req.body?.statement);
-  res.json({ ok: true, slash: s });
+  const ident = signalIdentity(req);
+  const s = slashes.getSlash(req.params.id);
+  if (!s) return res.status(404).json({ ok: false, error: 'slash not found' });
+  if (!ident || s.ownerId !== ident.agentId) return res.status(403).json({ ok: false, error: 'not your slash' });
+  res.json({ ok: true, slash: slashes.fileAppeal(req.params.id, req.body?.statement) });
 }));
 // POST /api/slashes/:id/decide {decision: accepted|rejected} — owner only
 app.post('/api/slashes/:id/decide', requireUser, h((req, res) => {
@@ -1790,24 +1809,43 @@ async function executeLiveOrder(req, { symbol, side = 'long', size, entry }) {
   const [acct, pos] = await Promise.all([kraken.getAccount(), kraken.getPositions()]);
   if (!acct.ok) return { status: 502, error: `venue: ${acct.error}` };
   const openPositions = pos.ok ? pos.positions : [];
+  // one quotes call: marks open live positions (REAL daily P&L for the loss
+  // halt — previously always 0, so the kill-switch never fired) and prices
+  // this order's notional so market orders hit the maxOrderUsd cap too.
+  const qr = await kraken.getQuotes([...new Set([symbol, ...openPositions.map(p => p.symbol)])]).catch(() => ({ ok: false, quotes: {} }));
+  const quotes = qr.ok ? qr.quotes : {};
   const today = new Date().toISOString().slice(0, 10);
-  const todayPnlUsd = st.journal
+  const realizedLive = st.journal
     .filter(j => j.live && j.closedAt && new Date(j.closedAt).toISOString().slice(0, 10) === today)
     .reduce((a, j) => a + (j.pnl || 0), 0);
-  const rail = checkLiveOrder({ symbol, side, size, entry, openPositions, cashUsd: acct.account.cashUsd ?? 0, todayPnlUsd });
+  const unrealizedLive = openPositions.reduce((a, p) => {
+    const last = quotes[p.symbol]?.last;
+    if (!last || !p.entry) return a;
+    return a + (last - p.entry) * p.size * (p.side === 'short' ? -1 : 1);
+  }, 0);
+  const todayPnlUsd = realizedLive + unrealizedLive;
+  const rail = checkLiveOrder({ symbol, side, size, entry, marketPrice: quotes[symbol]?.last, openPositions, cashUsd: acct.account.cashUsd ?? 0, todayPnlUsd });
   if (!rail.ok) return { status: 400, error: `risk rail: ${rail.error}` };
   const fee = canTrade(st);
   if (!fee.ok) return { status: 400, error: fee.error };
 
   const r = await kraken.placeOrder({ symbol, side, size, entry });
   if (!r.ok) return { status: 502, error: `venue: ${r.error}` };
+  // journal the live fill (live:true) — previously live fills never reached
+  // the journal, so the daily-loss rail and account views saw nothing
+  const lastQuote = quotes[symbol]?.last || null;
+  const fillPrice = entry && entry > 0 ? entry : lastQuote;
+  if (fillPrice) {
+    st.journal.push({
+      id: r.order.venueOrderId || `live_${Date.now()}`,
+      symbol, side, entry: fillPrice, size, reason: 'live (venue fill)',
+      status: 'open', openedAt: Date.now(), closedAt: null, exitPrice: null,
+      pnl: 0, pnlPct: null, result: null, live: true, venue: 'kraken',
+    });
+  }
   // fee: burn credits on the executed notional (entry price or last quote)
   let notional = entry && entry > 0 ? size * entry : 0;
-  if (!notional) {
-    const q = await kraken.getQuotes([symbol]);
-    const last = q.ok ? q.quotes[symbol]?.last : null;
-    if (last) notional = size * last;
-  }
+  if (!notional && lastQuote) notional = size * lastQuote;
   const burn = burnCredits(st, notional);
   persistAccounts();
   logLiveEvent(st.accountId, 'live.order', { symbol, side, size, entry: entry || null, venueOrderId: r.order.venueOrderId, burn: burn.ok ? burn.burn : 0 });
@@ -2351,8 +2389,10 @@ app.get('/api/ui-state', async (req, res) => {
 });
 // append-only agent audit log — tail reader over data/agent-audit.jsonl
 // ?agent=<agentId>&limit=N (default 50, max 200); entries newest-first
-app.get('/api/audit', (req, res) => {
-  const agent = String(req.query.agent || '').trim() || null;
+app.get('/api/audit', requireUser, (req, res) => {
+  const isOwner = isOwnerSession(req);
+  // non-owners only see their OWN trail; owner may ?agent= filter across all
+  const agent = isOwner ? (String(req.query.agent || '').trim() || null) : (signalIdentity(req)?.agentId || 'anon');
   const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
   let entries = [];
   try {
