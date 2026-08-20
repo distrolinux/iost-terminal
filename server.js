@@ -927,6 +927,7 @@ app.get('/.well-known/ai-catalog.json', (req, res) => {
     host: { name: 'IOST Terminal', url: SITE_URL },
     entries: [
       {
+        identifier: 'urn:air:iostcallister.com:api:rest',
         urn: 'urn:air:iostcallister.com:api:rest',
         displayName: 'IOST Terminal REST API',
         type: 'application/openapi+json',
@@ -934,6 +935,7 @@ app.get('/.well-known/ai-catalog.json', (req, res) => {
         representativeQueries: ['market prices and AI trade scores', 'what API endpoints does the trading platform expose', 'autopilot proposals'],
       },
       {
+        identifier: 'urn:air:iostcallister.com:mcp:terminal',
         urn: 'urn:air:iostcallister.com:mcp:terminal',
         displayName: 'IOST Terminal MCP server (read-only tools)',
         type: 'application/vnd.mcp+json',
@@ -941,6 +943,7 @@ app.get('/.well-known/ai-catalog.json', (req, res) => {
         representativeQueries: ['what tools does the IOST Terminal expose over MCP', 'get market snapshot', 'analyze a symbol'],
       },
       {
+        identifier: 'urn:air:iostcallister.com:docs:llms',
         urn: 'urn:air:iostcallister.com:docs:llms',
         displayName: 'LLM-friendly index',
         type: 'text/markdown',
@@ -948,6 +951,7 @@ app.get('/.well-known/ai-catalog.json', (req, res) => {
         representativeQueries: ['what is IOST Terminal and how do I use it', 'platform overview for agents'],
       },
       {
+        identifier: 'urn:air:iostcallister.com:auth:guide',
         urn: 'urn:air:iostcallister.com:auth:guide',
         displayName: 'Agent authentication guide',
         type: 'text/markdown',
@@ -955,6 +959,7 @@ app.get('/.well-known/ai-catalog.json', (req, res) => {
         representativeQueries: ['how does an agent authenticate', 'API keys and OAuth scopes'],
       },
       {
+        identifier: 'urn:air:iostcallister.com:skills:index',
         urn: 'urn:air:iostcallister.com:skills:index',
         displayName: 'Agent skills index',
         type: 'application/json',
@@ -962,6 +967,7 @@ app.get('/.well-known/ai-catalog.json', (req, res) => {
         representativeQueries: ['skills for reading IOST Terminal data', 'agent skills available'],
       },
       {
+        identifier: 'urn:air:iostcallister.com:manifest:agent',
         urn: 'urn:air:iostcallister.com:manifest:agent',
         displayName: 'Agent discovery manifest',
         type: 'application/json',

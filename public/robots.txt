@@ -9,7 +9,7 @@
 Content-Signal: ai-train=yes, search=yes, ai-input=yes
 
 # Agentmap (Agentic Resource Discovery): where agents find the capability manifest
-Agentmap: /.well-known/ai-catalog.json
+Agentmap: https://iostcallister.com/.well-known/ai-catalog.json
 
 User-agent: *
 Allow: /
