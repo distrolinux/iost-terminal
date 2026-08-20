@@ -170,6 +170,18 @@ const publicLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'too many requests — slow down' },
 });
+// Gentle site-wide limiter: real rate limit (600 req/min/IP) that also emits
+// standard RateLimit-* AND legacy X-RateLimit-* headers on every response, so
+// agent-readiness validators and agents can discover the policy. Endpoint-level
+// limiters (publicLimiter, oauthLimiter, …) stay the authoritative gates.
+const siteLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 600,
+  standardHeaders: 'draft-7',
+  legacyHeaders: true,
+  message: { error: 'too many requests — slow down' },
+});
+app.use(siteLimiter);
 // scope guard for per-user agent keys — platform keys & sessions are unaffected
 function userAgentHas(req, scope) {
   return !!(req.userAgent && req.userAgent.scopes.includes(scope));
@@ -442,7 +454,7 @@ function renderPage(name) {
     `<meta name="twitter:description" content="${OG.desc}">`,
     `<meta name="twitter:image" content="${SITE_URL}/img/og-image.png">`,
   ].join('\n') : '';
-  const headExtra = `${meta}\n<meta name="agent:state" content="/api/ui-state">\n<link rel="alternate" type="application/json" title="IOST Terminal agent state" href="/api/ui-state">\n<link rel="alternate" type="text/markdown" title="IOST Terminal LLM index" href="/llms.txt">\n<link rel="llms" href="/llms.txt">\n<link rel="api-catalog" href="/.well-known/api-catalog">\n<link rel="ai-catalog" href="/.well-known/ai-catalog.json">\n<link rel="service-desc" type="application/openapi+json" href="/openapi.json">\n${jsonLdBlock()}`;
+  const headExtra = `${meta}\n<meta name="agent:state" content="/api/ui-state">\n<link rel="alternate" type="application/json" title="IOST Terminal agent state" href="/api/ui-state">\n<link rel="alternate" type="text/markdown" title="IOST Terminal LLM index" href="/llms.txt">\n<link rel="llms" href="/llms.txt">\n<link rel="llms-full" href="/llms-full.txt">\n<link rel="api-catalog" href="/.well-known/api-catalog">\n<link rel="ai-catalog" href="/.well-known/ai-catalog.json">\n<link rel="alternate" type="application/json" title="A2A agent card" href="/.well-known/agent-card.json">\n<link rel="service-desc" type="application/openapi+json" href="/openapi.json">\n${jsonLdBlock()}`;
   html = html.replace('</head>', `${headExtra}\n</head>`);
   html = html.replace('<script type="application/json" id="agent-state">null</script>', `<script type="application/json" id="agent-state">${safeJson(statePayload())}</script>`);
 
@@ -579,8 +591,10 @@ function setAgentHeaders(res) {
     '</.well-known/ai-catalog.json>; rel="ai-catalog"',
     '</openapi.json>; rel="service-desc"; type="application/openapi+json"',
     '</llms.txt>; rel="llms"',
+    '</llms-full.txt>; rel="llms-full"',
     '</api>; rel="service-doc"',
     '</.well-known/agent.json>; rel="service-doc"',
+    '</.well-known/agent-card.json>; rel="agent-card"',
     '</api/ui-state>; rel="alternate"; type="application/json"',
   ].join(', '));
 }
@@ -2248,6 +2262,38 @@ app.get('/.well-known/agent.json', (req, res) => {
     contracts: API_INDEX,
   });
 });
+// ---- A2A agent card (A2A protocol v0.2) — /.well-known/agent-card.json ----
+// Companion to the legacy /.well-known/agent.json manifest: advertises the
+// service to other agents for discovery + delegation. Skills mirror the Agent
+// Skills index entries.
+app.get('/.well-known/agent-card.json', (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.json({
+    protocolVersion: '0.2.0',
+    name: 'IOST Terminal',
+    description: 'AI real-time trading platform for crypto + equities: live market data, AI trade scores (0-100), risk engine, news sentiment, IOST on-chain dashboard, paper trading, autonomous autopilot and decentralized agent signals hash-pinned on the IOST mainnet. Paper-first: live trades require owner approval.',
+    url: SITE_URL,
+    version: DISCOVERY_VERSION,
+    capabilities: {
+      streaming: false,
+      pushNotifications: false,
+      stateTransitionHistory: false,
+    },
+    skills: [
+      { id: 'iost-terminal-market-data', name: 'IOST Terminal market data', description: 'Read live market data, AI trade scores, news sentiment, on-chain status and platform state.', tags: ['market-data', 'trading', 'crypto', 'stocks', 'onchain'] },
+      { id: 'iost-terminal-agent-auth', name: 'IOST Terminal agent auth', description: 'Authenticate with API keys or OAuth 2.0 client_credentials and use scoped capabilities.', tags: ['auth', 'oauth', 'api-keys'] },
+      { id: 'iost-terminal-trading', name: 'IOST Terminal paper + live trading', description: 'Open/close paper trades, publish hash-pinned signals, and request live trades through the owner-approved proposal rail.', tags: ['trading', 'signals', 'paper', 'live'] },
+    ],
+    authentication: null,
+    preferredTransport: 'https',
+    securitySchemes: {
+      apiKey: { type: 'apiKey', in: 'header', name: 'X-API-Key' },
+      oauth2: { type: 'oauth2', flows: { clientCredentials: { tokenUrl: `${SITE_URL}/oauth/token` } } },
+    },
+    defaultInputModes: ['text/plain'],
+    defaultOutputModes: ['text/plain'],
+  });
+});
 app.get('/api', (req, res) => res.json(API_INDEX));
 app.get('/api/meta', async (req, res) => {
   try {
@@ -2545,6 +2591,11 @@ async function pushTick() {
 setInterval(pushTick, 20_000);
 
 // ---------- serve ----------
+// JSON 404 for API paths (agents get machine-readable errors); plain 404 elsewhere
+app.use((req, res) => {
+  if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'not found' });
+  res.status(404).type('text/plain').send('Not Found');
+});
 // JSON error handler: never leak stack traces / HTML error pages to clients
 app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
   console.error(`[server] ${req.method} ${req.path}: ${err.message}`);

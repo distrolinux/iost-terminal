@@ -14,7 +14,10 @@
 ## Machine-readable interfaces
 
 - [Agent discovery manifest](/.well-known/agent.json) — what this service is + where everything lives
+- [A2A agent card](/.well-known/agent-card.json) — agent-to-agent capability card
 - [Agent API index](/api) — every endpoint, method, body and purpose
+- [OpenAPI spec](/openapi.json) — OpenAPI 3.0.3, 26 paths
+- [Full agent guide](/llms-full.txt) — this index's full-content companion
 - [Live platform state](/api/ui-state) — one-call snapshot mirroring the dashboard (scanner, scores, account, autopilot, market, on-chain)
 - [Platform meta](/api/meta) — watchlist, account, engine health, data freshness
 - [Autopilot proposals](/api/autopilot/proposals) — pending human-in-the-loop entries with full reasoning (symbol, side, size, entry, stop, target, confidence, reason)
