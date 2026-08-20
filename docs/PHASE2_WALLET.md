@@ -889,6 +889,60 @@ seller-side x402 pattern spelled out end to end. MCP adds the distribution chann
   route config, free-before-gated ordering, pricing bands); make max-amount mandatory in
   our buyer client; keep MCP as the Phase 3+ distribution channel.
 
+### 9.25 MCP tool surface (docs 2026-08-20) — the least-privilege agent toolset, tool by tool
+Eight docs: MCP Tools Overview, get-wallet-address, get-wallet-balance, show-wallet-app,
+check-sign-in-status, list-bazaar-resources, get-resource-details, make-x402-request
+(+ check-payment-requirements, 8th tool referenced in overview). **The most valuable page
+yet for our agent-tool design: the MCP tool surface is the minimal, least-privilege agent
+toolset — 8 tools total, and the money actions are human-only.**
+
+- **The tool surface (Overview) — adopt the split verbatim:**
+  - **Wallet tools (4, all read/UX):** get-wallet-address, get-wallet-balance,
+    show-wallet-app (opens UI: sign-in, fund, Bazaar browse, history, limits),
+    check-sign-in-status (runs automatically at agent-session start — adopt: our agent
+    session bootstrap checks auth status first).
+  - **Payment tools (4):** list-bazaar-resources (discover), get-resource-details
+    (docs before paying), make-x402-request (the ONE spend tool), check-payment-
+    requirements (price check without paying).
+  - **Check-payment-requirements (8th tool, final page):** probes a NON-Bazaar x402 URL
+    and returns required payment amount, accepted payment schemes, accepted networks,
+    endpoint details — WITHOUT paying. Bazaar-listed services use get-resource-details
+    instead (richer: schemas + descriptions). So the discovery ladder is: Bazaar search
+    → get-resource-details (listed) OR check-payment-requirements (arbitrary URL) →
+    make-x402-request. Adopt the same two-tier pre-pay inspection in our facilitator
+    client (curated registry docs vs on-the-fly 402 probe, §9.23/9.24).
+  - **What agents CAN'T do (Overview) — the money boundary as product rule:** set
+    spending limits, **transfer funds to arbitrary addresses**, add funds (onramp) — all
+    UI-only, human-only. **Agents can ONLY pay for x402 services**, inside limits.
+    This is the least-privilege pattern our agent keys need: agent toolset = read +
+    discover + ONE bounded spend path; anything else requires the human lane (§9.21
+    policy edits, per-trade approval). No arbitrary `send` for agents, ever.
+- **Deterministic address per identity (get-wallet-address):** "The address is fixed to
+  your authenticated email — it doesn't change between sessions." = our counterfactual
+  Safe property (§9.1): same address every session, predictable pre-deploy. Confirms the
+  pattern; ours is stronger (same address across BSC + 182 via CREATE2).
+- **Balance = pre-payment gate (get-wallet-balance):** agent checks USDC balance before
+  paying, human-readable ($5.00). Our agent loop already does balance checks — keep
+  human-readable amounts + "if zero, fund" next-step hint in the tool response.
+- **Discovery with trust signals (list-bazaar-resources):** returns per service: name,
+  description, **price per call, quality score, transaction count** (e.g. "Gloria AI
+  News $0.01 · Score 0.87 · 529 txs"). Adopt for our bazaar: price + quality score +
+  tx count = the ranking/trust display agents and humans both read.
+- **Docs-before-pay (get-resource-details):** agent calls this automatically BEFORE
+  paying to understand the API (endpoint, method, params, body schema, payment amount/
+  network, response schema). Pay nothing until you know how to use it — enforce the
+  same ordering in our facilitator client flow.
+- **The one spend tool (make-x402-request):** discover → pay USDC → call API with
+  payment proof → return response. "Payments are instant and onchain — they cannot be
+  reversed"; gas sponsored; **"If the payment exceeds your spending limits, the agent
+  will notify you before proceeding"** = limit-check-then-ask escalation, the exact
+  pattern for our agent lane when a trade would breach a ceiling (propose → human
+  approval, §3.3).
+- **Verdict:** our agent API-key scopes (read/trade-paper/trade-live) map cleanly onto
+  this tool taxonomy; add the missing pieces at build time: agent-session auth-status
+  bootstrap, bazaar trust signals (score + tx count), docs-before-pay ordering,
+  limit-breach → human-approval escalation, and NO arbitrary-send tool for agents.
+
 ## 8. Open items before build
 
 **Wallet core (§1-7):**
@@ -954,3 +1008,7 @@ seller-side x402 pattern spelled out end to end. MCP adds the distribution chann
       cannot change (§9.24)
 - [ ] Phase 3+: MCP adapter for facilitator (stdio) so any MCP client can pay our
       endpoints; Bazaar Discover tab with copy-ready prompts (§9.24)
+- [ ] Agent toolset = least-privilege: read + discover + ONE bounded spend tool; NO
+      arbitrary-send for agents; agent-session auth-status bootstrap (§9.25)
+- [ ] Bazaar trust signals (price + quality score + tx count); docs-before-pay ordering
+      in client flow; limit-breach → human-approval escalation (§9.25)
