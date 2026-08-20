@@ -131,6 +131,10 @@ app.use(session({
 // API keys (optional; agents SHOULD authenticate). Set AGENT_KEYS="k1,k2" — no default (fail closed).
 // Registered BEFORE all routes so every protected route can see a valid key.
 const AGENT_KEYS = new Set((process.env.AGENT_KEYS || '').split(',').map(s => s.trim()).filter(Boolean));
+// OAuth 2.0 bearer tokens (v1.17): opaque tokens minted at POST /oauth/token
+// via client_credentials (client_id = agent-key id, client_secret = full itk_ key).
+// In-memory, TTL 24h, revocable via /oauth/revoke — a restart clears them (documented).
+const oauthTokens = new Map(); // token -> { userId, keyId, scopes, expiresAt }
 app.use((req, res, next) => {
   const key = req.get('x-api-key') || '';
   req.agentKey = key && AGENT_KEYS.has(key) ? key : null;
@@ -142,6 +146,17 @@ app.use((req, res, next) => {
   if (!req.agentKey && key) {
     const ua = agentKeys.resolve(key);
     if (ua) { req.userAgent = ua; agentKeys.touch(ua.keyId); }
+  }
+  // OAuth bearer tokens resolve to the same principal shape as user agent keys,
+  // so every existing scope guard (userAgentHas) works unchanged.
+  if (!req.userAgent) {
+    const authz = req.get('authorization') || '';
+    if (/^Bearer\s+/i.test(authz)) {
+      const entry = oauthTokens.get(authz.replace(/^Bearer\s+/i, '').trim());
+      if (entry && entry.expiresAt > Date.now()) {
+        req.userAgent = { userId: entry.userId, keyId: entry.keyId, name: 'oauth', scopes: entry.scopes.slice() };
+      }
+    }
   }
   next();
 });
@@ -427,7 +442,7 @@ function renderPage(name) {
     `<meta name="twitter:description" content="${OG.desc}">`,
     `<meta name="twitter:image" content="${SITE_URL}/img/og-image.png">`,
   ].join('\n') : '';
-  const headExtra = `${meta}\n<meta name="agent:state" content="/api/ui-state">\n<link rel="alternate" type="application/json" title="IOST Terminal agent state" href="/api/ui-state">\n<link rel="llms" href="/llms.txt">\n${jsonLdBlock()}`;
+  const headExtra = `${meta}\n<meta name="agent:state" content="/api/ui-state">\n<link rel="alternate" type="application/json" title="IOST Terminal agent state" href="/api/ui-state">\n<link rel="alternate" type="text/markdown" title="IOST Terminal LLM index" href="/llms.txt">\n<link rel="llms" href="/llms.txt">\n<link rel="api-catalog" href="/.well-known/api-catalog">\n<link rel="ai-catalog" href="/.well-known/ai-catalog.json">\n<link rel="service-desc" type="application/openapi+json" href="/openapi.json">\n${jsonLdBlock()}`;
   html = html.replace('</head>', `${headExtra}\n</head>`);
   html = html.replace('<script type="application/json" id="agent-state">null</script>', `<script type="application/json" id="agent-state">${safeJson(statePayload())}</script>`);
 
@@ -498,12 +513,94 @@ function renderPage(name) {
   return html;
 }
 
+// ---------- markdown negotiation (Cloudflare "Markdown for Agents") ----------
+// When an agent requests with Accept: text/markdown we return a markdown
+// rendering of the page instead of HTML. Browsers (Accept: text/html) are
+// unaffected. The markdown is built from the same 30s ssrState snapshot the
+// HTML SSR uses — an agent with zero JS still gets live values.
+function acceptsMarkdown(req) {
+  const accept = req.headers.accept || '';
+  return accept.includes('text/markdown') || accept.includes('text/x-markdown') || /markdown/i.test(accept.split(',')[0]);
+}
+function mdTable(rows) {
+  if (!rows || !rows.length) return '_no data yet_';
+  const w = (arr) => arr.map((c) => Math.max(4, c.length));
+  const widths = w(rows[0].map((c) => String(c)));
+  for (const r of rows.slice(1)) r.forEach((c, i) => { widths[i] = Math.max(widths[i], String(c).length); });
+  const fmt = (r) => '| ' + r.map((c, i) => String(c).padEnd(widths[i])).join(' | ') + ' |';
+  const sep = '|' + widths.map((n) => '-'.repeat(n + 2)).join('|') + '|';
+  return [fmt(rows[0]), sep, ...rows.slice(1).map(fmt)].join('\n');
+}
+function markdownFor(name) {
+  const s = ssrState;
+  const base = `# IOST Terminal — AI Real-Trading Platform\n\n> AI real-time trading platform for crypto + equities: live market data, AI\n> trade scores (0-100 with subscore breakdown), risk engine, news sentiment,\n> IOST on-chain dashboard, paper trading and an autonomous autopilot.\n> Paper-first: nothing here moves real money without explicit enablement.\n\nMachine interfaces: [API index](/api) · [OpenAPI](/openapi.json) · [full state](/api/ui-state) · [LLM index](/llms.txt) · [agent auth](/auth.md) · [ARD manifest](/.well-known/ai-catalog.json)\n`;
+  if (name === 'app' || name === 'hub') {
+    const isApp = name === 'app';
+    return `${base}\n## ${isApp ? 'AI Command Center' : 'Automation Hub'}\n\nThis is the ${isApp ? 'interactive trading console' : '3D automation hub'} — a client-side application shell.\nLive machine-readable state (server-rendered, no JS required): **/api/ui-state**\n\n- Top AI scores: ${(s?.scores || []).slice(0, 5).map((x) => `${x.symbol} ${x.composite} ${x.grade}`).join(' · ') || 'n/a'}\n- Autopilot: ${s?.autopilot?.enabled ? `enabled (${s.autopilot.ticks} ticks)${s.autopilot.config?.requireApproval ? ' · human-approval mode' : ''}` : 'disabled'}\n- Paper account: ${s?.paper?.account?.cash != null ? `$${Number(s.paper.account.cash).toLocaleString('en-US', { maximumFractionDigits: 2 })} cash · ${s.paper.positions?.length || 0} open` : 'n/a'}\n\nActions for agents: authenticated via **X-API-Key** header or **OAuth 2.0 client_credentials** (see [/auth.md](/auth.md)); live trades require owner approval through the proposal queue ([/api/autopilot/proposals](/api/autopilot/proposals)).\n`;
+  }
+  if (name === 'token') {
+    return `${base}\n## AITT — Agent Intelligence Trading Token\n\nERC-20 on IOST L2 (chain 182), 1B fixed supply, 8 decimals. Design draft — NOT issued yet.\n- Public info: [/api/aitt/info](/api/aitt/info)\n- Token page: [/aitt](/aitt) (SSR — no JS required)\n- Whitepaper: [/whitepaper](/whitepaper) (markdown)\n- Points → AITT conversion: 1:1 at TGE, gate closed until deploy (honest, no writes).\n`;
+  }
+  // index/landing — the full agent summary
+  const scores = (s?.scores || []).slice(0, 10).map((x) => {
+    const p = probFor(x.symbol);
+    return [x.symbol, String(x.composite), x.grade || '', p ? `${Math.round(p.probUp * 100)}% (CI ${Math.round(p.ciLo * 100)}–${Math.round(p.ciHi * 100)})` : '—', x.change24hPct != null ? `${x.change24hPct >= 0 ? '+' : ''}${Number(x.change24hPct).toFixed(2)}%` : '—'];
+  });
+  const m = s?.market;
+  const c = s?.onchain?.chain;
+  const mood = m ? (m.bullish > m.bearish ? '🟢 bullish' : m.bearish > m.bullish ? '🔴 bearish' : '⚪ mixed') : 'n/a';
+  const moodCounts = m ? `${Number(m.bullish) || 0} bull · ${Number(m.neutral) || 0} neutral · ${Number(m.bearish) || 0} bear headlines` : 'n/a';
+  const lb = computeLeaderboard('week', 5);
+  return `${base}
+## Live snapshot (${new Date(s?.ts || Date.now()).toISOString()})
+
+**Market mood:** ${mood} (${moodCounts}) · **IOST mainnet:** ${c ? `${c.tps} tx/s · head block ${Number(c.headBlock).toLocaleString('en-US')} · ${c.peerCount} peers` : 'n/a'}
+
+### Top AI trade scores
+${mdTable([['SYMBOL', 'SCORE', 'GRADE', 'UPSIDE PROB', '24H'], ...scores])}
+
+### Top paper traders (week)
+${lb.length ? mdTable([['RANK', 'TRADER', 'P&L', 'WIN RATE', 'TRADES']].concat(lb.map((r) => [String(r.rank), r.trader, `$${r.pnl.toLocaleString('en-US', { maximumFractionDigits: 2 })}`, `${r.winRate}%`, String(r.trades)]))) : '_no closed trades yet_'}
+
+### Autopilot
+${s?.autopilot?.enabled ? `enabled (${s.autopilot.ticks} ticks)${s.autopilot.config?.requireApproval ? ' — human-approval mode: entries queue at /api/autopilot/proposals' : ''}` : 'disabled (paper account idle)'}
+
+### Agent access
+- **Read state (no auth):** [/api/ui-state](/api/ui-state) · [/api/scores](/api/scores) · [/api/scanner](/api/scanner) · [/api/news](/api/news) · [/api/onchain](/api/onchain) · [/api/probability](/api/probability)
+- **Authenticate:** mint an agent key in the app (Portfolio → AI Agents) → send as \`X-API-Key: itk_…\`, or OAuth 2.0 client_credentials → Bearer token ([/auth.md](/auth.md))
+- **Trade (paper):** POST /api/paper/open|close with a \`trade-paper\`-scoped key
+- **Live:** proposals only — owner approves before anything executes (option C, human-in-the-loop)
+`;
+}
+// RFC 8288 Link headers — point agents at the discovery resources from every HTML page
+function setAgentHeaders(res) {
+  res.set('Link', [
+    '</.well-known/api-catalog>; rel="api-catalog"',
+    '</.well-known/ai-catalog.json>; rel="ai-catalog"',
+    '</openapi.json>; rel="service-desc"; type="application/openapi+json"',
+    '</llms.txt>; rel="llms"',
+    '</api>; rel="service-doc"',
+    '</.well-known/agent.json>; rel="service-doc"',
+    '</api/ui-state>; rel="alternate"; type="application/json"',
+  ].join(', '));
+}
+function sendPage(req, res, name) {
+  res.set('Cache-Control', 'no-store');
+  res.set('Vary', 'Accept');
+  if (acceptsMarkdown(req)) {
+    res.type('text/markdown; charset=utf-8');
+    return res.send(markdownFor(name));
+  }
+  setAgentHeaders(res);
+  res.send(renderPage(`${name}.html`));
+}
+
 // SSR routes — full market state present in the initial HTML (no client JS needed)
-app.get('/', (req, res) => { res.set('Cache-Control', 'no-store'); res.send(renderPage('index.html')); });
-app.get('/hub', (req, res) => { res.set('Cache-Control', 'no-store'); res.send(renderPage('hub.html')); });
-app.get('/app', (req, res) => { res.set('Cache-Control', 'no-store'); res.send(renderPage('app.html')); });
+app.get('/', (req, res) => sendPage(req, res, 'index'));
+app.get('/hub', (req, res) => sendPage(req, res, 'hub'));
+app.get('/app', (req, res) => sendPage(req, res, 'app'));
 // AITT token page — public, SSR (CMC-ready: crawlers get full content, no JS required)
-app.get(['/aitt', '/token'], (req, res) => { res.set('Cache-Control', 'no-store'); res.send(renderPage('token.html')); });
+app.get(['/aitt', '/token'], (req, res) => sendPage(req, res, 'token'));
 // Whitepaper (markdown distribution copy of TOKENOMICS.md — kept in sync)
 app.get('/whitepaper', (req, res) => {
   try {
@@ -534,6 +631,369 @@ app.get('/sitemap.xml', (req, res) => {
   res.type('application/xml');
   res.send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`);
 });
+
+// ================= agent discovery layer (v1.17) =================
+// Everything below is additive discovery metadata — zero impact on the
+// trading engine. Standards: RFC 9727 (API catalog), RFC 8414 (OAuth AS
+// metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
+// card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
+
+const DISCOVERY_VERSION = '1.17.0';
+
+// ---- RFC 9727 API catalog (application/linkset+json) ----
+app.get('/.well-known/api-catalog', (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.type('application/linkset+json');
+  res.json({
+    linkset: [
+      {
+        anchor: `${SITE_URL}/api`,
+        'service-desc': [`${SITE_URL}/openapi.json`],
+        'service-doc': [`${SITE_URL}/api`],
+        status: [`${SITE_URL}/api/health`],
+      },
+      {
+        anchor: `${SITE_URL}/.well-known/agent.json`,
+        'service-doc': [`${SITE_URL}/.well-known/agent.json`],
+      },
+      {
+        anchor: `${SITE_URL}/llms.txt`,
+        'describedby': [`${SITE_URL}/llms.txt`],
+      },
+    ],
+  });
+});
+
+// ---- OpenAPI 3.0.3 — curated, honest subset of the public + authed API ----
+const OPENAPI_PATHS = {
+  '/api/health': { get: { summary: 'Liveness probe', tags: ['meta'], security: [] } },
+  '/api/meta': { get: { summary: 'Platform state for agents: watchlist, account, engine status, freshness', tags: ['meta'], security: [] } },
+  '/api/ui-state': { get: { summary: 'Single-call full snapshot mirroring the dashboard (scanner, scores, account, autopilot, market, on-chain)', tags: ['meta'], security: [] } },
+  '/api': { get: { summary: 'Full API index — every endpoint, method, body and purpose', tags: ['meta'], security: [] } },
+  '/api/scanner': { get: { summary: 'Real-time analysis for all watchlist assets (signals, indicators, whale tape, rank, market cap)', tags: ['market'], security: [] } },
+  '/api/scores': { get: { summary: '0-100 AI trade scores for all assets (composite + 6 subscores)', tags: ['market'], security: [] } },
+  '/api/score/{symbol}': { get: { summary: 'AI trade score for one symbol', tags: ['market'], security: [], parameters: [{ name: 'symbol', in: 'path', required: true, schema: { type: 'string' } }] } },
+  '/api/analyze/{symbol}': { get: { summary: 'Full analysis for one symbol', tags: ['market'], security: [], parameters: [{ name: 'symbol', in: 'path', required: true, schema: { type: 'string' } }] } },
+  '/api/klines/{symbol}': { get: { summary: 'OHLCV candles (bar=15m|1h|1d, limit=N)', tags: ['market'], security: [], parameters: [{ name: 'symbol', in: 'path', required: true, schema: { type: 'string' } }] } },
+  '/api/probability': { get: { summary: 'Upside probability + confidence interval + signal drivers per asset', tags: ['market'], security: [] } },
+  '/api/orderbook/{symbol}': { get: { summary: 'L3 order book depth (OKX, crypto only)', tags: ['market'], security: [], parameters: [{ name: 'symbol', in: 'path', required: true, schema: { type: 'string' } }] } },
+  '/api/news': { get: { summary: 'Headlines + per-asset sentiment classification', tags: ['intelligence'], security: [] } },
+  '/api/onchain': { get: { summary: 'IOST mainnet dashboard (TPS, head block, large transfers, gas/RAM)', tags: ['intelligence'], security: [] } },
+  '/api/assistant': { post: { summary: 'Natural-language market Q&A synthesized from live data', tags: ['intelligence'], security: [], requestBody: { content: { 'application/json': { schema: { type: 'object', properties: { question: { type: 'string' } }, required: ['question'] } } } } } },
+  '/api/risk': { post: { summary: 'Position size, $ risk, R:R, potential P/L, exposure', tags: ['risk'], security: [], requestBody: { content: { 'application/json': { schema: { type: 'object' } } } } } },
+  '/api/leaderboard': { get: { summary: 'Top paper traders by closed P&L (masked identities)', tags: ['social'], security: [] } },
+  '/api/backtest': { post: { summary: 'Objective-rules backtest with FXReplay KPIs + honesty caveats', tags: ['analysis'], security: [], requestBody: { content: { 'application/json': { schema: { type: 'object' } } } } } },
+  '/api/token-audit': { post: { summary: 'Binance Web3 token security audit (honeypot/rug/tax scan)', tags: ['analysis'], security: [], requestBody: { content: { 'application/json': { schema: { type: 'object', properties: { contractAddress: { type: 'string' }, chainId: { type: 'string' } }, required: ['contractAddress'] } } } } } },
+  '/api/smart-money': { get: { summary: 'Whale buy/sell signals (BSC/Solana)', tags: ['analysis'], security: [] } },
+  '/api/signals/feed': { get: { summary: 'Public signal feed with on-chain proof status', tags: ['agents'], security: [] } },
+  '/api/autopilot/proposals': { get: { summary: 'Pending human-in-the-loop proposals with full reasoning', tags: ['autonomy'], security: [] } },
+  '/api/paper': { get: { summary: 'Account + open positions + journal (mark-to-market)', tags: ['execution'] } },
+  '/api/paper/open': { post: { summary: 'Open paper trade', tags: ['execution'] } },
+  '/api/paper/close': { post: { summary: 'Close paper trade', tags: ['execution'] } },
+  '/api/signals': { post: { summary: 'Publish a signal as the authenticated principal; SHA-256 pinned on IOST mainnet', tags: ['agents'] } },
+  '/api/agent-keys': { get: { summary: 'My AI-agent API keys (scopes, prefixes)', tags: ['auth'] }, post: { summary: 'Mint a scoped AI-agent API key', tags: ['auth'] } },
+};
+app.get('/openapi.json', (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.type('application/openapi+json');
+  res.json({
+    openapi: '3.0.3',
+    info: { title: 'IOST Terminal API', version: DISCOVERY_VERSION, description: 'AI real-time trading platform — market data, AI trade scores, risk analysis, paper execution, agent signal publishing. Read endpoints are public; execution/agent endpoints require an agent key (X-API-Key) or OAuth 2.0 bearer token. Not financial advice.' },
+    servers: [{ url: SITE_URL }],
+    tags: [
+      { name: 'meta' }, { name: 'market' }, { name: 'intelligence' }, { name: 'risk' },
+      { name: 'social' }, { name: 'analysis' }, { name: 'agents' }, { name: 'autonomy' },
+      { name: 'execution' }, { name: 'auth' },
+    ],
+    paths: OPENAPI_PATHS,
+    components: {
+      securitySchemes: {
+        ApiKey: { type: 'apiKey', in: 'header', name: 'X-API-Key', description: 'Agent key minted in Portfolio → AI Agents (itk_…). Scopes: read / trade-paper / trade-live.' },
+        BearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'opaque', description: 'OAuth 2.0 access token from POST /oauth/token (client_credentials).' },
+      },
+    },
+    security: [{ ApiKey: [] }, { BearerAuth: [] }],
+  });
+});
+
+// ---- OAuth 2.0 authorization-server metadata (RFC 8414) ----
+app.get('/.well-known/oauth-authorization-server', (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.type('application/json');
+  res.json({
+    issuer: SITE_URL,
+    token_endpoint: `${SITE_URL}/oauth/token`,
+    revocation_endpoint: `${SITE_URL}/oauth/revoke`,
+    grant_types_supported: ['client_credentials'],
+    token_endpoint_auth_methods_supported: ['client_secret_post', 'client_secret_basic'],
+    scopes_supported: ['read', 'trade-paper', 'trade-live'],
+    response_types_supported: [],
+    code_challenge_methods_supported: [],
+    service_documentation: `${SITE_URL}/auth.md`,
+  });
+});
+// ---- OAuth protected-resource metadata (RFC 9728) ----
+app.get('/.well-known/oauth-protected-resource', (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.type('application/json');
+  res.json({
+    resource: `${SITE_URL}/api/`,
+    authorization_servers: [SITE_URL],
+    scopes_supported: ['read', 'trade-paper', 'trade-live'],
+    bearer_methods_supported: ['header'],
+  });
+});
+
+// ---- real OAuth 2.0 client_credentials grant (no fake metadata) ----
+// client_id = agent-key id (public), client_secret = the full itk_ secret.
+// Tokens are opaque, in-memory, 24h TTL; revoke via /oauth/revoke.
+const oauthLimiter = rateLimit({ windowMs: 60_000, limit: 20, standardHeaders: 'draft-7', legacyHeaders: false, message: { error: 'too many token requests — slow down' } });
+const oauthForm = express.urlencoded({ extended: false });
+app.post('/oauth/token', oauthLimiter, oauthForm, (req, res) => {
+  const grant = String(req.body.grant_type || '');
+  if (grant !== 'client_credentials') {
+    return res.status(400).json({ error: 'unsupported_grant_type', error_description: 'only client_credentials is supported' });
+  }
+  const clientId = String(req.body.client_id || '');
+  const clientSecret = String(req.body.client_secret || '');
+  const authz = req.get('authorization') || '';
+  let id = clientId, secret = clientSecret;
+  if (/^Basic\s+/i.test(authz)) {
+    try {
+      const decoded = Buffer.from(authz.replace(/^Basic\s+/i, '').trim(), 'base64').toString('utf8');
+      const i = decoded.indexOf(':');
+      if (i > 0) { id = decoded.slice(0, i); secret = decoded.slice(i + 1); }
+    } catch { /* fall through to body */ }
+  }
+  const principal = agentKeys.verifySecret(id, secret);
+  if (!principal) {
+    return res.status(401).json({ error: 'invalid_client', error_description: 'unknown client_id or bad client_secret' });
+  }
+  const token = crypto.randomBytes(32).toString('base64url');
+  const expiresAt = Date.now() + 24 * 3600 * 1000;
+  oauthTokens.set(token, { ...principal, expiresAt });
+  res.set('Cache-Control', 'no-store');
+  res.json({ access_token: token, token_type: 'Bearer', expires_in: 86400, scope: principal.scopes.join(' ') });
+});
+app.post('/oauth/revoke', oauthForm, (req, res) => {
+  const tok = String(req.body.token || '');
+  if (tok && oauthTokens.delete(tok)) res.json({ ok: true });
+  else res.status(200).json({ ok: false, error: 'token not found or already revoked' });
+});
+
+// ---- Auth.md — honest agent registration guide (workos.com/auth.md style) ----
+const AUTH_MD = `# Auth.md — how AI agents authenticate to IOST Terminal
+
+IOST Terminal is an AI real-time trading platform (crypto + equities, paper-first).
+Agents can read public market data with **no auth**, and act on an account with a
+**scoped agent API key** — or an OAuth 2.0 bearer token derived from one.
+
+## Public (no auth) — read-only
+\`/api/ui-state\` · \`/api/scores\` · \`/api/scanner\` · \`/api/analyze/:symbol\` · \`/api/news\` ·
+\`/api/onchain\` · \`/api/probability\` · \`/api/leaderboard\` · \`/api/backtest\` ·
+\`/api/signals/feed\` · \`/api/token-audit\` · \`/api/smart-money\` — all public, no keys.
+
+## Agent API keys (recommended)
+1. Human signs in at https://iostcallister.com/app → **Portfolio → AI Agents → Create key**.
+2. Key looks like \`itk_…\`; the full secret is shown **exactly once** (like a wallet seed).
+3. Scopes: \`read\` (always) · \`trade-paper\` (open/close paper trades) · \`trade-live\` (owner-only, requests only).
+4. Send it: \`X-API-Key: itk_…\` on every request. Revocable instantly in the UI.
+
+## OAuth 2.0 (client_credentials)
+Discovery: \`/.well-known/oauth-authorization-server\` (RFC 8414) · \`/.well-known/oauth-protected-resource\` (RFC 9728).
+- \`client_id\` = the key's id (shown in the app), \`client_secret\` = the full \`itk_…\` secret.
+- \`POST /oauth/token\` with \`grant_type=client_credentials\` (form body or HTTP Basic) → \`access_token\` (Bearer, 24h, opaque, in-memory).
+- Use \`Authorization: Bearer <token>\` — resolves to the same identity + scopes as the key.
+- Revoke: \`POST /oauth/revoke\` with \`{token}\`.
+
+## Live trading — human-in-the-loop
+Agents never execute live trades directly. With a \`trade-live\` key an agent submits a
+**proposal** (\`POST /api/live/proposals\`); the owner approves or rejects it
+(\`POST /api/live/proposals/:id/approve|reject\`) before anything reaches the venue.
+No CAPTCHAs, no barriers — keys and rails instead.
+
+## Fail-closed
+There are no default/shared platform keys. Unset credentials = no agent identity.
+`;
+app.get('/auth.md', (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.type('text/markdown; charset=utf-8');
+  res.send(AUTH_MD);
+});
+
+// ---- MCP server card (SEP-1649 draft) + real streamable-HTTP MCP endpoint ----
+const MCP_VERSION = '2025-06-18';
+const MCP_TOOLS = [
+  { name: 'market_snapshot', description: 'Live platform snapshot: top AI trade scores, market mood, IOST mainnet state, autopilot status (from the 30s server cache — no per-call scans).', inputSchema: { type: 'object', properties: {} } },
+  { name: 'asset_scores', description: '0-100 AI trade scores for every watchlist asset (composite + momentum/volume/news/risk subscores).', inputSchema: { type: 'object', properties: {} } },
+  { name: 'analyze_symbol', description: 'Full AI analysis for one symbol: score, subscores, indicators, signals, price.', inputSchema: { type: 'object', properties: { symbol: { type: 'string', description: 'e.g. IOST, BTC, ETH, SOL, AAPL, NVDA' } }, required: ['symbol'] } },
+  { name: 'news_sentiment', description: 'Latest headlines + bullish/bearish/neutral classification.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'chain_status', description: 'IOST mainnet dashboard: TPS, head block, peers, large transfers.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'proposals', description: 'Pending autopilot proposals (candidate trades queued for human approval) with full reasoning.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'platform_help', description: 'What IOST Terminal is and how to connect: endpoints, auth, skills index, MCP card, ARD manifest.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'health', description: 'Liveness + version.', inputSchema: { type: 'object', properties: {} } },
+];
+async function mcpToolCall(name, args) {
+  switch (name) {
+    case 'market_snapshot': {
+      const s = ssrState;
+      const m = s?.market;
+      const c = s?.onchain?.chain;
+      return {
+        ts: s?.ts || null,
+        marketMood: m ? (m.bullish > m.bearish ? 'bullish' : m.bearish > m.bullish ? 'bearish' : 'mixed') : null,
+        headlines: m ? { bullish: m.bullish, neutral: m.neutral, bearish: m.bearish } : null,
+        onchain: c ? { tps: c.tps, headBlock: c.headBlock, peers: c.peerCount } : null,
+        autopilot: s?.autopilot ? { enabled: s.autopilot.enabled, requireApproval: !!s.autopilot.config?.requireApproval } : null,
+        topScores: (s?.scores || []).slice(0, 10).map((x) => ({ symbol: x.symbol, score: x.composite, grade: x.grade, change24hPct: x.change24hPct })),
+      };
+    }
+    case 'asset_scores': return (ssrState?.scores || []).map((x) => ({ symbol: x.symbol, score: x.composite, grade: x.grade, subscores: x.subscores }));
+    case 'analyze_symbol': {
+      const sym = String(args?.symbol || '').toUpperCase().trim();
+      if (!sym) throw new Error('missing required argument: symbol');
+      return await analyzeSymbol(sym);
+    }
+    case 'news_sentiment': return await getNews();
+    case 'chain_status': return await getChainSnapshot();
+    case 'proposals': return getProposals().slice(0, 10);
+    case 'platform_help': return {
+      name: 'IOST Terminal', version: DISCOVERY_VERSION,
+      api: `${SITE_URL}/api`, openapi: `${SITE_URL}/openapi.json`, llms: `${SITE_URL}/llms.txt`,
+      auth: `${SITE_URL}/auth.md`, ard: `${SITE_URL}/.well-known/ai-catalog.json`,
+      skills: `${SITE_URL}/.well-known/agent-skills/index.json`, mcpCard: `${SITE_URL}/.well-known/mcp/server-card.json`,
+      note: 'Read-only MCP tools. Execution stays on the REST API with scoped agent keys + owner-approved live proposals.',
+    };
+    case 'health': return { ok: true, version: DISCOVERY_VERSION, ts: Date.now() };
+    default: throw new Error(`unknown tool: ${name}`);
+  }
+}
+app.get('/.well-known/mcp/server-card.json', (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.type('application/json');
+  res.json({
+    serverInfo: { name: 'iost-terminal', version: DISCOVERY_VERSION },
+    protocolVersion: MCP_VERSION,
+    transport: { type: 'streamable-http', endpoint: `${SITE_URL}/mcp` },
+    capabilities: { tools: { listChanged: false } },
+  });
+});
+app.post('/mcp', express.json({ limit: '128kb' }), async (req, res) => {
+  const msg = req.body;
+  const reply = (payload, httpStatus = 200) => res.status(httpStatus).json(payload);
+  if (!msg || msg.jsonrpc !== '2.0' || typeof msg.method !== 'string') {
+    return reply({ jsonrpc: '2.0', id: msg?.id ?? null, error: { code: -32600, message: 'Invalid Request' } }, 400);
+  }
+  const id = msg.id ?? null;
+  if (msg.method === 'initialize') {
+    return reply({ jsonrpc: '2.0', id, result: { protocolVersion: MCP_VERSION, capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'iost-terminal', version: DISCOVERY_VERSION } } });
+  }
+  if (msg.method === 'notifications/initialized' || msg.method === 'notifications/cancelled') {
+    return res.status(202).end(); // JSON-RPC notification — no body
+  }
+  if (msg.method === 'tools/list') {
+    return reply({ jsonrpc: '2.0', id, result: { tools: MCP_TOOLS } });
+  }
+  if (msg.method === 'tools/call') {
+    const name = String(msg.params?.name || '');
+    const args = msg.params?.arguments ?? {};
+    try {
+      const data = await mcpToolCall(name, args);
+      return reply({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }], isError: false } });
+    } catch (e) {
+      return reply({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: `error: ${e.message}` }], isError: true } });
+    }
+  }
+  if (msg.method === 'ping') {
+    return reply({ jsonrpc: '2.0', id, result: {} });
+  }
+  return reply({ jsonrpc: '2.0', id, error: { code: -32601, message: `Method not found: ${msg.method}` } });
+});
+
+// ---- ARD manifest (Agentic Resource Discovery) — /.well-known/ai-catalog.json ----
+app.get('/.well-known/ai-catalog.json', (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.type('application/json');
+  res.json({
+    specVersion: '1.0.0',
+    host: { name: 'IOST Terminal', url: SITE_URL },
+    entries: [
+      {
+        urn: 'urn:air:iostcallister.com:api:rest',
+        displayName: 'IOST Terminal REST API',
+        type: 'application/openapi+json',
+        url: `${SITE_URL}/openapi.json`,
+        representativeQueries: ['market prices and AI trade scores', 'what API endpoints does the trading platform expose', 'autopilot proposals'],
+      },
+      {
+        urn: 'urn:air:iostcallister.com:mcp:terminal',
+        displayName: 'IOST Terminal MCP server (read-only tools)',
+        type: 'application/vnd.mcp+json',
+        url: `${SITE_URL}/.well-known/mcp/server-card.json`,
+        representativeQueries: ['what tools does the IOST Terminal expose over MCP', 'get market snapshot', 'analyze a symbol'],
+      },
+      {
+        urn: 'urn:air:iostcallister.com:docs:llms',
+        displayName: 'LLM-friendly index',
+        type: 'text/markdown',
+        url: `${SITE_URL}/llms.txt`,
+        representativeQueries: ['what is IOST Terminal and how do I use it', 'platform overview for agents'],
+      },
+      {
+        urn: 'urn:air:iostcallister.com:auth:guide',
+        displayName: 'Agent authentication guide',
+        type: 'text/markdown',
+        url: `${SITE_URL}/auth.md`,
+        representativeQueries: ['how does an agent authenticate', 'API keys and OAuth scopes'],
+      },
+      {
+        urn: 'urn:air:iostcallister.com:skills:index',
+        displayName: 'Agent skills index',
+        type: 'application/json',
+        url: `${SITE_URL}/.well-known/agent-skills/index.json`,
+        representativeQueries: ['skills for reading IOST Terminal data', 'agent skills available'],
+      },
+      {
+        urn: 'urn:air:iostcallister.com:manifest:agent',
+        displayName: 'Agent discovery manifest',
+        type: 'application/json',
+        url: `${SITE_URL}/.well-known/agent.json`,
+        representativeQueries: ['agent manifest for iostcallister.com'],
+      },
+    ],
+  });
+});
+
+// ---- Agent Skills Discovery index (RFC v0.2.0) — hashes computed at serve time ----
+const AGENT_SKILLS_DIR = join(ROOT, 'public', '.well-known', 'agent-skills');
+const AGENT_SKILLS = [
+  { name: 'iost-terminal-market-data', type: 'skill', description: 'How an agent reads IOST Terminal market data: endpoints, the agent-state JSON blob, JSON-LD, markdown negotiation and the LLM index.', file: 'iost-terminal-market-data/SKILL.md' },
+  { name: 'iost-terminal-agent-auth', type: 'skill', description: 'How an agent authenticates to IOST Terminal: API keys (X-API-Key), OAuth 2.0 client_credentials, scopes, and the human-in-the-loop live-trade proposal rail.', file: 'iost-terminal-agent-auth/SKILL.md' },
+];
+// Serve the SKILL.md bodies (express.static ignores dot-directories by default,
+// so these need explicit routes).
+for (const sk of AGENT_SKILLS) {
+  app.get(`/.well-known/agent-skills/${sk.file}`, (req, res) => {
+    try {
+      res.type('text/markdown; charset=utf-8');
+      res.send(readFileSync(join(AGENT_SKILLS_DIR, sk.file), 'utf8'));
+    } catch {
+      res.status(404).json({ error: 'skill not found' });
+    }
+  });
+}
+app.get('/.well-known/agent-skills/index.json', (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.type('application/json');
+  const skills = AGENT_SKILLS.map((sk) => {
+    let sha256 = '';
+    try { sha256 = crypto.createHash('sha256').update(readFileSync(join(AGENT_SKILLS_DIR, sk.file), 'utf8')).digest('hex'); } catch { /* keep empty */ }
+    return { name: sk.name, type: sk.type, description: sk.description, url: `${SITE_URL}/.well-known/agent-skills/${sk.file}`, sha256 };
+  });
+  res.json({ $schema: 'https://agentskills.io/schema/skills-index.schema.json', skills });
+});
+// legacy path alias (v0.1.0)
+app.get('/.well-known/skills/index.json', (req, res) => res.redirect(301, '/.well-known/agent-skills/index.json'));
 
 // fast cached snapshot for the landing page (no forced scans)
 app.get('/api/landing', async (req, res) => {
@@ -1758,7 +2218,18 @@ const API_INDEX = {
 };
 
 app.get('/.well-known/agent.json', (req, res) => {
-  res.json({ name: 'IOST Terminal', version: '1.11.0', machineReadable: true, api: '/api', index: '/api', meta: '/api/meta', uiState: '/api/ui-state', auth: '/api/auth', points: '/api/points', aitt: '/api/aitt/info', agentWallet: '/api/wallets', wallet: '/api/account/iost', contracts: API_INDEX });
+  res.set('Access-Control-Allow-Origin', '*');
+  res.json({
+    name: 'IOST Terminal', version: DISCOVERY_VERSION, machineReadable: true,
+    api: '/api', index: '/api', meta: '/api/meta', uiState: '/api/ui-state',
+    openapi: '/openapi.json', apiCatalog: '/.well-known/api-catalog',
+    ard: '/.well-known/ai-catalog.json', auth: '/api/auth', authMd: '/auth.md',
+    oauth: { authorizationServer: '/.well-known/oauth-authorization-server', tokenEndpoint: '/oauth/token', protectedResource: '/.well-known/oauth-protected-resource', grantTypes: ['client_credentials'] },
+    mcp: { card: '/.well-known/mcp/server-card.json', endpoint: '/mcp', tools: ['market_snapshot', 'asset_scores', 'analyze_symbol', 'news_sentiment', 'chain_status', 'proposals', 'platform_help', 'health'] },
+    skills: '/.well-known/agent-skills/index.json', llms: '/llms.txt',
+    points: '/api/points', aitt: '/api/aitt/info', agentWallet: '/api/wallets', wallet: '/api/account/iost',
+    contracts: API_INDEX,
+  });
 });
 app.get('/api', (req, res) => res.json(API_INDEX));
 app.get('/api/meta', async (req, res) => {

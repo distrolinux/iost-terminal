@@ -3,6 +3,14 @@
 # Security-sensitive actions (trades, config) require API keys (X-API-Key),
 # never CAPTCHAs.
 
+# Content Signals (draft-romm-aipref-contentsignals): explicit AI content
+# preferences — training, search indexing and AI-input use are ALL allowed
+# (transparency over blocking; this platform exists to be read by agents).
+Content-Signal: ai-train=yes, search=yes, ai-input=yes
+
+# Agentmap (Agentic Resource Discovery): where agents find the capability manifest
+Agentmap: /.well-known/ai-catalog.json
+
 User-agent: *
 Allow: /
 
@@ -42,9 +50,16 @@ Allow: /
 
 # Machine-readable indexes every agent should fetch first
 Allow: /llms.txt
+Allow: /auth.md
 Allow: /.well-known/agent.json
+Allow: /.well-known/ai-catalog.json
+Allow: /.well-known/api-catalog
+Allow: /.well-known/mcp/server-card.json
+Allow: /.well-known/agent-skills/
+Allow: /openapi.json
 Allow: /api/
 Allow: /api/ui-state
 Allow: /api/meta
 
-Sitemap: /robots.txt
+# Sitemap (absolute URL per sitemaps.org)
+Sitemap: https://iostcallister.com/sitemap.xml
