@@ -737,7 +737,7 @@ app.get('/.well-known/oauth-authorization-server', (req, res) => {
       claim_uri: `${SITE_URL}/api/meta`,
       revocation_uri: `${SITE_URL}/oauth/revoke`,
       revocation_endpoint: `${SITE_URL}/oauth/revoke`,
-      skill: `${SITE_URL}/.well-known/agent-skills/iost-terminal-agent-auth/SKILL.md`,
+      skill: `${SITE_URL}/auth.md`,
     },
   });
 });
