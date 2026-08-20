@@ -734,9 +734,10 @@ app.get('/.well-known/oauth-authorization-server', (req, res) => {
       register_uri: `${SITE_URL}/auth.md`,
       identity_types: ['api_key', 'oauth_client_credentials'],
       credential_types: ['api_key', 'access_token'],
-      scopes_supported: ['read', 'trade-paper', 'trade-live'],
       claim_uri: `${SITE_URL}/api/meta`,
+      revocation_uri: `${SITE_URL}/oauth/revoke`,
       revocation_endpoint: `${SITE_URL}/oauth/revoke`,
+      skill: `${SITE_URL}/.well-known/agent-skills/iost-terminal-agent-auth/SKILL.md`,
     },
   });
 });
