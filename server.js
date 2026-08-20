@@ -730,6 +730,14 @@ app.get('/.well-known/oauth-authorization-server', (req, res) => {
     response_types_supported: [],
     code_challenge_methods_supported: [],
     service_documentation: `${SITE_URL}/auth.md`,
+    agent_auth: {
+      register_uri: `${SITE_URL}/auth.md`,
+      identity_types: ['api_key', 'oauth_client_credentials'],
+      credential_types: ['api_key', 'access_token'],
+      scopes_supported: ['read', 'trade-paper', 'trade-live'],
+      claim_uri: `${SITE_URL}/api/meta`,
+      revocation_endpoint: `${SITE_URL}/oauth/revoke`,
+    },
   });
 });
 // ---- OAuth protected-resource metadata (RFC 9728) ----
@@ -737,7 +745,7 @@ app.get('/.well-known/oauth-protected-resource', (req, res) => {
   res.set('Access-Control-Allow-Origin', '*');
   res.type('application/json');
   res.json({
-    resource: `${SITE_URL}/api/`,
+    resource: [`${SITE_URL}/`, `${SITE_URL}/api/`],
     authorization_servers: [SITE_URL],
     scopes_supported: ['read', 'trade-paper', 'trade-live'],
     bearer_methods_supported: ['header'],
