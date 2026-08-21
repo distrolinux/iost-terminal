@@ -45,7 +45,7 @@ cp deploy.config.example.json deploy.config.json
 #    pointsConversionReserve                                        -> 0 for now (set at TGE)
 
 # 2. Deploy (deployer needs a little BNB on L2)
-# Canonical deployer/owner = PROJECT OWNER's MetaMask wallet (EIP-55 verified 2026-08-16):
+# Canonical deployer/owner MetaMask wallet (EIP-55 verified 2026-08-16):
 #   0xAcF508de0Cdab772C08988Db8aA9898db6b3D769
 export PRIVATE_KEY=0x...            # deployer key — do not commit, do not share
 npx hardhat run scripts/deploy.js --network iostL2
