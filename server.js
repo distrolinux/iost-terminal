@@ -649,7 +649,7 @@ app.get('/whitepaper', (req, res) => {
 });
 app.use(express.static(join(ROOT, 'public')));
 
-// ---- legal pages (draft — PROJECT OWNER reviews before publishing) ----
+// ---- legal pages (draft — owner reviews before publishing) ----
 const LEGAL_PAGES = {};
 for (const f of ['terms.html', 'privacy.html', 'risk-disclosure.html']) {
   LEGAL_PAGES[f] = readFileSync(join(ROOT, 'public', f), 'utf8');
@@ -1961,7 +1961,7 @@ app.post('/api/live/proposals/:id/reject', requireUser, (req, res) => {
   res.json({ ok: true, proposal: r.proposal });
 });
 
-// ---- admin (owner-only): fee config + wallets — PROJECT OWNER can change pricing live ----
+// ---- admin (owner-only): fee config + wallets — owner can change pricing live ----
 app.get('/api/admin/fee-config', requireUser, (req, res) => {
   if (!isOwnerSession(req)) return res.status(403).json({ error: 'owner only' });
   res.json({ ok: true, config: getFeeConfig() });

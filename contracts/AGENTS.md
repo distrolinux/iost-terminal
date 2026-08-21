@@ -5,10 +5,10 @@ Solidity build for the AITT token (Phase 1 of the roadmap in `docs/TOKENOMICS.md
 AITT ERC-20, allocation vesting, points→AITT converter, deploy + verify scripts.
 
 ## Ownership
-- Owner: PROJECT OWNER (final sign-off on any deployment or design change)
+- Owner: project owner (final sign-off on any deployment or design change)
 - Scope: this folder only. Design decisions live in `../docs/TOKENOMICS.md` (source of truth).
 
-## Local Contracts (locked — do not change without PROJECT OWNER)
+## Local Contracts (locked — do not change without owner approval)
 - Token: OpenZeppelin ERC-20, **1B fixed supply, 8 decimals, no mint / no external burn** + **swap tax (TOKENOMICS.md v1.4, locked 2026-08-19):** 3% on AMM-pair buy/sell only — 1.8% burn / 0.8% stakers / 0.4% treasury; 0% on wallet-to-wallet, staking, airdrops, platform transfers. Burn clamped at **200M cumulative (800M supply floor)**; post-cap the burn share redirects to stakers 70/30. AMM pair locked once via `setAmmPair` (owner-only, one-time, permanent — the pair only exists after the token is deployed); `treasury` + `stakersPool` recipients set at construction. After the pair is set, no privileged functions remain.
 - Vesting: cliff + linear (team 12-mo cliff + 36-mo linear · advisors 12-mo cliff + 24-mo linear)
 - Converter: 1:1 points→AITT, operator-approved snapshots, reserve-funded, pausable
@@ -18,7 +18,7 @@ AITT ERC-20, allocation vesting, points→AITT converter, deploy + verify script
 
 ## Work Guidance
 - Secrets never live here: `deploy.config.json` (addresses only) and `.env` are gitignored.
-- Deploying needs PROJECT OWNER's explicit go-ahead; runbook: `../docs/PHASE1_SPEC.md`.
+- Deploying needs the owner's explicit go-ahead; runbook: `../docs/PHASE1_SPEC.md`.
 - Design-doc edits (supply, allocations, schedules, burn mechanics) must stay in sync with `../docs/TOKENOMICS.md` AND `../docs/AITT-Whitepaper-v1.0.md` (same mechanics; the public whitepaper is a condensed copy that omits the internal §15 appendix — edit TOKENOMICS first, then mirror public-facing changes).
 
 ## Verification

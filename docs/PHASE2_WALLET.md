@@ -1,6 +1,6 @@
 # Phase 2 Wallet Architecture — Agentic Wallets & Spend Rails (design draft)
 
-> Status: **RESEARCH COMPLETE (2026-08-20)** — design draft for PROJECT OWNER review.
+> Status: **RESEARCH COMPLETE (2026-08-20)** — design draft for owner review.
 > Source of truth for economics: `docs/TOKENOMICS.md` §4.1–4.9, §15. This doc is the
 > wallet/security implementation layer. Nothing here is deployed; all addresses are
 > chain-state verification results, not deployments by us.
@@ -61,7 +61,7 @@ Alchemy MAv2) with session-key validators. **Deferred** — see §6.
 - Caveat: explorer shows `is_contract: True` but 0 tx; canonical addresses suggest real
   pre-deployments. Re-verify EntryPoint/Permit2 against RPC when network access is available.
 
-## 2. Non-negotiables (from TOKENOMICS + PROJECT OWNER's stated posture)
+## 2. Non-negotiables (from TOKENOMICS + the owner's stated posture)
 
 1. **Non-custodial-with-delegation.** User owns the root authority; platform can never move
    funds alone; agent holds scoped, revocable, expiring signing power.

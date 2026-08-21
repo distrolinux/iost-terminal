@@ -6,7 +6,7 @@
 > v1.0 §4.1/§4.7/§4.8 (trust staking, payment sessions, AP2 mandate model) and the
 > Phase 1 contracts (`contracts/`). Phase 2 does NOT move real value until Phase 1
 > is stable and externally audited.
-> Date: 2026-08-16 · Owner: PROJECT OWNER
+> Date: 2026-08-16 · Owner: project owner
 > Research folded in: AWS AgentCore (reserve→process→commit) · AP2 v0.2 (mandates) ·
 > Cobo Agentic Wallet guide 2026-04-28 (Pact framework, MPC, emergency freeze) ·
 > ChiMoney AI agent wallets 2026-08-16 (server-side policy engine, parent-child wallets,
@@ -284,7 +284,7 @@ Atomic tmp+rename writes, boot-cached stores — same rules as every other store
 - Stores: `data/wallets.json` · `limits.json` · `freeze.json` · `stakes.json` · `slashes.json` · `pacts.json` (all atomic tmp+rename).
 - NOT yet built: on-chain staking (post-deploy), AP2 mandate tokens, UI views, audit-event alerts cron.
 
-## Open Items (decision points for PROJECT OWNER)
+## Open Items (decision points for the owner)
 
 1. [ ] Credit-line formula calibration (`stakeUSD × multiplier`) — propose numbers after Phase 1 fee data
 2. [ ] Staking rewards: none at Phase 2 start? Or fee-share % (50% stakers split) once fees exist? **Recommend: no rewards until fee revenue exists (revenue-backed rule)**

@@ -1,6 +1,6 @@
-# AITT Tokenomics — Professional Design Draft (v1.3)
+# AITT Tokenomics — Professional Design Draft (v1.7)
 
-> **Status: DESIGN DRAFT — no token has been created, minted, or sold.**
+> **Status: DESIGN DRAFT — pre-launch. No public sale; utility-only; not an investment (§10).**
 > Supersedes `docs/tokenomics-vision.md` (v0.1) in design intent; that file remains as historical record.
 > This draft incorporates the Hermes review notes: 1B supply, revenue-backed incentives, legal-first sequencing, utility framing.
 > **Go-live gate:** real user base + real fee revenue + legal counsel sign-off (Canada/CSA review). No TGE before that.
@@ -8,6 +8,9 @@
 > v1.2 (2026-08-17): diligence-pass appendix (§15) — Agent Cards/DIDs identity layer, FinOps circuit breakers, KYA/AML posture. Doc-only; no locked mechanics changed (pre-launch freeze).
 > v1.3 (2026-08-17): **burn cap locked (owner decision)** — cumulative burn (fee-burn + DAO buy-back/burn) capped at 200M → 800M supply floor; post-cap the 20% fee share redirects to stakers (70/30 split). Guarantees agent-operable supply.
 > v1.4 (2026-08-19): **swap tax locked (owner decision)** — 3% buy/sell tax on AMM-pair swaps only (1.8% burn / 0.8% stakers / 0.4% treasury); 0% on wallet-to-wallet, staking, airdrops, platform transfers. Burn share feeds the same 200M cumulative cap; post-cap it redirects to stakers (70/30). Rationale: LP/trader-friendly — supersedes the earlier 20%-of-everything reading; platform-fee split (50/20/30) unchanged.
+> v1.5 (2026-08-20): **status banner reworded (owner decision, token creation imminent)** — "pre-launch" wording stays accurate after deployment; posture unchanged (no public sale, utility-only, not an investment).
+> v1.6 (2026-08-20): **quantum-readiness posture added (§16)** — hash-anchored records quantum-strong today; PQC-ready agent signing (ML-DSA) Phase 2/3; chain-level PQC question raised with the IOST team.
+> v1.7 (2026-08-20): **audit checklist item replaced with Phase 2 timing note (owner decision)** — external audit remains a Phase 2 gate (before real value moves), removed as a Phase 1 checklist item.
 
 ---
 
@@ -296,7 +299,7 @@ Live off-chain points (per the v0.1 mapping: signals +10, followers +5, referral
 - [ ] Supply/allocation modeled on real fee + staking projections (post Phase 1 data)
 - [x] Canadian legal counsel review — CLEARED 2026-08-16 (counsel: "good to go")
 - [x] **Phase 1 contracts BUILT + free tooling audit DONE 2026-08-16** (re-run 2026-08-19 after swap tax: **36/36 tests**, Slither 0 High/Medium, Mythril clean) — `contracts/` (AITT + vesting + converter). Runbook: `docs/PHASE1_SPEC.md`
-- [ ] Mid-tier external audit (≈$3–8k) — required BEFORE Phase 2 moves real value (not yet scheduled; tooling pass is NOT an external audit)
+- Note: independent external audit required BEFORE Phase 2 moves real value — a Phase 2 gate, not a Phase 1 deploy gate (owner decision 2026-08-20; the free tooling pass is not an external audit).
 - [x] **Points→AITT conversion mechanics BUILT 2026-08-16** (rate 1:1 locked · claim endpoint + Points UI with honesty labels "planned, not guaranteed" · gate closed until deploy + TGE gates · reserve = live points-ledger snapshot via `data/aitt-config.json`) — public AITT page `/aitt` + `/whitepaper` live (CMC-ready infra)
 - [x] **Burn cap locked 2026-08-17 (owner decision)** — 200M cumulative cap across fee-burn + DAO buy-back/burn → 800M supply floor; post-cap 20% redirects to stakers (70/30)
 - [x] **Swap tax locked 2026-08-19 (owner decision)** — 3% buy/sell-only AMM tax (1.8% burn / 0.8% stakers / 0.4% treasury), same 200M cap, post-cap 70/30; 0% wallet-to-wallet. Phase 1 contracts to be updated accordingly (contract-level `_update` override + supply-floor check)
@@ -304,6 +307,7 @@ Live off-chain points (per the v0.1 mapping: signals +10, followers +5, referral
 - [ ] **Agent Cards + DID identity layer spec'd (diligence appendix §15.1)** — Phase 2 scope
 - [ ] **FinOps circuit-breaker thresholds modeled (diligence appendix §15.2)** — Phase 2/3 scope
 - [ ] **KYA/AML posture drafted into §10 (diligence appendix §15.3)** — before Phase 2
+- [ ] **Quantum-readiness posture drafted (§16) 2026-08-20** — ML-DSA agent-key migration Phase 2/3; chain-level PQC roadmap question raised with IOST team (t.me/iostdev)
 - [ ] Final version controlled with date + version
 
 ---
@@ -329,6 +333,31 @@ Live off-chain points (per the v0.1 mapping: signals +10, followers +5, referral
 
 ### Deferred to Phase 3 (operational, not token design)
 - **A2A protocol** (Google A2A / ASAP — task-handoff beside AP2's payment mandates) and **semantic firewalls** (prompt-injection defense) — product-layer work for when the agent network exists.
+
+---
+
+## 16. Quantum Readiness (posture & path)
+
+> Added 2026-08-20 (owner-requested diligence item, pre-launch freeze respected). Goal: an honest, defensible post-quantum posture — no overclaims.
+
+### 16.1 The reality (what "quantum-resistant" means for an ERC-20)
+- **A token is not itself quantum-resistant — the chain is.** AITT is an ERC-20 on IOST L2 (EVM); its on-chain security inherits the chain's signature schemes (ECDSA on EVM, Ed25519 on IOST L1) and consensus. "Quantum-resistant token" claims elsewhere are chain-level readiness claims, not token properties.
+- Honest benchmark framing (Aug 2026): no network in the agentic-payments comparison set is end-to-end quantum-secure today; Algorand's Falcon-1024 is a readiness claim on its state-proof path, not live transaction security.
+
+### 16.2 What is already quantum-strong today
+- **Hash-pinned signal records on IOST L1 (SHA-256):** Grover's algorithm halves 256-bit security to ~128-bit — still strong for decades. Tamper-evidence relies on hashes, not signatures. This is the durable-record layer and it is already PQC-robust.
+- No reliance on single-party signatures for audit integrity; the mandate→receipt chain (§4.8) is hash-linked.
+
+### 16.3 What we control — the agent signing layer (the real migration path)
+- **Phase 2 (agent wallet):** agent identity keys migrate to **NIST-standard ML-DSA (FIPS 204)** / SLH-DSA (FIPS 205) for long-lived agent identities and mandate VDCs (SD-JWTs can carry PQC keys — the AP2 layer upgrades without protocol change).
+- **Phase 3 (x402/AP2):** PQC-ready signing in the payment handshake (facilitator verification paths).
+- Platform API keys (today Ed25519/ECDSA) get a documented PQC upgrade path before long-lived credentials are issued at scale.
+
+### 16.4 What is IOST's call (asked, not assumed)
+- IOST L1 signature scheme + PQC roadmap; IOST L2 (EVM) PQC direction. Formal question raised with the IOST team (2026-08-20, t.me/iostdev). AITT's posture updates when the chain's roadmap is confirmed.
+
+### 16.5 Claim we will make (and no more)
+*"Hash-anchored records quantum-strong today; PQC-ready agent signing layer by Phase 3; chain-level PQC roadmap formally requested from IOST."* — that is the honest version of any Falcon-style readiness badge.
 
 ---
 

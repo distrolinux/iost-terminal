@@ -1,11 +1,15 @@
-# AITT Tokenomics — Professional Design Draft (v1.1)
+# AITT Tokenomics — Professional Design Draft (v1.5)
 
-> **Status: DESIGN DRAFT — no token has been created, minted, or sold.**
+> **Status: DESIGN DRAFT — pre-launch. No public sale; utility-only; not an investment (§10).**
 > Supersedes `docs/tokenomics-vision.md` (v0.1) in design intent; that file remains as historical record.
 > This draft incorporates the Hermes review notes: 1B supply, revenue-backed incentives, legal-first sequencing, utility framing.
 > **Go-live gate:** real user base + real fee revenue + legal counsel sign-off (Canada/CSA review). No TGE before that.
 > v1.1 (2026-08-17): burn cap sync with TOKENOMICS.md v1.3 — cumulative burn (fee-burn + DAO buy-back/burn) capped at 200M → 800M supply floor; post-cap the 20% fee share redirects to stakers (70/30 split).
 > v1.2 (2026-08-19): swap tax sync with TOKENOMICS.md v1.4 — 3% buy/sell tax on AMM-pair swaps only (1.8% burn / 0.8% stakers / 0.4% treasury); 0% on wallet-to-wallet, staking, airdrops, platform transfers. Burn share feeds the same 200M cap; post-cap redirects to stakers (70/30). Platform-fee split (50/20/30) unchanged.
+> v1.3 (2026-08-20): Agentic Payments Readiness positioning section added (§15) — verified chain stats + agentic trust rows; H1 version corrected.
+> v1.4 (2026-08-20): status banner reworded to match TOKENOMICS.md v1.5 — "pre-launch"; stays accurate once the token is deployed. Posture unchanged.
+> v1.5 (2026-08-20): Quantum Readiness posture added (§16, condensed from TOKENOMICS §16).
+> v1.6 (2026-08-20): audit checklist item replaced with Phase 2 timing note (mirror of TOKENOMICS v1.7).
 
 ---
 
@@ -285,11 +289,47 @@ Live off-chain points (per the v0.1 mapping: signals +10, followers +5, referral
 - [ ] Supply/allocation modeled on real fee + staking projections (post Phase 1 data)
 - [x] Canadian legal counsel review — CLEARED 2026-08-16 (counsel: "good to go")
 - [x] **Phase 1 contracts BUILT + free tooling audit DONE 2026-08-16** (re-run 2026-08-19 after swap tax: **36/36 tests**, Slither 0 High/Medium, Mythril clean) — `contracts/` (AITT + vesting + converter). Runbook: `docs/PHASE1_SPEC.md`
-- [ ] Mid-tier external audit (≈$3–8k) — required BEFORE Phase 2 moves real value (not yet scheduled; tooling pass is NOT an external audit)
+- Note: independent external audit required BEFORE Phase 2 moves real value — a Phase 2 gate, not a Phase 1 deploy gate (owner decision 2026-08-20; the free tooling pass is not an external audit).
 - [x] **Points→AITT conversion mechanics BUILT 2026-08-16** (rate 1:1 locked · claim endpoint + Points UI with honesty labels "planned, not guaranteed" · gate closed until deploy + TGE gates · reserve = live points-ledger snapshot via `data/aitt-config.json`) — public AITT page `/aitt` + `/whitepaper` live (CMC-ready infra)
 - [x] **Burn cap locked 2026-08-17 (owner decision)** — 200M cumulative cap across fee-burn + DAO buy-back/burn → 800M supply floor; post-cap 20% redirects to stakers (70/30) — synced with TOKENOMICS.md v1.3
+- [x] **Readiness section added 2026-08-20** — §15 Agentic Payments Readiness (verified 2026-08-20 explorer pulls; positioning draft)
 - [ ] Community/DAO charter drafted
 - [ ] Final version controlled with date + version
+
+---
+
+## 15. Agentic Payments Readiness (positioning)
+
+The platform's home chain is not just EVM-compatible — it is live and provable. Chain numbers below were **verified by direct explorer pulls (2026-08-20)**. Competitor figures are as reported in their own published comparison (Chainspect & Token Terminal, 2026-08-20).
+
+| Metric | IOST L2 (AITT's home chain) | Algorand | Base | Polygon | Solana |
+|---|---|---|---|---|---|
+| Architecture | L2 rollup · EVM (chain 182) | L1 | L2 | Sidechain | L1 |
+| Block time | **1.0 s** (verified) | Instant | 13 min | 5 s | 12.8 s |
+| Avg tx fee | **$0.000** — gas price 0.0 (verified) | $0.0002 fixed | $0.015 | $0.01 | $0.003 |
+| Throughput | **345,594 tx/day** (verified) · 8K+ TPS claimed (L1 bench, live bench pending) | 10,000 max (claimed) | 3,600 | 3,800 | 65,000 |
+| Consensus | 17 producers (PoB) | 1,541 validators | 1 sequencer | 105 validators | 690 validators |
+| Uptime | **471,005,961 continuous blocks** since Feb 2019 (verified) | 100% (claimed) | Past downtime | Past downtime | Past downtime |
+| x402 volume | $0 — Phase 3 (the land-grab) | $250K (95% in last 2 wks) | $45M | $850K | $9.3M |
+| PQC | Phase 3 program | Falcon-1024 | — | — | — |
+
+**What the comparison never charts — agentic trust (live in IOST Terminal today):**
+- **Mandates (chain of intent):** AP2-compatible consent / intent / payment tokens, Open & Closed, hash-linked on-chain (§4.8)
+- **Human control:** per-trade approval on live agent trades (Human Present); autopilot within budget (Human Not Present)
+- **Trust & slashing:** stake → Trust Score → spend limits → slashing — KYA with economic teeth (§4.1)
+- **Agent identity:** scoped API keys (read / paper / live) with per-agent spend rails
+- **Track records:** signals hash-pinned on IOST L1 — machine-verifiable audit trails
+- **Working product:** iostcallister.com live — 60s autopilot loop, paper + live lanes, 73/100 agent-native scan
+
+**Stated gaps:** 17 producers (smaller set by PoB design) · PQC Phase 3 · peak TPS live benchmark pending · x402 volume $0 — the land-grab, not a footnote.
+
+*Verified 2026-08-20 via l2-scan.iost.io (Blockscout) · IOSTscan · api.iost.io. Full positioning draft: `docs/AGENTIC-PAYMENTS-READINESS.md`.*
+
+---
+
+## 16. Quantum Readiness (posture & path)
+
+A token is not itself quantum-resistant — the chain is. AITT inherits IOST L2 (EVM) security; its durable records are hash-anchored (SHA-256) on IOST L1, which is already quantum-strong (Grover halves 256-bit → ~128-bit). The layer we control — agent identity and payment signing — migrates to **NIST PQC standards (ML-DSA / FIPS 204)** in Phase 2–3, so the agent wallet, mandate VDCs, and x402 handshake become PQC-ready without protocol change. IOST's own L1/L2 PQC roadmap has been formally requested from the IOST team (2026-08-20). No chain in the current comparison set is end-to-end quantum-secure today — our claim is the honest version: *hash-anchored records quantum-strong now, PQC-ready agent layer by Phase 3.*
 
 ---
 
