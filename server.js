@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getTicker, getKlines, WATCHLIST } from './lib/market.js';
-import { getGlobalMetrics, getTopMovers, getMarketExtras } from './lib/marketdata.js';
+import { getGlobalMetrics, getTopMovers, getMarketExtras, getCmcGlobal } from './lib/marketdata.js';
 import { scanAll, analyzeSymbol } from './lib/scanner.js';
 import { computeScores } from './lib/score.js';
 import { getNews, getAssetSentiment } from './lib/news.js';
@@ -1087,7 +1087,10 @@ app.get('/api/scanner', publicLimiter, async (req, res) => {
 
 // ---- market-wide data (keyless: CoinGecko + Fear & Greed) ----
 app.get('/api/market/global', publicLimiter, async (req, res) => {
-  try { res.json({ ok: true, ...(await getGlobalMetrics()) }); }
+  try {
+    const [base, cmc] = await Promise.all([getGlobalMetrics(), getCmcGlobal()]);
+    res.json({ ok: true, ...base, cmc });
+  }
   catch (e) { res.status(502).json({ error: e.message }); }
 });
 
