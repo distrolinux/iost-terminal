@@ -10,8 +10,8 @@ const ok = (name, cond, extra = '') => {
   if (!cond) failures++;
 };
 
-const KEY='YOUR_K..._KEY';
-const SECRET='YOUR_K...CRET';
+const KEY = 'YOUR_KRAKEN_API_KEY';
+const SECRET = 'YOUR_KRAKEN_API_SECRET';
 
 // encryption round-trip on a scratch user
 const user = { id: 'scratch-user', email: 'u@x.com' };
