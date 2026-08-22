@@ -10,8 +10,8 @@ const ok = (name, cond, extra = '') => {
   if (!cond) failures++;
 };
 
-const KEY = 'nFGxWboVMe0EXvgkqXx7sp4R0lQk1VxC4ThqhTeNASMJDob4f4LYoEje';
-const SECRET = 'kL3c6lvVYsqDPWlqhGIuCoRtYwji2+lnidDD4rQoFvE3Ap9Rk2SKQJLUSrFXVhk9UIOpcvEnCyxAs1h8+NfwjQ==';
+const KEY='YOUR_K..._KEY';
+const SECRET='YOUR_K...CRET';
 
 // encryption round-trip on a scratch user
 const user = { id: 'scratch-user', email: 'u@x.com' };
