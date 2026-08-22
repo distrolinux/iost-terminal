@@ -842,6 +842,9 @@ async function renderScanner(fromTick = false) {
   const fg = global.fearGreed;
   const fgCls = fg == null ? 'neut' : fg <= 25 ? 'down' : fg <= 45 ? 'warn' : fg <= 55 ? 'warn' : fg <= 75 ? 'up' : 'up';
   const fgLabel = global.fearGreedLabel || '—';
+  const cmc = global.cmc && global.cmc.enabled ? global.cmc : null;
+  const domBtc = cmc ? cmc.btcDominance : global.btcDominance;
+  const domEth = cmc ? cmc.ethDominance : null;
   const moverRow = (m) => `<tr class="clickable" data-sym="${esc(m.symbol)}"><td><strong>${esc(m.symbol)}</strong></td><td class="mono">$${fmtNum(m.price)}</td><td class="mono ${m.change24hPct >= 0 ? 'up' : 'down'}">${pct(m.change24hPct)}</td></tr>`;
   const priceCls = (sym, price) => {
     const p = prevPrices[sym];
@@ -868,7 +871,7 @@ async function renderScanner(fromTick = false) {
     <div class="section-title">AI Market Scanner <span class="sub">real-time · unusual volume · breakouts · RSI/MACD · S/R · MA crosses · volatility · whale activity</span></div>
     <div class="stat-cards">
       <div class="card kpi"><span class="k-label">Total market cap</span><span class="k-value">${fmtCap(global.totalMcapUsd)}</span><span class="k-sub">${global.activeCoins != null ? global.activeCoins.toLocaleString() + ' coins' : ''} · ${global.markets != null ? global.markets + ' markets' : ''}</span></div>
-      <div class="card kpi"><span class="k-label">BTC dominance</span><span class="k-value">${global.btcDominance != null ? global.btcDominance.toFixed(1) + '%' : '—'}</span><span class="k-sub">share of total market cap</span></div>
+      <div class="card kpi"><span class="k-label">BTC dominance</span><span class="k-value">${domBtc != null ? domBtc.toFixed(1) + '%' : '—'}</span><span class="k-sub">${domEth != null ? 'ETH ' + domEth.toFixed(1) + '%' : 'share of total market cap'}${cmc ? ' · CMC' : ''}</span></div>
       <div class="card kpi"><span class="k-label">24h volume</span><span class="k-value">${fmtCap(global.volume24hUsd)}</span><span class="k-sub">across all markets</span></div>
       <div class="card kpi"><span class="k-label">Fear & Greed</span><span class="k-value ${fgCls}">${fg != null ? fg : '—'}</span><span class="k-sub">${esc(fgLabel)} · alternative.me</span></div>
     </div>
