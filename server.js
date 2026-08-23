@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getTicker, getKlines, WATCHLIST } from './lib/market.js';
 import { getGlobalMetrics, getTopMovers, getMarketExtras, getCmcGlobal } from './lib/marketdata.js';
+import { applyGarchSizing, getGarchState, garchConfig } from './lib/garch.js';
 import { scanAll, analyzeSymbol } from './lib/scanner.js';
 import { computeScores } from './lib/score.js';
 import { getNews, getAssetSentiment } from './lib/news.js';
@@ -1086,6 +1087,15 @@ app.get('/api/scanner', publicLimiter, async (req, res) => {
 });
 
 // ---- market-wide data (keyless: CoinGecko + Fear & Greed) ----
+// GARCH vol state for a symbol — public read-only sizing info (how much).
+app.get('/api/risk/garch', publicLimiter, async (req, res) => {
+  const symbol = String(req.query.symbol || 'BTC').toUpperCase().slice(0, 12);
+  try {
+    const st = await getGarchState(symbol);
+    res.json({ ok: true, config: garchConfig, ...st });
+  }
+  catch (e) { res.status(502).json({ error: e.message }); }
+});
 app.get('/api/market/global', publicLimiter, async (req, res) => {
   try {
     const [base, cmc] = await Promise.all([getGlobalMetrics(), getCmcGlobal()]);
@@ -1827,12 +1837,16 @@ async function executeLiveOrder(req, { symbol, side = 'long', size, entry }) {
     return a + (last - p.entry) * p.size * (p.side === 'short' ? -1 : 1);
   }, 0);
   const todayPnlUsd = realizedLive + unrealizedLive;
-  const rail = checkLiveOrder({ symbol, side, size, entry, marketPrice: quotes[symbol]?.last, openPositions, cashUsd: acct.account.cashUsd ?? 0, todayPnlUsd });
+  // GARCH vol sizing (opt-in via GARCH_ENABLED=1): how much, not which way.
+  // Applied at the single execution choke point; fail-soft → multiplier 1.
+  const gs = await applyGarchSizing(symbol, size);
+  const effSize = gs.size;
+  const rail = checkLiveOrder({ symbol, side, size: effSize, entry, marketPrice: quotes[symbol]?.last, openPositions, cashUsd: acct.account.cashUsd ?? 0, todayPnlUsd });
   if (!rail.ok) return { status: 400, error: `risk rail: ${rail.error}` };
   const fee = canTrade(st);
   if (!fee.ok) return { status: 400, error: fee.error };
 
-  const r = await kraken.placeOrder({ symbol, side, size, entry });
+  const r = await kraken.placeOrder({ symbol, side, size: effSize, entry });
   if (!r.ok) return { status: 502, error: `venue: ${r.error}` };
   // journal the live fill (live:true) — previously live fills never reached
   // the journal, so the daily-loss rail and account views saw nothing
@@ -1841,18 +1855,18 @@ async function executeLiveOrder(req, { symbol, side = 'long', size, entry }) {
   if (fillPrice) {
     st.journal.push({
       id: r.order.venueOrderId || `live_${Date.now()}`,
-      symbol, side, entry: fillPrice, size, reason: 'live (venue fill)',
+      symbol, side, entry: fillPrice, size: effSize, reason: 'live (venue fill)',
       status: 'open', openedAt: Date.now(), closedAt: null, exitPrice: null,
       pnl: 0, pnlPct: null, result: null, live: true, venue: 'kraken',
     });
   }
   // fee: burn credits on the executed notional (entry price or last quote)
-  let notional = entry && entry > 0 ? size * entry : 0;
-  if (!notional && lastQuote) notional = size * lastQuote;
+  let notional = entry && entry > 0 ? effSize * entry : 0;
+  if (!notional && lastQuote) notional = effSize * lastQuote;
   const burn = burnCredits(st, notional);
   persistAccounts();
-  logLiveEvent(st.accountId, 'live.order', { symbol, side, size, entry: entry || null, venueOrderId: r.order.venueOrderId, burn: burn.ok ? burn.burn : 0 });
-  return { status: 200, ok: true, order: { venue: 'kraken', venueOrderId: r.order.venueOrderId, symbol, side, size, entry: entry || null }, fee: burn.ok ? { burn: burn.burn, credits: burn.credits } : { error: burn.error } };
+  logLiveEvent(st.accountId, 'live.order', { symbol, side, size: effSize, requestedSize: Number(size), entry: entry || null, garchMult: gs.multiplier, garchRegime: gs.regime, stormCapped: gs.stormCapped || false, venueOrderId: r.order.venueOrderId, burn: burn.ok ? burn.burn : 0 });
+  return { status: 200, ok: true, order: { venue: 'kraken', venueOrderId: r.order.venueOrderId, symbol, side, size: effSize, entry: entry || null, garch: { multiplier: gs.multiplier, regime: gs.regime, requestedSize: Number(size) } }, fee: burn.ok ? { burn: burn.burn, credits: burn.credits } : { error: burn.error } };
 }
 
 app.post('/api/trade/live', requireUser, async (req, res) => {
@@ -2222,6 +2236,7 @@ const API_INDEX = {
     { path: '/api/assistant', method: 'POST', body: '{question}', purpose: 'natural-language market Q&A synthesized from live data' },
   ],
   risk: [
+    { path: '/api/risk/garch', method: 'GET', body: '?symbol=BTC', purpose: 'GARCH forecast vol + regime + size multiplier (how much, never which way)' },
     { path: '/api/risk', method: 'POST', body: '{accountSize,maxRiskPct,entryPrice,stopLoss,targetPrice,side}', purpose: 'position size, $ risk, R:R, potential P/L, exposure' },
     { path: '/api/portfolio', method: 'GET', purpose: 'whole-portfolio AI analysis' },
   ],
@@ -2257,7 +2272,7 @@ const API_INDEX = {
     { path: '/api/aitt/info', method: 'GET', purpose: 'public AITT token info: identity, supply, chain, contract/converter addresses, conversion gate state, honesty notice' },
     { path: '/aitt', method: 'GET', purpose: 'public AITT token page (SSR — CMC-ready, no JS required)' },
     { path: '/token', method: 'GET', purpose: 'alias of /aitt' },
-    { path: '/whitepaper', method: 'GET', purpose: 'AITT whitepaper v1.0 (markdown — identical to docs/TOKENOMICS.md)' },
+    { path: '/whitepaper', method: 'GET', purpose: 'AITT whitepaper v1.5 (markdown — served from docs/AITT-Whitepaper-v1.0.md)' },
   ],
   agentWallet: [
     { path: '/api/wallets', method: 'GET', purpose: 'my wallet tree: parent (user) wallet + agent child wallets with balances, limits, capabilities, status' },
