@@ -47,7 +47,7 @@
 - [/app](/app) — AI command center: scanner, scores, risk, portfolio, on-chain, news, assistant, journal
 - [/hub](/hub) — 3D automation hub (8 strategy bots)
 - [/aitt](/aitt) and [/token](/token) — AITT token page (SSR, no JS required)
-- [/whitepaper](/whitepaper) — AITT whitepaper v1.7 (markdown)
+- [/whitepaper](/whitepaper) — AITT tokenomics draft v1.8 (pre-launch review hold, markdown)
 
 ## Data model
 
@@ -125,7 +125,7 @@
 - `POST /api/points/referral-code` — create my referral code (+50 referrer / +10 referee)
 - `POST /api/points/feedback {signalId,rating(1-5),comment?}` — rate a signal's quality
 - `GET /api/points/bounty/status` — weekly top-trader bounty state
-- `POST /api/points/claim` — points→AITT conversion attempt (1:1 planned at TGE; gate closed until deploy — answers honestly, writes nothing)
+- `POST /api/points/claim` — points→AITT conversion attempt (1:1 design target; pre-launch review hold — answers honestly and writes nothing while closed)
 - `GET /api/aitt/info` — public AITT token info (identity, supply, chain, contract/converter addresses, gate state, honesty notice)
 
 ### Agent wallet engine (Phase 2, off-chain)

@@ -517,18 +517,18 @@ async function renderPoints() {
     </tr>`;
   }).join('') || '<tr><td colspan="4" class="dim">No activity yet — earn points by publishing signals, gaining followers, referrals and quality feedback.</td></tr>';
   el.innerHTML = `
-    <div class="section-title">Platform Points <span class="sub">off-chain accrual · 1:1 AITT conversion planned at TGE · not a token — nothing issued yet</span></div>
+    <div class="section-title">Platform Points <span class="sub">off-chain accrual · 1:1 AITT conversion design target · pre-launch hold · nothing issued</span></div>
     <div class="stat-cards">
-      <div class="card kpi"><span class="k-label">Points balance</span><span class="k-value">${d.balance}</span><span class="k-sub">1 point → 1 AITT at TGE (planned, not guaranteed) · not spendable</span></div>
+      <div class="card kpi"><span class="k-label">Points balance</span><span class="k-value">${d.balance}</span><span class="k-sub">1 point → 1 AITT design target (planned, not guaranteed) · not spendable</span></div>
     </div>
     <div class="card" style="margin-bottom:16px">
-      <div class="section-title" style="margin-bottom:8px">AITT conversion <span class="sub">1 point → 1 AITT at TGE · planned, not guaranteed · no token issued yet</span></div>
+      <div class="section-title" style="margin-bottom:8px">AITT conversion <span class="sub">1 point → 1 AITT design target · pre-launch hold · no token issued</span></div>
       <div class="aitt-conv">
-        <div class="conv-cell"><span class="k-label">Convertible at TGE</span><span class="k-value">≈ ${d.balance} AITT</span></div>
+        <div class="conv-cell"><span class="k-label">Design target</span><span class="k-value">≈ ${d.balance} AITT</span></div>
         <div class="conv-cell"><span class="k-label">Status</span><span class="chip ${d.conversion?.open ? 'ok' : 'neut'}">${esc((d.conversion?.status || 'planned at TGE — not open yet'))}</span></div>
-        <button class="btn sm" id="claimBtn" ${d.conversion?.open ? '' : 'disabled'} aria-label="Claim AITT for your points" title="${d.conversion?.open ? '' : 'Conversion opens at TGE — planned, not guaranteed'}">Claim AITT</button>
+        <button class="btn sm" id="claimBtn" ${d.conversion?.open ? '' : 'disabled'} aria-label="Claim AITT for your points" title="${d.conversion?.open ? '' : 'Conversion is under pre-launch review — planned, not guaranteed'}">Claim AITT</button>
       </div>
-      <p class="muted" style="font-size:11px;margin-top:8px">Conversion is an earn-event, not a purchase. The gate opens at TGE — after deployment, converter reserve funding and adoption gates pass. Honest label: <strong>planned, not guaranteed</strong>.</p>
+      <p class="muted" style="font-size:11px;margin-top:8px">Conversion remains closed pending deployment, reserve, verified EVM-wallet binding, atomic on-chain reconciliation, corrected release gates, legal review, and owner sign-off. <strong>Planned, not guaranteed.</strong></p>
     </div>
     <div class="card" style="margin-bottom:16px">
       <div class="section-title" style="margin-bottom:8px">Referral program <span class="sub">share your code — you earn +50, the new trader earns +10 · self-referral blocked</span></div>
@@ -581,22 +581,22 @@ async function renderAITT() {
     ['Advisors', 5, '50M', '12-mo cliff + 24-mo linear'],
   ];
   el.innerHTML = `
-    <div class="section-title">AITT — Agent Intelligence Trading Token <span class="sub">${esc(d.status === 'deployed' ? 'deployed on IOST L2 · contract verified below' : 'design draft · no token created, minted or sold')}</span></div>
+    <div class="section-title">AITT — Agent Intelligence Trading Token <span class="sub">${esc(d.status === 'deployed' ? 'deployed on IOST L2 · contract verified below' : 'pre-launch review hold · no token created, minted or sold')}</span></div>
     <div class="stat-cards">
       <div class="card kpi"><span class="k-label">Total supply</span><span class="k-value">${esc(t.totalSupply || '1,000,000,000')}</span><span class="k-sub">fixed · no minting</span></div>
-      <div class="card kpi"><span class="k-label">Standard</span><span class="k-value">ERC-20</span><span class="k-sub">vanilla OpenZeppelin</span></div>
+      <div class="card kpi"><span class="k-label">Standard</span><span class="k-value">ERC-20</span><span class="k-sub">OpenZeppelin-based · custom AMM tax</span></div>
       <div class="card kpi"><span class="k-label">Decimals</span><span class="k-value">${t.decimals ?? 8}</span><span class="k-sub">home chain ${esc(t.chain || 'IOST L2')}</span></div>
-      <div class="card kpi"><span class="k-label">Contract</span><span class="k-value">${d.contractAddress ? '<a href="' + esc(d.explorerUrl || '') + '/address/' + esc(d.contractAddress) + '" target="_blank" rel="noopener">' + esc(d.contractAddress.slice(0, 8)) + '…' + esc(d.contractAddress.slice(-6)) + '</a>' : 'pending deploy'}</span><span class="k-sub">free tooling audit passed 2026-08-16</span></div>
+      <div class="card kpi"><span class="k-label">Contract</span><span class="k-value">${d.contractAddress ? '<a href="' + esc(d.explorerUrl || '') + '/address/' + esc(d.contractAddress) + '" target="_blank" rel="noopener">' + esc(d.contractAddress.slice(0, 8)) + '…' + esc(d.contractAddress.slice(-6)) + '</a>' : 'pending deploy'}</span><span class="k-sub">40/40 tests · tooling-reviewed · external audit pending</span></div>
     </div>
     <div class="card" style="margin-bottom:16px">
-      <div class="section-title" style="margin-bottom:8px">Allocation <span class="sub">1,000,000,000 AITT · fixed at deployment · earned, never sold</span></div>
+      <div class="section-title" style="margin-bottom:8px">Allocation <span class="sub">1B fixed-supply design · team/advisor vesting implemented · other release controls pending</span></div>
       ${ALLOC.map(([name, pct, amt, vest]) => `<div class="alloc-row"><span class="alloc-name">${name}</span><span class="alloc-bar"><i style="width:${pct}%"></i></span><span class="alloc-pct mono">${amt} · ${pct}%</span><span class="alloc-vest">${vest}</span></div>`).join('')}
     </div>
     <div class="card" style="margin-bottom:16px">
-      <div class="section-title" style="margin-bottom:8px">Utility <span class="sub">use-rights within the platform — no dividend rights, no implied investment return</span></div>
+      <div class="section-title" style="margin-bottom:8px">Utility <span class="sub">proposed mechanics · revenue-sharing and transferability under legal/engineering review</span></div>
       <div class="util-grid">
         <div class="util"><span class="chip ok">Trust staking</span><p>Agents stake AITT → Trust Score → spend limits. Slashing for unauthorized spend — KYA with teeth.</p></div>
-        <div class="util"><span class="chip ok">Fee utility</span><p>50% discount on platform fees paid in AITT · split 50% stakers / 20% burn / 30% treasury.</p></div>
+        <div class="util"><span class="chip neut">Fee utility</span><p>Design target: 50% discount · 50/20/30 split. Not active; global burn accounting and legal posture remain under review.</p></div>
         <div class="util"><span class="chip ok">Governance</span><p>1 staked AITT = 1 vote · spend limits, slashing rules, fee schedule, treasury allocations.</p></div>
         <div class="util"><span class="chip ok">Agentic payments</span><p>AP2 consent/intent/payment mandates + x402 rails on IOST — Phase 3.</p></div>
       </div>

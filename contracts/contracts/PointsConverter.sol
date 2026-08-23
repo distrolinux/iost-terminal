@@ -25,7 +25,9 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 contract PointsConverter is Ownable, Pausable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
-    /// @notice 1:1 conversion is expressed as 1 point = 1 wei of 8-decimal AITT.
+    /// @notice Locked 1:1 rule: 1 whole point = 1 whole AITT. Amounts passed to
+    ///         this contract are ERC-20 base units, so the operator must submit
+    ///         `points * 10**8` for this 8-decimal token.
     IERC20 public immutable token;
     address public operator;
 

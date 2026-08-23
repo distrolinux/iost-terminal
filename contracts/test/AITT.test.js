@@ -96,7 +96,7 @@ describe("AITT swap tax (TOKENOMICS.md v1.4)", function () {
     expect(await aitt.ammPair()).to.equal(pair.address);
   });
 
-  it("buy (user→pair): pair receives 97%, burn 1.8%, stakers 0.8%, treasury 0.4%", async function () {
+  it("sell (user→pair): pair receives 97%, burn 1.8%, stakers 0.8%, treasury 0.4%", async function () {
     await aitt.setAmmPair(pair.address);
     const V = 1_000_000_000n; // 10 AITT
     const burn = (V * BURN_BPS) / BPS;
@@ -111,10 +111,10 @@ describe("AITT swap tax (TOKENOMICS.md v1.4)", function () {
     expect(await aitt.totalSupply()).to.equal(SUPPLY - burn); // supply decreased by the burn
   });
 
-  it("sell (pair→user): user receives 97% of the pair's transfer", async function () {
+  it("buy (pair→user): user receives 97% of the pair's transfer", async function () {
     await aitt.setAmmPair(pair.address);
     const V = 1_000_000_000n;
-    await aitt.transfer(pair.address, V); // fund the pair (buy, taxed)
+    await aitt.transfer(pair.address, V); // fund the pair (sell/LP-add direction, taxed)
     const pairBalance = await aitt.balanceOf(pair.address);
 
     const sellValue = 500_000_000n;

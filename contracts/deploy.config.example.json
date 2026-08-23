@@ -1,6 +1,6 @@
 {
   "network": "iostL2",
-  "comment": "Fill every 0x... address before deploying. Addresses are public — never put private keys here. Amounts are in base units (8 decimals): 100000000000000000 = 1 AITT.",
+  "comment": "Fill every 0x... address before deploying. Addresses are public — never put private keys here. Amounts are in base units (8 decimals): 100000000 = 1 AITT.",
   "allocations": {
     "ecosystemPool": "0x0000000000000000000000000000000000000000",
     "treasury": "0x0000000000000000000000000000000000000000",

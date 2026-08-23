@@ -18,6 +18,7 @@ const DAY = 24n * 60n * 60n;
 const YEAR = 365n * DAY;
 const TOKEN = 10n ** 8n; // 1 AITT
 const B = (n) => BigInt(n) * TOKEN;
+const ZERO_ADDRESS = ethers.ZeroAddress;
 
 function loadConfig() {
   const p = path.join(__dirname, "..", "deploy.config.json");
@@ -25,14 +26,30 @@ function loadConfig() {
     throw new Error("deploy.config.json not found — copy deploy.config.example.json and fill it in");
   }
   const cfg = JSON.parse(fs.readFileSync(p, "utf8"));
-  const zero = ethers.ZeroAddress;
+  const requiredAllocations = [
+    "ecosystemPool", "treasury", "teamBeneficiary", "partners",
+    "community", "reserve", "advisorBeneficiary",
+  ];
+  if (!cfg.allocations || typeof cfg.allocations !== "object") {
+    throw new Error("deploy.config.json: allocations object is required");
+  }
+  for (const key of requiredAllocations) {
+    if (!Object.prototype.hasOwnProperty.call(cfg.allocations, key)) {
+      throw new Error(`deploy.config.json: allocations.${key} is required`);
+    }
+  }
+  const requireAddress = (label, value, { allowZero = false } = {}) => {
+    if (!value || !ethers.isAddress(value)) throw new Error(`deploy.config.json: ${label} is not a valid address`);
+    const normalized = ethers.getAddress(value);
+    if (!allowZero && normalized === ZERO_ADDRESS) throw new Error(`deploy.config.json: ${label} is not set`);
+    return normalized;
+  };
   for (const [k, v] of Object.entries(cfg.allocations)) {
-    if (!v || v === zero) throw new Error(`deploy.config.json: allocations.${k} is not set`);
+    cfg.allocations[k] = requireAddress(`allocations.${k}`, v);
   }
-  if (!cfg.operator || cfg.operator === zero) throw new Error("deploy.config.json: operator is not set");
-  if (!cfg.stakersPool || cfg.stakersPool === zero) {
-    throw new Error("deploy.config.json: stakersPool is not set (swap-tax staker share recipient)");
-  }
+  cfg.operator = requireAddress("operator", cfg.operator);
+  cfg.stakersPool = requireAddress("stakersPool", cfg.stakersPool);
+  if (cfg.ammPair) cfg.ammPair = requireAddress("ammPair", cfg.ammPair, { allowZero: true });
   return cfg;
 }
 
@@ -44,6 +61,10 @@ async function main() {
   console.log(`deployer: ${deployer.address}\n`);
 
   const totalReserve = BigInt(cfg.pointsConversionReserve || "0");
+  const ecosystemAllocation = B(300_000_000);
+  if (totalReserve < 0n || totalReserve > ecosystemAllocation) {
+    throw new Error("deploy.config.json: pointsConversionReserve exceeds 300M ecosystem pool");
+  }
 
   // 1. Token (swap tax per TOKENOMICS.md v1.4: 3% buy/sell only —
   //    1.8% burn / 0.8% stakers / 0.4% treasury)
@@ -56,7 +77,7 @@ async function main() {
   // 1b. Lock the taxed AMM pair — only possible after the DEX pair exists
   //     (createPair), so this is a manual one-time step. Optional in config;
   //     can also be run later: npx hardhat run scripts/setAmmPair.js --network iostL2
-  if (cfg.ammPair && cfg.ammPair !== zero) {
+  if (cfg.ammPair && cfg.ammPair !== ZERO_ADDRESS) {
     await (await aitt.setAmmPair(cfg.ammPair)).wait();
     console.log(`  -> AMM pair locked: ${cfg.ammPair}`);
   } else {

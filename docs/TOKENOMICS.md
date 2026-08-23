@@ -1,4 +1,4 @@
-# AITT Tokenomics — Professional Design Draft (v1.7)
+# AITT Tokenomics — Professional Design Draft (v1.8)
 
 > **Status: DESIGN DRAFT — pre-launch. No public sale; utility-only; not an investment (§10).**
 > Supersedes `docs/tokenomics-vision.md` (v0.1) in design intent; that file remains as historical record.
@@ -11,6 +11,7 @@
 > v1.5 (2026-08-20): **status banner reworded (owner decision, token creation imminent)** — "pre-launch" wording stays accurate after deployment; posture unchanged (no public sale, utility-only, not an investment).
 > v1.6 (2026-08-20): **quantum-readiness posture added (§16)** — hash-anchored records quantum-strong today; PQC-ready agent signing (ML-DSA) Phase 2/3; chain-level PQC question raised with the IOST team.
 > v1.7 (2026-08-20): **audit checklist item replaced with Phase 2 timing note (owner decision)** — external audit remains a Phase 2 gate (before real value moves), removed as a Phase 1 checklist item.
+> v1.8 (2026-08-23): **pre-launch consistency review hold** — no locked economics changed; deployment/conversion remain frozen pending remediation of global burn accounting, allocation custody, conversion plumbing, phase gates, bridge/tax portability, and legal wording. Review: `docs/AITT_REVIEW_2026-08-23.md`.
 
 ---
 
@@ -41,8 +42,8 @@ AITT powers the platform's **agentic payments economy**: it is the trust, fee, a
 | Home chain | IOST L2 (network ID 182, `l2-mainnet.iost.io`); L1 node as facilitator · BSC bridge for liquidity in Phase 4 |
 | Contract | OpenZeppelin-standard ERC-20 on IOST L2 (subject to final audit) |
 | Inflation | None — rewards drawn from allocation pools + real revenue |
-| Deflation | Burn sources share one **200M cumulative cap (800M supply floor)**: (1) 20% of all AITT-denominated platform fees, (2) 1.8% of AITT buy/sell swap volume (3% swap tax, Phase 4 DEX), (3) DAO-voted buy-back/burn from treasury. Post-cap, all burn shares redirect to stakers (70/30) |
-| Initial circulating | ≈10% at TGE (earned points conversion + ecosystem seed); remainder vesting/locked |
+| Deflation | **Locked design target:** one 200M cumulative cap across platform, swap, and DAO burns. Current contract enforces only an 800M `totalSupply()` floor for swap burns; global accounting is deployment-blocking review work. |
+| Initial circulating | Target ≈10% at TGE. Only team/advisor vesting is currently contractual; broader custody/release controls remain pending. |
 
 **Design rationale for 1B:** supply is modeled from platform economics (fee volume, staking demand, reward budget), not round-number marketing. 21B (v0.1) was rejected as retail-bait.
 
@@ -84,10 +85,10 @@ Agents and agent-operators stake AITT as **collateral** to obtain a **Trust Scor
 ### 4.2 Fee Utility
 - Platform and agent-network fees paid in AITT receive a **50% discount** vs fiat-denominated fees
 - Fee split: **50% stakers / 20% burn / 30% treasury** until the burn cap (below) is reached; thereafter **70% stakers / 30% treasury**
-- **Swap tax (Phase 4, DEX):** 3% on AMM-pair buy/sell only — 1.8% burn / 0.8% stakers / 0.4% treasury. 0% on wallet-to-wallet, staking, airdrops, and platform transfers. Implemented in the token contract via an `_update` override gated on the AMM pair address (pair set at construction or one-time, preserving the zero-privileged-functions stance); buy = user→pair, sell = pair→user
+- **Swap tax (Phase 4, DEX):** 3% on AMM-pair buy/sell only — 1.8% burn / 0.8% stakers / 0.4% treasury. 0% on wallet-to-wallet, staking, airdrops, and platform transfers. Implemented in the token contract via an `_update` override gated on the AMM pair address (pair set at construction or one-time, preserving the zero-privileged-functions stance); sell = user→pair, buy = pair→user
 - AITT-denominated fees create ongoing demand + deflation
-- **Burn mechanism:** two paths, neither granting admin "burn power": (1) **Platform-fee burn** at the settlement layer — 20% of every AITT-denominated fee is sent to the canonical null address (`0x0000…dEaD`), permanently destroyed (effect identical to a contract burn, no privileged function); (2) **Swap-tax burn** — the 3% buy/sell tax (v1.4) is burned inside the token contract by immutable protocol logic in `_update` (hardcoded split; no key can change it). DAO-voted buy-back/burn from treasury (§5) uses mechanism (1).
-- **Burn cap — 200M cumulative / 800M supply floor (locked 2026-08-17; swap tax added 2026-08-19):** cumulative destruction across ALL burn sources (20% platform-fee burn + 1.8% swap-tax burn + DAO buy-back/burn) is capped at **200M AITT** = 20% of total supply, so total supply never falls below **800M** — agents always retain a working token supply. On-chain enforcement for contract burns (swap tax) = direct supply-floor check (`totalSupply() − amount ≥ 800M`); null-address burns (platform fees) are enforced at the settlement layer, where the null-address balance IS the running counter. Once 200M is reached: (1) every burn share redirects to stakers (70/30); (2) DAO buy-back/burn stops destroying — further buy-backs are held or redistributed. Platform-fee burn alone would need ~1B in cumulative AITT fees; the swap tax accelerates deflation (≈11.1B cumulative swap volume to the cap at 1.8%) — the floor remains insurance, not a constraint.
+- **Burn mechanism design:** swap-tax burns use immutable `_burn` logic. Platform-fee and DAO dead-address burns are proposed but **not yet coordinated with the contract burn counter**.
+- **Burn-cap review hold:** the current contract protects an 800M `totalSupply()` floor only for swap burns. Dead-address balances do not reduce `totalSupply()`, so the promised global 200M cap is not yet enforceable. Deployment remains blocked until one authoritative counter/mechanism covers every burn path; post-cap 70/30 redirection remains the locked target.
 - **Fair ordering (no MEV):** as facilitator/sequencer-adjacent operator, the platform never exploits private order flow; any MEV-like surplus from transaction ordering accrues to burn. Fair ordering is part of the trust contract — slashing-enforced (IOST 3.0's MEV-redistribution principle, adapted).
 
 ### 4.3 Rewards
@@ -212,6 +213,8 @@ Live off-chain points (per the v0.1 mapping: signals +10, followers +5, referral
 
 **Hard rule:** if reward emissions would exceed available revenue + pool balance in a period, emissions scale down — the platform **never mints** to pay yield.
 
+**Review hold:** the percentage example above exceeds 100% over 48 months and is not deployable. Replace it with an exact 100%-sum monthly schedule before building the emission vault.
+
 ---
 
 ## 8. Staking & Trust Mechanics (parameters — to be modeled on live data)
@@ -249,6 +252,7 @@ Live off-chain points (per the v0.1 mapping: signals +10, followers +5, referral
 - **Geo-restrictions:** platform already blocks restricted jurisdictions; token features inherit the same allowlists.
 - **Public communication:** all docs and UI must state AITT has no guaranteed value, is not an investment, and is not listed/transferable until a compliant path exists.
 - **Before TGE:** contract audit + final numbers modeled on ≥3 months of real fee data. *(Legal opinion ✓ cleared 2026-08-16; ticker ✓ AITT verified 2026-08-16.)*
+- **2026-08-23 hold:** staker fee-revenue/APY and external transferability require refreshed counsel review because they conflict with the current “holders earn nothing/no implied return” wording. These mechanics are not active.
 
 ---
 
@@ -298,11 +302,11 @@ Live off-chain points (per the v0.1 mapping: signals +10, followers +5, referral
 - [x] Name trademark-checked — 2026-08-16: "AIgent" dropped (registered USPTO by Ubiquity Global Services, enforced); renamed "Agent Intelligence Trading Token"
 - [ ] Supply/allocation modeled on real fee + staking projections (post Phase 1 data)
 - [x] Canadian legal counsel review — CLEARED 2026-08-16 (counsel: "good to go")
-- [x] **Phase 1 contracts BUILT + free tooling audit DONE 2026-08-16** (re-run 2026-08-19 after swap tax: **36/36 tests**, Slither 0 High/Medium, Mythril clean) — `contracts/` (AITT + vesting + converter). Runbook: `docs/PHASE1_SPEC.md`
+- [x] **Phase 1 contracts BUILT + tooling pass run** (2026-08-23: **40/40 tests**, Slither 0 High/Medium; Mythril AITT clean, expected vesting notices, generic converter funding warning constrained by immutable AITT). This is not an external audit. Runbook: `docs/PHASE1_SPEC.md`.
 - Note: independent external audit required BEFORE Phase 2 moves real value — a Phase 2 gate, not a Phase 1 deploy gate (owner decision 2026-08-20; the free tooling pass is not an external audit).
-- [x] **Points→AITT conversion mechanics BUILT 2026-08-16** (rate 1:1 locked · claim endpoint + Points UI with honesty labels "planned, not guaranteed" · gate closed until deploy + TGE gates · reserve = live points-ledger snapshot via `data/aitt-config.json`) — public AITT page `/aitt` + `/whitepaper` live (CMC-ready infra)
+- [ ] **Points→AITT end-to-end conversion pending.** UI/gate shell and reserve-funded converter exist, but verified EVM-address binding, `points × 10**8` snapshot submission, on-chain transaction reconciliation, point debit/freeze, and idempotent retry handling are not built. Gate remains closed.
 - [x] **Burn cap locked 2026-08-17 (owner decision)** — 200M cumulative cap across fee-burn + DAO buy-back/burn → 800M supply floor; post-cap 20% redirects to stakers (70/30)
-- [x] **Swap tax locked 2026-08-19 (owner decision)** — 3% buy/sell-only AMM tax (1.8% burn / 0.8% stakers / 0.4% treasury), same 200M cap, post-cap 70/30; 0% wallet-to-wallet. Phase 1 contracts to be updated accordingly (contract-level `_update` override + supply-floor check)
+- [x] **Swap tax contract implementation built 2026-08-19** — 3% buy/sell-only AMM tax (1.8% contract burn / 0.8% stakers recipient / 0.4% treasury), contract-level 800M `totalSupply()` floor, post-cap 70/30 redirect; 0% wallet-to-wallet. **Global cap across contract burns + dead-address fee/DAO burns remains unresolved** (§14 review hold).
 - [ ] Community/DAO charter drafted
 - [ ] **Agent Cards + DID identity layer spec'd (diligence appendix §15.1)** — Phase 2 scope
 - [ ] **FinOps circuit-breaker thresholds modeled (diligence appendix §15.2)** — Phase 2/3 scope

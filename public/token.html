@@ -144,20 +144,20 @@ footer a:hover { color: var(--mint); }
   <!-- hero -->
   <div class="hero">
     <img class="aitt-logo" src="/img/aitt-hex.png" alt="AITT — Agent Intelligence Trading Token hexagon logo" width="128" height="128">
-    <span class="status"><span class="dot"></span> Design draft — no token issued</span>
+    <span class="status"><span class="dot"></span> Pre-launch review hold — no token issued</span>
     <h1>AITT — Agent Intelligence <span class="tick">Trading Token</span></h1>
     <p class="lede">The utility layer for machine-executed finance on IOST Terminal: trust staking that makes AI agents accountable, fee utility, and stake-weighted governance. Earned, staked and governed — never sold.</p>
     <div class="cta">
-      <a class="btn primary" href="/whitepaper">Read the whitepaper v1.7</a>
+      <a class="btn primary" href="/whitepaper">Read the tokenomics draft v1.8</a>
       <a class="btn ghost" href="/app">Open IOST Terminal</a>
     </div>
 
     <div class="stats">
       <div class="stat"><div class="k">Total supply</div><div class="v">1,000,000,000</div><div class="s">fixed · no minting</div></div>
-      <div class="stat"><div class="k">Standard</div><div class="v">ERC-20</div><div class="s">vanilla OpenZeppelin</div></div>
+      <div class="stat"><div class="k">Standard</div><div class="v">ERC-20</div><div class="s">OpenZeppelin-based · custom AMM swap tax</div></div>
       <div class="stat"><div class="k">Decimals</div><div class="v">8</div></div>
       <div class="stat"><div class="k">Home chain</div><div class="v"><a href="https://l2-scan.iost.io" rel="noopener" target="_blank">IOST L2</a></div><div class="s">chain 182 · l2-mainnet.iost.io</div></div>
-      <div class="stat"><div class="k">Contract</div><div class="v"><a href="https://l2-scan.iost.io" rel="noopener" target="_blank">pending deploy</a></div><div class="s">audited by tooling pass 2026-08-16</div></div>
+      <div class="stat"><div class="k">Contract</div><div class="v"><a href="https://l2-scan.iost.io" rel="noopener" target="_blank">pending deploy</a></div><div class="s">tooling-reviewed · external audit pending</div></div>
       <div class="stat"><div class="k">Points → AITT</div><div class="v">1:1</div><div class="s">planned at TGE — not guaranteed</div></div>
     </div>
   </div>
@@ -165,7 +165,7 @@ footer a:hover { color: var(--mint); }
   <!-- allocation -->
   <section id="allocation">
     <h2>Allocation</h2>
-    <p class="sub">1,000,000,000 AITT — fixed at deployment, distributed by vesting and earned programs, never by sale.</p>
+    <p class="sub">1,000,000,000 AITT design — fixed at deployment. Team/advisor vesting is implemented; other release controls remain pre-launch design targets.</p>
     <div class="card">
       <div class="alloc">
         <div class="alloc-row"><span class="name">Ecosystem &amp; agent rewards</span><span class="bar"><i style="width:30%;background:linear-gradient(90deg,var(--cyan),var(--mint))"></i></span><span class="pct">300M · 30%</span><span class="vest">48-month declining emission · revenue-backed top-ups</span></div>
@@ -182,10 +182,10 @@ footer a:hover { color: var(--mint); }
   <!-- utility -->
   <section id="utility">
     <h2>Utility</h2>
-    <p class="sub">AITT is a use-right within the platform — no dividend rights, no implied investment return.</p>
+    <p class="sub">Proposed utility mechanics — not active. Revenue-sharing and transferability remain under pre-launch legal/engineering review.</p>
     <div class="grid2">
       <div class="card"><span class="tag">Trust staking</span><h3>How do you trust an agent with money?</h3><p>Agents stake AITT as collateral → Trust Score → spending authority. Slashing penalizes unauthorized spend and failed settlement. Economic incentives instead of hope — the industry's "Know Your Agent" made routine.</p></div>
-      <div class="card"><span class="tag">Fee utility</span><h3>50% discount</h3><p>Platform and agent-network fees paid in AITT get a 50% discount vs fiat-denominated fees. Fee split: 50% to stakers · 20% burned · 30% treasury. DEX swaps (Phase 4): 3% buy/sell tax on the AMM pair — 1.8% burned (capped at 200M → 800M floor) · 0.8% stakers · 0.4% treasury; 0% wallet-to-wallet.</p></div>
+      <div class="card"><span class="tag">Fee utility</span><h3>Proposed 50% discount</h3><p>Design target: platform fees split 50% stakers · 20% burn · 30% treasury. DEX design: 3% AMM-pair tax — 1.8% contract burn · 0.8% stakers recipient · 0.4% treasury. These mechanics are not active; global burn accounting and legal posture remain under pre-launch review.</p></div>
       <div class="card"><span class="tag">Governance</span><h3>Stake-weighted votes</h3><p>1 AITT staked = 1 vote. Spend-limit defaults, slashing rules, fee schedule, treasury allocations and buy-back/burn — all DAO-adjustable. 0.1% proposal threshold, 20% quorum.</p></div>
       <div class="card"><span class="tag">Agentic payments</span><h3>AP2 + x402 ready</h3><p>Consent / intent / payment token mandates (AP2 v0.2 mapping) with payment sessions and atomic reserve→process→commit enforcement. First AP2-compatible implementation on a non-EVM L1 ecosystem — IOST as a payment rail.</p></div>
     </div>
@@ -198,7 +198,7 @@ footer a:hover { color: var(--mint); }
     <div class="card">
       <div class="road">
         <div class="step live"><span class="num">0</span><div><h4>Points — live now</h4><p>Off-chain points ledger: signals +10 · followers +5 · referrals +50/+10 · weekly top paper trader +500. 1:1 AITT conversion planned at TGE.</p></div></div>
-        <div class="step"><span class="num">1</span><div><h4>ERC-20 deployment — built &amp; audited</h4><p>Contracts (token + vesting + converter) complete on IOST L2, 36/36 tests, Slither + Mythril clean. Deploy pending gate sign-off.</p></div></div>
+        <div class="step"><span class="num">1</span><div><h4>ERC-20 deployment — pre-launch hold</h4><p>Contracts compile and 40/40 tests pass. Tooling review is complete, but this is not an external audit; burn, custody, conversion, bridge and legal blockers remain open.</p></div></div>
         <div class="step"><span class="num">2</span><div><h4>Agent wallet</h4><p>Trust staking, spend limits, approval flows, slashing; consent/intent/payment token mandates.</p></div></div>
         <div class="step"><span class="num">3</span><div><h4>x402 agent payments on IOST</h4><p>Pay-per-request API payments; IOST Terminal's producer node as the ecosystem x402 facilitator.</p></div></div>
         <div class="step"><span class="num">4</span><div><h4>External liquidity</h4><p>DEX listing + EVM bridges (BSC first — PancakeSwap, CMC price data) only after full legal review.</p></div></div>
@@ -209,15 +209,15 @@ footer a:hover { color: var(--mint); }
   <!-- conversion -->
   <section id="conversion">
     <h2>Points → AITT conversion</h2>
-    <p class="sub">Earned platform points convert 1:1 at TGE. Conversion is an earn-event, never a purchase.</p>
+    <p class="sub">Design target: earned platform points convert 1:1. End-to-end on-chain conversion plumbing and release gates remain under review.</p>
     <div class="card conv">
-      <h3>Status: gate closed — opens at TGE</h3>
+      <h3>Status: gate closed — pre-launch review hold</h3>
       <div class="rate">1 point → 1 AITT</div>
-      <p class="note">The conversion opens only after the token deploys, the converter reserve is funded, and the TGE gates pass (10,000 registered users · 500 staked agents · ≥40% of circulating supply staked). Until then points are accrual-only and non-spendable — and honestly labeled: <strong>planned, not guaranteed</strong>.</p>
+      <p class="note">Conversion stays closed until the token, reserve, verified EVM-wallet binding, atomic claim/reconciliation flow, corrected release gates, legal review, and explicit owner sign-off are complete. Points remain accrual-only and non-spendable: <strong>planned, not guaranteed</strong>.</p>
     </div>
   </section>
 
-  <div class="honesty">⚠️ AITT is a design draft. <strong>No token has been created, minted, or sold.</strong> AITT is not an investment and has no guaranteed value. Nothing on this page is financial advice — DYOR. Utility framing per Canadian securities posture (counsel-cleared 2026-08-16).</div>
+  <div class="honesty">⚠️ AITT is a design draft. <strong>No token has been created, minted, or sold.</strong> AITT has no guaranteed value. Nothing on this page is financial or legal advice. Proposed staker-revenue and transferability mechanics require refreshed counsel review before launch.</div>
 </main>
 
 <footer class="wrap">

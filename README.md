@@ -11,8 +11,9 @@ money moves without exchange keys + explicit enablement.
 |---|---|
 | [`docs/PHASE2_WALLET.md`](docs/PHASE2_WALLET.md) | **Phase 2 non-custodial wallet design** (2026-08-20): Safe 2-of-3 + AllowanceModule + Zodiac scoping, agent session keys, TEE/MPC custody, trust-stake ceilings, recovery, funding layer (deposits/bridge/gas/on-ramp), and 7 sections of Coinbase CDP research folded in (§9.20–9.26: security policies, policy engine, agentic wallet CLI/skills, x402 seller side + MCP) |
 | [`docs/PHASE2_SPEC.md`](docs/PHASE2_SPEC.md) | Phase 2 agent-wallet engine (off-chain): trust staking, spend limits, approvals, AP2 mandate chain (Phase 3) — engine built + tested |
-| [`docs/TOKENOMICS.md`](docs/TOKENOMICS.md) | AITT tokenomics v1.0 (also served as [/whitepaper](/whitepaper)) |
-| [`docs/AITT-Whitepaper-v1.0.md`](docs/AITT-Whitepaper-v1.0.md) | AITT whitepaper v1.0 |
+| [`docs/AITT_REVIEW_2026-08-23.md`](docs/AITT_REVIEW_2026-08-23.md) | **Current AITT pre-launch review verdict and blockers** — deployment/conversion hold |
+| [`docs/TOKENOMICS.md`](docs/TOKENOMICS.md) | AITT tokenomics v1.8 design source (pre-launch review hold) |
+| [`docs/AITT-Whitepaper-v1.0.md`](docs/AITT-Whitepaper-v1.0.md) | Public AITT whitepaper draft v1.7 |
 | [`docs/PHASE1_SPEC.md`](docs/PHASE1_SPEC.md) | Phase 1 contracts spec |
 | [`docs/COMPETITIVE-NOTE-etoro.md`](docs/COMPETITIVE-NOTE-etoro.md) | Competitive note: eToro copy-trading vs our agent marketplace |
 

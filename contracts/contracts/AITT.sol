@@ -78,8 +78,8 @@ contract AITT is ERC20, Ownable {
     /// @notice Locks the taxed AMM pair. Owner-only, one-time, permanent.
     /// @dev The DEX pair is created after this token is deployed
     ///      (factory.createPair), so its address cannot be known at
-    ///      construction. Once set, the tax applies to buy (user→pair) and
-    ///      sell (pair→user) transfers; LP add/remove also touch the pair and
+    ///      construction. Once set, the tax applies to sell (user→pair) and
+    ///      buy (pair→user) transfers; LP add/remove also touch the pair and
     ///      are taxed (standard fee-token behavior, documented in PHASE1_SPEC).
     function setAmmPair(address pair) external onlyOwner {
         require(ammPair == address(0), "AITT: pair already set");
