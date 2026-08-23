@@ -11,6 +11,7 @@
 
 ## Local Contracts
 
+- Security policy and vulnerability reporting live in `SECURITY.md`; it is binding alongside this file.
 - Production is the only writer to `data/`; never start a second server against production stores.
 - Real-money execution requires a signed-in human, enabled venue, hard order rails, and owner-approved agent proposals.
 - Agent-wallet spending uses server-side limits and an active wallet-bound Pact; commit identity comes from the reservation, not the client.
