@@ -47,7 +47,7 @@
 - [/app](/app) — AI command center: scanner, scores, risk, portfolio, on-chain, news, assistant, journal
 - [/hub](/hub) — 3D automation hub (8 strategy bots)
 - [/aitt](/aitt) and [/token](/token) — AITT token page (SSR, no JS required)
-- [/whitepaper](/whitepaper) — AITT whitepaper v1.5 (markdown)
+- [/whitepaper](/whitepaper) — AITT whitepaper v1.7 (markdown)
 
 ## Data model
 

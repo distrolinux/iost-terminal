@@ -643,7 +643,7 @@ app.get(['/aitt', '/token'], (req, res) => sendPage(req, res, 'token'));
 app.get('/whitepaper', (req, res) => {
   try {
     res.type('text/markdown; charset=utf-8');
-    res.send(readFileSync(join(ROOT, 'docs', 'AITT-Whitepaper-v1.0.md'), 'utf8'));
+    res.send(readFileSync(join(ROOT, 'docs', 'TOKENOMICS.md'), 'utf8'));
   } catch {
     res.status(404).json({ error: 'whitepaper not available yet' });
   }
@@ -2272,7 +2272,7 @@ const API_INDEX = {
     { path: '/api/aitt/info', method: 'GET', purpose: 'public AITT token info: identity, supply, chain, contract/converter addresses, conversion gate state, honesty notice' },
     { path: '/aitt', method: 'GET', purpose: 'public AITT token page (SSR — CMC-ready, no JS required)' },
     { path: '/token', method: 'GET', purpose: 'alias of /aitt' },
-    { path: '/whitepaper', method: 'GET', purpose: 'AITT whitepaper v1.5 (markdown — served from docs/AITT-Whitepaper-v1.0.md)' },
+    { path: '/whitepaper', method: 'GET', purpose: 'AITT whitepaper v1.7 (markdown — served from docs/TOKENOMICS.md)' },
   ],
   agentWallet: [
     { path: '/api/wallets', method: 'GET', purpose: 'my wallet tree: parent (user) wallet + agent child wallets with balances, limits, capabilities, status' },
