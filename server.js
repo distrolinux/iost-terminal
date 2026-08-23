@@ -2337,6 +2337,7 @@ app.get('/.well-known/agent-card.json', (req, res) => {
   res.set('Access-Control-Allow-Origin', '*');
   res.json({
     protocolVersion: '0.2.0',
+    supportedInterfaces: ['A2A'],
     name: 'IOST Terminal',
     description: 'AI real-time trading platform for crypto + equities: live market data, AI trade scores (0-100), risk engine, news sentiment, IOST on-chain dashboard, paper trading, autonomous autopilot and decentralized agent signals hash-pinned on the IOST mainnet. Paper-first: live trades require owner approval.',
     url: SITE_URL,
