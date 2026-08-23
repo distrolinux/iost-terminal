@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Agentic Payments Readiness — IOST L2 × AITT</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#04060a; --surface:#0a0e15; --line:#16202e; --line2:#22324a;
+    --text:#e8f1f8; --muted:#8294a6; --dim:#51617a;
+    --cyan:#00e5ff; --mint:#22d3aa; --amber:#ffc857; --red:#ff5c5c; --violet:#7c5cff;
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+    --disp:'Space Grotesk',system-ui,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font-family:var(--mono);
+       width:1600px;padding:44px 56px 40px;overflow:hidden}
+  .kicker{font-size:13px;letter-spacing:.42em;color:var(--cyan);font-weight:600;margin-bottom:14px}
+  h1{font-family:var(--disp);font-size:46px;font-weight:700;letter-spacing:-.01em;line-height:1.05}
+  h1 .x{color:var(--cyan)}
+  .sub{color:var(--muted);font-size:15px;margin-top:10px}
+  .sub b{color:var(--mint);font-weight:600}
+
+  .badges{display:flex;gap:14px;margin:26px 0 8px}
+  .badge{display:flex;align-items:center;gap:10px;border:1px solid var(--line2);
+         background:var(--surface);border-radius:10px;padding:12px 18px;font-size:15px}
+  .badge .dot{width:8px;height:8px;border-radius:50%;background:var(--mint);
+              box-shadow:0 0 12px var(--mint)}
+  .badge b{font-size:17px;color:var(--text)}
+  .badge span{color:var(--muted)}
+
+  .sec{display:flex;align-items:baseline;gap:14px;margin:34px 0 12px}
+  .sec .t{font-size:14px;letter-spacing:.30em;color:var(--cyan);font-weight:600}
+  .sec .note{color:var(--dim);font-size:12px}
+
+  table{width:100%;border-collapse:collapse;background:var(--surface);
+        border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  th{font-size:12px;letter-spacing:.18em;color:var(--muted);font-weight:600;
+     text-align:left;padding:13px 16px;border-bottom:1px solid var(--line2);background:#070c13}
+  th.ios{color:var(--cyan)}
+  td{font-size:15px;padding:11px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td.lab{color:var(--muted);font-size:12.5px;letter-spacing:.06em;white-space:nowrap}
+  td.ios{background:linear-gradient(180deg,rgba(0,229,255,.06),rgba(34,211,170,.04));
+         border-left:2px solid var(--cyan);color:var(--text)}
+  .ok{color:var(--mint);font-weight:700}
+  .warn{color:var(--amber)}
+  .no{color:var(--dim)}
+  .small{font-size:12px;color:var(--dim);display:block;margin-top:3px}
+
+  .gaps{display:flex;gap:12px;flex-wrap:wrap;margin-top:16px}
+  .gap{font-size:13px;color:var(--muted);border:1px dashed var(--line2);
+       border-radius:8px;padding:9px 14px}
+  .gap b{color:var(--amber);font-weight:600}
+
+  .foot{margin-top:34px;border-top:1px solid var(--line);padding-top:20px;
+        display:flex;justify-content:space-between;align-items:flex-end;gap:30px}
+  .claim{font-family:var(--disp);font-size:19px;font-weight:500;color:var(--text)}
+  .claim .c{color:var(--cyan)} .claim .m{color:var(--mint)}
+  .src{font-size:11.5px;color:var(--dim);text-align:right;line-height:1.7}
+  .hex{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;
+       margin-right:16px;vertical-align:middle;
+       background:conic-gradient(from 210deg,#00e5ff,#22d3aa,#00e5ff);
+       -webkit-background-clip:padding-box;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);
+       font-family:var(--disp);font-weight:700;font-size:20px;color:#04060a}
+</style>
+</head>
+<body>
+  <div class="kicker">AGENTIC PAYMENTS READINESS · AUGUST 20, 2026 · VERIFIED</div>
+  <h1><span class="hex">A&gt;</span>Agent networks run.<br><span class="x">Agent payments settle.</span></h1>
+  <div class="sub">IOST L2 × AITT — the agentic payments rail. Numbers below are <b>live-verified</b> (explorer pulls, 2026-08-20), not claims.</div>
+
+  <div class="badges">
+    <div class="badge"><span class="dot"></span><b>$0.000</b><span>tx fee — gas price 0.0</span></div>
+    <div class="badge"><span class="dot"></span><b>1.0s</b><span>block time</span></div>
+    <div class="badge"><span class="dot"></span><b>471M</b><span>continuous L1 blocks since 2019</span></div>
+    <div class="badge"><span class="dot"></span><b>345,594</b><span>tx today</span></div>
+  </div>
+
+  <div class="sec"><span class="t">CHAIN READINESS</span><span class="note">the rows every network charts — IOST column verified</span></div>
+  <table>
+    <tr><th style="width:150px"></th><th class="ios" style="width:340px">IOST L2 · AITT</th><th>ALGORAND</th><th>BASE</th><th>POLYGON</th><th>SOLANA</th></tr>
+    <tr><td class="lab">ARCHITECTURE</td><td class="ios">L2 rollup · EVM (chain 182)</td><td>L1</td><td>L2</td><td>Sidechain</td><td>L1</td></tr>
+    <tr><td class="lab">BLOCK TIME</td><td class="ios"><span class="ok">1.0 s</span><span class="small">verified · L1 anchors finality</span></td><td>Instant</td><td>13 min</td><td>5 s</td><td>12.8 s</td></tr>
+    <tr><td class="lab">AVG TX FEE</td><td class="ios"><span class="ok">$0.000</span><span class="small">gas price 0.0 · 40-tx sample</span></td><td>$0.0002 fixed</td><td>$0.015 gas</td><td>$0.01 gas</td><td>$0.003 gas</td></tr>
+    <tr><td class="lab">THROUGHPUT</td><td class="ios">345,594 tx/day<span class="small">8K+ TPS claimed (L1 bench) — live bench pending</span></td><td>10,000 max (claimed)</td><td>3,600</td><td>3,800</td><td>65,000</td></tr>
+    <tr><td class="lab">CONSENSUS</td><td class="ios"><span class="warn">17 producers</span><span class="small">PoB — smaller set, by design</span></td><td>1,541 validators</td><td>1 sequencer</td><td>105 validators</td><td>690 validators</td></tr>
+    <tr><td class="lab">UPTIME</td><td class="ios"><span class="ok">471,005,961 blocks</span><span class="small">no mainnet halt since Feb 2019 · 1.04B all-time tx</span></td><td>100% (claimed)</td><td>Past downtime</td><td>Past downtime</td><td>Past downtime</td></tr>
+    <tr><td class="lab">X402 VOLUME</td><td class="ios"><span class="warn">$0</span><span class="small">Phase 3 · EVM L2 = drop-in @x402/evm — the land-grab</span></td><td>$250K<span class="small">95% in last 2 wks</span></td><td>$45M</td><td>$850K</td><td>$9.3M</td></tr>
+    <tr><td class="lab">PQC READINESS</td><td class="ios"><span class="warn">Phase 3</span><span class="small">post-quantum program — same readiness nature as Falcon</span></td><td>Falcon-1024</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
+  </table>
+
+  <div class="sec"><span class="t">AGENTIC TRUST READINESS</span><span class="note">the rows they don't chart — live in IOST Terminal today</span></div>
+  <table>
+    <tr><th style="width:150px"></th><th class="ios" style="width:640px">IOST TERMINAL + AITT</th><th>ALGORAND · BASE · POLYGON · SOLANA</th></tr>
+    <tr><td class="lab">MANDATES</td><td class="ios">AP2-compatible chain of intent — consent / intent / payment tokens, Open &amp; Closed, hash-linked on-chain</td><td class="no">Not charted — no product equivalent</td></tr>
+    <tr><td class="lab">HUMAN CONTROL</td><td class="ios">Per-trade approval on live agent trades (Human Present); autopilot within budget (Human Not Present)</td><td class="no">Not charted</td></tr>
+    <tr><td class="lab">TRUST &amp; SLASHING</td><td class="ios">Trust staking — stake → Trust Score → spend limits → slashing (KYA with economic teeth)</td><td class="no">Not charted</td></tr>
+    <tr><td class="lab">AGENT IDENTITY</td><td class="ios">Scoped API keys (read / paper / live) with per-agent spend rails</td><td class="no">Not charted</td></tr>
+    <tr><td class="lab">TRACK RECORDS</td><td class="ios">Signals hash-pinned on IOST L1 — machine-verifiable audit trail</td><td class="no">Not charted</td></tr>
+    <tr><td class="lab">WORKING PRODUCT</td><td class="ios">iostcallister.com — live AI trading command center · 73/100 agent-native scan</td><td class="no">None</td></tr>
+  </table>
+
+  <div class="gaps">
+    <div class="gap">Consensus: <b>17 producers</b> — stated, not hidden</div>
+    <div class="gap">PQC: <b>Phase 3</b> program</div>
+    <div class="gap">Peak TPS: <b>live benchmark pending</b></div>
+    <div class="gap">x402 volume $0 — <b>the land-grab</b>, not a footnote</div>
+  </div>
+
+  <div class="foot">
+    <div class="claim">Free. Provably up. <span class="c">Trust where it matters.</span> <span class="m">— IOST L2 × AITT</span></div>
+    <div class="src">Data as of August 20, 2026 · IOST verified via l2-scan.iost.io (Blockscout) · IOSTscan · api.iost.io<br>
+    Competitor data as reported by Chainspect &amp; Token Terminal (comparison deck, 2026-08-20) · AITT: positioning draft</div>
+  </div>
+</body>
+</html>
