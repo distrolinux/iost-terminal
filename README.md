@@ -21,7 +21,16 @@ money moves without exchange keys + explicit enablement.
 ```bash
 cd /opt/data/iost-terminal
 npm start          # or: node server.js  → http://localhost:8787
+npm test           # offline safety/regression suite; never places live orders
 ```
+
+## Safety boundaries
+
+- Live orders fail closed when a trustworthy market/limit price is unavailable; the configured notional cap is always applied.
+- Agent live proposals acquire a persisted `executing` lease before Kraken is called, preventing duplicate approval requests from placing duplicate orders.
+- Per-user agent keys need `trade-paper` for both opening and closing paper positions.
+- `/api/spend/check|reserve` require an active wallet-bound `pactId`; recipient/protocol policies are checked before reservation, outstanding reservations count against the Pact budget, and the pact identity is bound into the server-side reservation used at commit.
+- Production password-reset tokens are never logged. Development console delivery is opt-in with `AUTH_DEV_RESET_LOG=1` and is disabled when `NODE_ENV=production`.
 
 ## Engines
 

@@ -42,7 +42,7 @@ ok('per-user broker read-only balance works', acct.ok, acct.ok ? `cashUsd ${acct
 
 // live enable with own keys (scratch account state — no disk writes)
 const state = { accountId: 'smoke-self', owner: 'u', positions: [], journal: [], account: {} };
-const e = await enableLive(state, 'nobody@not-allowlisted.com', true);
+const e = await enableLive(state, 'nobody@not-allowlisted.com', broker);
 ok('enableLive with own keys bypasses allowlist', e.ok && e.live.venue === 'kraken:self', e.error || e.live.venue);
 ok('live state reflects own venue', getLiveState(state).venue === 'kraken:self');
 const d = await disableLive(state, broker); // kill switch against user's own broker (no orders → clean)

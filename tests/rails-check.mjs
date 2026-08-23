@@ -32,5 +32,15 @@ ok('daily loss halt enforced', !bleeding.ok && bleeding.rail === 'maxDailyLoss')
 // shape validation
 ok('rejects no size', !checkLiveOrder({ symbol: 'BTC', openPositions: [], cashUsd: 100 }).ok);
 
+// Regression: live rail must fail closed if it cannot value an order. Without
+// this, a market-data outage would skip the max-notional protection entirely.
+const unpriced = checkLiveOrder({ symbol: 'BTC', size: 1_000_000, entry: null, marketPrice: null, openPositions: [], cashUsd: 1_000_000 });
+ok('rejects an order with no trustworthy price', !unpriced.ok && unpriced.rail === 'price', unpriced.error);
+
+// Regression: a limit order's own limit price, not the stale/current quote,
+// determines maximum possible notional exposure.
+const oversizedLimit = checkLiveOrder({ symbol: 'BTC', size: 0.0005, entry: 1_000_000, marketPrice: 60_000, openPositions: [], cashUsd: 1_000 });
+ok('uses limit entry for the notional cap', !oversizedLimit.ok && oversizedLimit.rail === 'maxOrderUsd', oversizedLimit.error);
+
 console.log(failures === 0 ? '\nALL PASS ✅' : `\n${failures} FAILURES ❌`);
 process.exit(failures === 0 ? 0 : 1);

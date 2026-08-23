@@ -277,9 +277,9 @@ Atomic tmp+rename writes, boot-cached stores — same rules as every other store
 ---
 
 ## Implementation status (2026-08-16)
-- **Built & tested — 49/49 checks pass** (`node tests/agent-wallet-check.mjs`, scratch data dir via `IOST_DATA_DIR`; production data never touched).
+- **Built & tested — 56/56 checks pass** (`node tests/agent-wallet-check.mjs`, scratch data dir via `IOST_DATA_DIR`; production data never touched).
 - Modules: `lib/wallets.js` (parent-child + balances + policies) · `lib/limits.js` (per-tx/daily/weekly, UTC windows, reserve→commit/release) · `lib/freeze.js` · `lib/stakes.js` (min 1,000 AITT, locks 7/30/90/365, 7d cooldown) · `lib/slashes.js` (10%/5%, 14d appeals) · `lib/trust.js` (derived score, tiers 1k/10k/100k) · `lib/pacts.js` (time/budget/goal auto-expiry).
-- API live: `/api/wallets*` · `/api/spend/check|reserve|commit|release` · `/api/stake*` · `/api/trust/score` · `/api/slashes*` · `/api/pacts*` · `/api/freeze`. In API_INDEX + `/.well-known/agent.json`.
+- API live: `/api/wallets*` · `/api/spend/check|reserve|commit|release` · `/api/stake*` · `/api/trust/score` · `/api/slashes*` · `/api/pacts*` · `/api/freeze`. In API_INDEX + `/.well-known/agent.json`. Explicit spend endpoints require an active Pact bound to the same owner + wallet; pact/recipient/protocol metadata is persisted with the reservation, outstanding reservations consume Pact budget immediately, release restores capacity, and commit converts reserved capacity to spent.
 - **Permissive default:** no wallet ⇒ no enforcement; execution-rail hook (`AGENT_SPEND_ENFORCE=1` opt-in, paper-open only) — existing flows byte-for-byte unchanged with the env off.
 - Stores: `data/wallets.json` · `limits.json` · `freeze.json` · `stakes.json` · `slashes.json` · `pacts.json` (all atomic tmp+rename).
 - NOT yet built: on-chain staking (post-deploy), AP2 mandate tokens, UI views, audit-event alerts cron.

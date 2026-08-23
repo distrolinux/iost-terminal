@@ -1227,6 +1227,7 @@ app.post('/api/paper/open', requireUser, async (req, res) => {
 });
 
 app.post('/api/paper/close', requireUser, async (req, res) => {
+  if (req.userAgent && !userAgentHas(req, 'trade-paper')) return res.status(403).json({ error: 'scope: this key cannot trade (missing trade-paper)' });
   try {
     const r = await closeTrade(req.body?.positionId, req.body?.exitPrice, accountFor(req).accountId);
     // decentralized agents: when a copy-followed position closes, pin the close
@@ -1607,29 +1608,47 @@ app.get('/api/freeze', (req, res) => res.json({ ok: true, ...freeze.freezeState(
 // ---- spend enforcement boundary (rails): check → reserve → act → commit/release ----
 // Agents call these; the engine (not agent code) enforces limits atomically.
 app.post('/api/spend/check', requireUser, h((req, res) => {
-  const { walletId, amountMinor, purpose } = req.body || {};
+  const { walletId, amountMinor, purpose, pactId, recipient, protocol } = req.body || {};
   const gate = walletOwnedBy(req, walletId);
   if (gate) return res.status(gate.status).json({ ok: false, error: gate.error });
+  if (!pactId) return res.status(400).json({ ok: false, error: 'pactId required' });
+  const w = wallets.getWallet(walletId);
+  const pactGate = pacts.checkPactSpend({ pactId, walletId, ownerId: w.ownerId, amountMinor, recipient, protocol });
+  if (!pactGate.ok) return res.status(402).json(pactGate);
   res.json(limits.checkSpend({ walletId, amountMinor, purpose }));
 }));
 app.post('/api/spend/reserve', requireUser, h((req, res) => {
-  const { walletId, amountMinor, purpose } = req.body || {};
+  const { walletId, amountMinor, purpose, pactId, recipient, protocol } = req.body || {};
   const gate = walletOwnedBy(req, walletId);
   if (gate) return res.status(gate.status).json({ ok: false, error: gate.error });
-  res.json(limits.reserveSpend({ walletId, amountMinor, purpose }));
+  if (!pactId) return res.status(400).json({ ok: false, error: 'pactId required' });
+  const w = wallets.getWallet(walletId);
+  const pactGate = pacts.checkPactSpend({ pactId, walletId, ownerId: w.ownerId, amountMinor, recipient, protocol });
+  if (!pactGate.ok) return res.status(402).json(pactGate);
+  const reservation = limits.reserveSpend({ walletId, amountMinor, purpose, pactId, recipient, protocol });
+  if (!reservation.ok) return res.status(402).json(reservation);
+  const pactReservation = pacts.reservePactSpend({ pactId, reservationId: reservation.reserveId, walletId, ownerId: w.ownerId, amountMinor, recipient, protocol });
+  if (!pactReservation.ok) {
+    limits.releaseReserve({ walletId, reserveId: reservation.reserveId });
+    return res.status(402).json(pactReservation);
+  }
+  res.json(reservation);
 }));
 app.post('/api/spend/commit', requireUser, h((req, res) => {
-  const { walletId, reserveId, pactId } = req.body || {};
+  const { walletId, reserveId } = req.body || {};
   const gate = walletOwnedBy(req, walletId);
   if (gate) return res.status(gate.status).json({ ok: false, error: gate.error });
+  const pending = limits.getReservation({ walletId, reserveId });
+  if (!pending) return res.status(400).json({ ok: false, error: 'reservation not found' });
+  if (!pending.pactId) return res.status(400).json({ ok: false, error: 'reservation has no pact authorization' });
+  if (wallets.balanceOf(walletId) < pending.amount) return res.status(402).json({ ok: false, error: 'insufficient wallet balance' });
   // commitReserve returns the settled amount; captured BEFORE the reserve record is cleared
   const r = limits.commitReserve({ walletId, reserveId });
   if (r.ok) {
-    // debit the wallet ledger; record against a pact when provided
+    // The pact identity comes from the server-side reservation, never the commit request.
     const debit = wallets.debitWallet(walletId, r.amount);
-    if (pactId) {
-      try { pacts.recordPactSpend(pactId, r.amount); } catch { /* pact gone — audit still holds */ }
-    }
+    const pactCommit = pacts.commitPactReservation(r.pactId, reserveId);
+    if (!pactCommit.ok) return res.status(500).json({ ok: false, error: 'pact reservation settlement failed' });
     res.json({ ok: true, debit });
   } else {
     res.status(400).json(r);
@@ -1639,7 +1658,10 @@ app.post('/api/spend/release', requireUser, h((req, res) => {
   const { walletId, reserveId } = req.body || {};
   const gate = walletOwnedBy(req, walletId);
   if (gate) return res.status(gate.status).json({ ok: false, error: gate.error });
-  res.json(limits.releaseReserve({ walletId, reserveId }));
+  const pending = limits.getReservation({ walletId, reserveId });
+  const released = limits.releaseReserve({ walletId, reserveId });
+  if (released.ok && pending?.pactId) pacts.releasePactReservation(pending.pactId, reserveId);
+  res.json(released);
 }));
 // ownership gate for wallet-scoped routes (mirrors /api/wallets/:id/* checks)
 function walletOwnedBy(req, walletId) {
@@ -1696,7 +1718,8 @@ setInterval(flushWalletQueue, 600_000); // 10 min
 app.get('/api/account', requireUser, (req, res) => {
   const st = accountFor(req);
   const unrealized = st.positions.reduce((a, p) => a + ((p.lastPrice || p.entry) - p.entry) * p.size * (p.side === 'short' ? -1 : 1), 0);
-  const email = req.session?.userId ? auth.findById(req.session.userId)?.email : null;
+  const user = req.session?.userId ? auth.findById(req.session.userId) : null;
+  const email = user?.email || null;
   res.json({
     accountId: st.accountId,
     owner: st.owner,
@@ -1705,7 +1728,7 @@ app.get('/api/account', requireUser, (req, res) => {
     equity: Math.round((st.account.cash + unrealized) * 100) / 100,
     openPositions: st.positions.length,
     lastTrades: st.journal.slice(-5).reverse().map(j => ({ symbol: j.symbol, side: j.side, status: j.status, pnl: j.pnl, result: j.result, openedAt: j.openedAt, closedAt: j.closedAt })),
-    live: getLiveState(st, email), // masked — never exposes keys
+    live: getLiveState(st, email, user ? brokerForUser(user) : null), // masked — never exposes keys
     fee: { ...walletSummary(st), exempt: getFeeConfig().feeExemptAccounts.includes(st.accountId), burnRate: getFeeConfig().burnRate, minCreditsToTrade: getFeeConfig().minCreditsToTrade, bundles: getFeeConfig().bundles, wallet: getFeeConfig().wallet },
   });
 });
@@ -1715,9 +1738,9 @@ app.post('/api/account/live/enable', requireUser, async (req, res) => {
   if (!req.session?.userId) return res.status(403).json({ error: 'owner account only' });
   const u = auth.findById(req.session.userId);
   if (!u) return res.status(401).json({ error: 'auth required' });
-  const ownKeys = !!brokerForUser(u);
-  if (!isLiveAllowed(u.email) && !ownKeys) return res.status(403).json({ error: 'not eligible for live trading — connect your own Kraken key first' });
-  const r = await enableLive(accountFor(req), u.email, ownKeys);
+  const ownBroker = brokerForUser(u);
+  if (!isLiveAllowed(u.email) && !ownBroker) return res.status(403).json({ error: 'not eligible for live trading — connect your own Kraken key first' });
+  const r = await enableLive(accountFor(req), u.email, ownBroker);
   if (!r.ok) return res.status(400).json({ error: r.error });
   res.json({ ok: true, live: r.live });
 });
@@ -1952,18 +1975,24 @@ app.get('/api/live/proposals/:id', requireUser, (req, res) => {
 // APPROVE — owner session only. Re-checks venue + risk rails, then executes.
 app.post('/api/live/proposals/:id/approve', requireUser, async (req, res) => {
   if (!isOwnerSession(req)) return res.status(403).json({ error: 'owner only' });
-  const p = liveProposals.getProposal(req.params.id);
-  if (!p) return res.status(404).json({ error: 'proposal not found' });
-  if (p.status !== 'pending') return res.status(400).json({ error: `proposal already ${p.status}` });
-  const r = await executeLiveOrder(req, { symbol: p.symbol, side: p.side, size: p.size, entry: p.entry });
+  const claim = liveProposals.claimForExecution(req.params.id, 'owner');
+  if (!claim.ok) return res.status(claim.error === 'proposal not found' ? 404 : 400).json({ error: claim.error });
+  const p = claim.proposal;
+  let r;
+  try {
+    r = await executeLiveOrder(req, { symbol: p.symbol, side: p.side, size: p.size, entry: p.entry });
+  } catch (e) {
+    const error = e instanceof Error ? e.message : 'live execution failed';
+    liveProposals.finalizeExecution(p.id, { status: 'rejected', by: 'owner', error });
+    logLiveEvent(p.userId, 'live.proposal.rejected', { proposalId: p.id, error });
+    return res.status(502).json({ ok: false, error, proposal: liveProposals.getProposal(p.id) });
+  }
   if (r.status === 200) {
-    liveProposals.decide({ id: p.id, status: 'approved', by: 'owner' });
-    liveProposals.attachResult(p.id, { venueOrderId: r.order.venueOrderId });
+    liveProposals.finalizeExecution(p.id, { status: 'approved', by: 'owner', venueOrderId: r.order.venueOrderId });
     logLiveEvent(p.userId, 'live.proposal.approved', { proposalId: p.id, venueOrderId: r.order.venueOrderId });
     res.json({ ok: true, proposal: liveProposals.getProposal(p.id), order: r.order });
   } else {
-    liveProposals.decide({ id: p.id, status: 'rejected', by: 'owner' });
-    liveProposals.attachResult(p.id, { error: r.error });
+    liveProposals.finalizeExecution(p.id, { status: 'rejected', by: 'owner', error: r.error });
     logLiveEvent(p.userId, 'live.proposal.rejected', { proposalId: p.id, error: r.error });
     res.status(r.status).json({ ok: false, error: r.error, proposal: liveProposals.getProposal(p.id) });
   }
@@ -2282,7 +2311,7 @@ const API_INDEX = {
     { path: '/api/wallets/credit', method: 'POST', body: '{amountMinor}', purpose: 'owner only — credit the user wallet (onboarding funds)' },
     { path: '/api/wallets/:id/suspend | /reactivate', method: 'POST', purpose: 'suspend/reactivate an agent wallet' },
     { path: '/api/wallets/:id/usage', method: 'GET', purpose: 'daily/weekly spend usage snapshot vs limits' },
-    { path: '/api/spend/check|reserve|commit|release', method: 'POST', purpose: 'rails enforcement: check → reserve (atomic) → act → commit or release. Limits never enforced by agent code' },
+    { path: '/api/spend/check|reserve|commit|release', method: 'POST', body: '{walletId,amountMinor,pactId,recipient?,protocol?,purpose?} for check/reserve; {walletId,reserveId} for commit/release', purpose: 'Pact + limit enforcement: active wallet-bound Pact check → reserve limit and Pact budget capacity with server-bound policy metadata → act → commit or release. Commit never trusts a client-supplied pact identity.' },
     { path: '/api/stake', method: 'POST', body: '{amountMinor (8-dec AITT), lockDays 7|30|90|365}', purpose: 'create trust stake (min 1,000 AITT)' },
     { path: '/api/stake/unstake | /withdraw', method: 'POST', body: '{stakeId}', purpose: 'start 7-day cooldown / withdraw after cooldown' },
     { path: '/api/trust/score', method: 'GET', purpose: 'derived Trust Score + credit line + components (never stored)' },

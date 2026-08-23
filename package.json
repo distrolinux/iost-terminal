@@ -7,7 +7,7 @@
     "lib": "lib"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node tests/rails-check.mjs && node tests/live-proposals-check.mjs && node tests/agent-wallet-check.mjs && node tests/live-self-custody-check.mjs && node tests/auth-security-check.mjs && node tests/server-security-contract-check.mjs"
   },
   "keywords": [],
   "author": "",
