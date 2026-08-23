@@ -148,7 +148,7 @@ footer a:hover { color: var(--mint); }
     <h1>AITT — Agent Intelligence <span class="tick">Trading Token</span></h1>
     <p class="lede">The utility layer for machine-executed finance on IOST Terminal: trust staking that makes AI agents accountable, fee utility, and stake-weighted governance. Earned, staked and governed — never sold.</p>
     <div class="cta">
-      <a class="btn primary" href="/whitepaper">Read the tokenomics draft v1.8</a>
+      <a class="btn primary" href="/whitepaper">Read the tokenomics draft v1.9</a>
       <a class="btn ghost" href="/app">Open IOST Terminal</a>
     </div>
 
@@ -165,10 +165,10 @@ footer a:hover { color: var(--mint); }
   <!-- allocation -->
   <section id="allocation">
     <h2>Allocation</h2>
-    <p class="sub">1,000,000,000 AITT design — fixed at deployment. Team/advisor vesting is implemented; other release controls remain pre-launch design targets.</p>
+    <p class="sub">1,000,000,000 AITT design — fixed at deployment. Every allocation is contract-locked; only the funded converter reserve can become directly claimable after all release gates pass.</p>
     <div class="card">
       <div class="alloc">
-        <div class="alloc-row"><span class="name">Ecosystem &amp; agent rewards</span><span class="bar"><i style="width:30%;background:linear-gradient(90deg,var(--cyan),var(--mint))"></i></span><span class="pct">300M · 30%</span><span class="vest">48-month declining emission · revenue-backed top-ups</span></div>
+        <div class="alloc-row"><span class="name">Ecosystem &amp; agent rewards</span><span class="bar"><i style="width:30%;background:linear-gradient(90deg,var(--cyan),var(--mint))"></i></span><span class="pct">300M · 30%</span><span class="vest">48-month linear emission vault</span></div>
         <div class="alloc-row"><span class="name">Treasury (DAO)</span><span class="bar"><i style="width:20%;background:linear-gradient(90deg,var(--violet),var(--cyan))"></i></span><span class="pct">200M · 20%</span><span class="vest">milestone-gated</span></div>
         <div class="alloc-row"><span class="name">Team &amp; core contributors</span><span class="bar"><i style="width:15%;background:linear-gradient(90deg,var(--mint),var(--violet))"></i></span><span class="pct">150M · 15%</span><span class="vest">12-month cliff + 36-month linear (4 yrs total)</span></div>
         <div class="alloc-row"><span class="name">Strategic partners</span><span class="bar"><i style="width:10%;background:var(--amber)"></i></span><span class="pct">100M · 10%</span><span class="vest">milestone-gated · partner contracts only</span></div>
@@ -185,7 +185,7 @@ footer a:hover { color: var(--mint); }
     <p class="sub">Proposed utility mechanics — not active. Revenue-sharing and transferability remain under pre-launch legal/engineering review.</p>
     <div class="grid2">
       <div class="card"><span class="tag">Trust staking</span><h3>How do you trust an agent with money?</h3><p>Agents stake AITT as collateral → Trust Score → spending authority. Slashing penalizes unauthorized spend and failed settlement. Economic incentives instead of hope — the industry's "Know Your Agent" made routine.</p></div>
-      <div class="card"><span class="tag">Fee utility</span><h3>Proposed 50% discount</h3><p>Design target: platform fees split 50% stakers · 20% burn · 30% treasury. DEX design: 3% AMM-pair tax — 1.8% contract burn · 0.8% stakers recipient · 0.4% treasury. These mechanics are not active; global burn accounting and legal posture remain under pre-launch review.</p></div>
+      <div class="card"><span class="tag">Fee utility</span><h3>Proposed 50% discount</h3><p>FeeRouter code enforces 50% stakers · 20% shared-floor burn · 30% treasury; at the floor, burn-share redirect yields 64%/36%. AMM tax shares the same floor. Mechanics remain inactive pending external audit and counsel.</p></div>
       <div class="card"><span class="tag">Governance</span><h3>Stake-weighted votes</h3><p>1 AITT staked = 1 vote. Spend-limit defaults, slashing rules, fee schedule, treasury allocations and buy-back/burn — all DAO-adjustable. 0.1% proposal threshold, 20% quorum.</p></div>
       <div class="card"><span class="tag">Agentic payments</span><h3>AP2 + x402 ready</h3><p>Consent / intent / payment token mandates (AP2 v0.2 mapping) with payment sessions and atomic reserve→process→commit enforcement. First AP2-compatible implementation on a non-EVM L1 ecosystem — IOST as a payment rail.</p></div>
     </div>
@@ -198,7 +198,7 @@ footer a:hover { color: var(--mint); }
     <div class="card">
       <div class="road">
         <div class="step live"><span class="num">0</span><div><h4>Points — live now</h4><p>Off-chain points ledger: signals +10 · followers +5 · referrals +50/+10 · weekly top paper trader +500. 1:1 AITT conversion planned at TGE.</p></div></div>
-        <div class="step"><span class="num">1</span><div><h4>ERC-20 deployment — pre-launch hold</h4><p>Contracts compile and 40/40 tests pass. Tooling review is complete, but this is not an external audit; burn, custody, conversion, bridge and legal blockers remain open.</p></div></div>
+        <div class="step"><span class="num">1</span><div><h4>ERC-20 deployment — pre-launch hold</h4><p>Remediation contracts compile and 58/58 tests pass. External audit, refreshed counsel, deployment and owner release gates remain closed; Phase 4 is disabled.</p></div></div>
         <div class="step"><span class="num">2</span><div><h4>Agent wallet</h4><p>Trust staking, spend limits, approval flows, slashing; consent/intent/payment token mandates.</p></div></div>
         <div class="step"><span class="num">3</span><div><h4>x402 agent payments on IOST</h4><p>Pay-per-request API payments; IOST Terminal's producer node as the ecosystem x402 facilitator.</p></div></div>
         <div class="step"><span class="num">4</span><div><h4>External liquidity</h4><p>DEX listing + EVM bridges (BSC first — PancakeSwap, CMC price data) only after full legal review.</p></div></div>

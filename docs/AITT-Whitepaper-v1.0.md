@@ -1,4 +1,4 @@
-# AITT Tokenomics — Professional Design Draft (v1.7)
+# AITT Tokenomics — Professional Design Draft (v1.8)
 
 > **Status: DESIGN DRAFT — pre-launch. No public sale; utility-only; not an investment (§10).**
 > Supersedes `docs/tokenomics-vision.md` (v0.1) in design intent; that file remains as historical record.
@@ -11,6 +11,7 @@
 > v1.5 (2026-08-20): Quantum Readiness posture added (§16, condensed from TOKENOMICS §16).
 > v1.6 (2026-08-20): audit checklist item replaced with Phase 2 timing note (mirror of TOKENOMICS v1.7).
 > v1.7 (2026-08-23): pre-launch review hold added; no locked economics changed. Deployment/conversion remain frozen pending burn, custody, conversion, bridge, phase-gate, and legal remediation.
+> v1.8 (2026-08-23): owner-approved remediation implemented, still pre-launch — authoritative FeeRouter burn path, contract-locked allocations, signed EVM wallet binding, atomic claim states/receipt verification, and Phase 4 hard-disable. Audit/counsel/owner gates remain closed.
 
 ---
 
@@ -24,7 +25,7 @@ AITT powers the platform's **agentic payments economy**: it is the trust, fee, a
 - **Total supply:** 1,000,000,000 (1B) — fixed, no uncapped minting
 - **Core roles:** Trust staking collateral · fee utility · rewards · governance
 - **Value drivers:** real fee revenue (50% stakers / 20% burn / 30% treasury — burn capped at 200M) + staking lock-up + discretionary buy-back/burn (same cap) + 3% DEX buy/sell swap tax (1.8% burn / 0.8% stakers / 0.4% treasury, same cap)
-- **Emission discipline:** rewards funded by revenue first; emission pool releases on a 48-month declining schedule; team fully vested over 4 years
+- **Emission discipline:** rewards funded by revenue first; emission pool releases linearly over 48 months; team fully vested over 4 years
 
 ---
 
@@ -40,8 +41,8 @@ AITT powers the platform's **agentic payments economy**: it is the trust, fee, a
 | Home chain | IOST L2 (network ID 182, `l2-mainnet.iost.io`); L1 node as facilitator · BSC bridge for liquidity in Phase 4 |
 | Contract | OpenZeppelin-standard ERC-20 on IOST L2 (subject to final audit) |
 | Inflation | None — rewards drawn from allocation pools + real revenue |
-| Deflation | **Design target:** one 200M cumulative cap across platform, swap, and DAO burns. Current contract enforces only an 800M `totalSupply()` floor for swap burns; global accounting is deployment-blocking review work. |
-| Initial circulating | Target ≈10% at TGE; only team/advisor locks are currently contractual, so broader custody/release controls remain pending. |
+| Deflation | Swap burns plus FeeRouter platform/DAO burns share one token-owned 800M `totalSupply()` floor; no dead-address burn path. |
+| Initial circulating | Only the funded converter reserve is directly claimable; every other allocation is contract-locked. |
 
 **Design rationale for 1B:** supply is modeled from platform economics (fee volume, staking demand, reward budget), not round-number marketing. 21B (v0.1) was rejected as retail-bait.
 
@@ -51,12 +52,12 @@ AITT powers the platform's **agentic payments economy**: it is the trust, fee, a
 
 | Category | % | Amount | Vesting / Release |
 |---|---|---|---|
-| Ecosystem & Agent Rewards Pool | 30% | 300M | 48-month declining emission; revenue-backed top-ups |
-| Treasury (DAO-controlled) | 20% | 200M | Milestone-gated (users, volume, agent adoption) |
+| Ecosystem & Agent Rewards Pool | 30% | 300M | 48-month linear emission vault; converter reserve deducted first |
+| Treasury (DAO-controlled) | 20% | 200M | 48-hour queued milestone vault |
 | Team & Core Contributors | 15% | 150M | 12-mo cliff + 36-mo linear (4 yrs total) |
-| Strategic Partners & Ecosystem | 10% | 100M | Milestone-gated; partner contracts only |
-| Community & Adoption Fund | 10% | 100M | Airdrops (earned only), liquidity incentives, grants |
-| Reserve Fund | 10% | 100M | Insurance, emergency liquidity, buy-back/burn — DAO-voted |
+| Strategic Partners & Ecosystem | 10% | 100M | 48-hour queued milestone vault |
+| Community & Adoption Fund | 10% | 100M | 48-hour queued milestone vault |
+| Reserve Fund | 10% | 100M | 48-hour queued milestone vault |
 | Early Supporters & Advisors | 5% | 50M | 12-mo cliff + 24-mo linear |
 
 - No founder/team tokens are tradable before month 12.
@@ -81,11 +82,12 @@ Agents and agent-operators stake AITT as **collateral** to obtain a **Trust Scor
 
 ### 4.2 Fee Utility
 - Platform and agent-network fees paid in AITT receive a **50% discount** vs fiat-denominated fees
-- Fee split: **50% stakers / 20% burn / 30% treasury** until the burn cap (below) is reached; thereafter **70% stakers / 30% treasury**
+- Fee split: **50% stakers / 20% burn / 30% treasury** while burn headroom exists; burn-share redirect yields **64%/36% overall** at the floor
 - **Swap tax (Phase 4, DEX):** 3% on AMM-pair buy/sell only — 1.8% burn / 0.8% stakers / 0.4% treasury. 0% on wallet-to-wallet, staking, airdrops, and platform transfers. Implemented in the token contract via an `_update` override gated on the AMM pair address (one-time lock at setup; no privileged functions after)
 - AITT-denominated fees create ongoing demand + deflation
-- **Burn mechanism design:** swap-tax burns use immutable `_burn` logic. Platform-fee and DAO dead-address burns are proposed but **not yet coordinated with the contract burn counter**.
-- **Burn-cap review hold:** the current contract protects an 800M `totalSupply()` floor only for swap burns. Dead-address balances do not reduce `totalSupply()`, so the promised global 200M cap is not yet enforceable. Deployment remains blocked until one authoritative counter/mechanism covers every burn path.
+- **Authoritative burn mechanism:** swap-tax burns and FeeRouter platform/DAO burns all call token-owned floor/clamp logic; dead-address burns are prohibited.
+- **Fee rounding:** at most 9 base units remain pending until an exact 50/20/30 split is possible; fragmentation cannot bypass burn/staker shares.
+- **Post-floor behavior:** only the burn share redirects 70/30, preserving the locked base shares.
 
 ### 4.3 Rewards
 - Signal providers earn AITT per quality-verified signal (existing hash-pinned-on-IOST mechanic)
@@ -195,7 +197,7 @@ Live off-chain points (per the v0.1 mapping: signals +10, followers +5, referral
 
 | Pool | Schedule |
 |---|---|
-| Ecosystem & Rewards | 48-month linear decline (e.g., month 1–12: 6.25%/mo of pool → declining to 1%/mo by year 4) |
+| Ecosystem & Rewards | 48-month linear release from the ecosystem emission vault |
 | Team | 12-mo cliff, then 36-mo linear (100% vested at month 48) |
 | Advisors | 12-mo cliff, then 24-mo linear |
 | Partners/Marketing | Milestone-gated: users, volume, agent adoption targets |
@@ -290,9 +292,9 @@ Live off-chain points (per the v0.1 mapping: signals +10, followers +5, referral
 - [x] Name trademark-checked — 2026-08-16: "AIgent" dropped (registered USPTO by Ubiquity Global Services, enforced); renamed "Agent Intelligence Trading Token"
 - [ ] Supply/allocation modeled on real fee + staking projections (post Phase 1 data)
 - [x] Canadian legal counsel review — CLEARED 2026-08-16 (counsel: "good to go")
-- [x] **Phase 1 contracts BUILT + tooling pass run** (2026-08-23: **40/40 tests**, Slither 0 High/Medium; Mythril AITT clean, expected vesting notices, generic converter funding warning constrained by immutable AITT). This is not an external audit.
+- [x] **Pre-launch contracts/remediation built:** 58/58 tests; Slither 0 High/Medium; AITT Mythril clean; FeeRouter Mythril pending larger isolated worker after local OOM. Not an external audit.
 - Note: independent external audit required BEFORE Phase 2 moves real value — a Phase 2 gate, not a Phase 1 deploy gate (owner decision 2026-08-20; the free tooling pass is not an external audit).
-- [ ] **Points→AITT end-to-end conversion pending.** UI/gate shell and reserve-funded converter exist, but verified EVM-address binding, `points × 10**8` snapshot submission, on-chain receipt reconciliation, point debit/freeze, and idempotent retry handling are not built. Gate remains closed.
+- [x] **Points→AITT plumbing built pre-launch:** EIP-191 binding, base-unit snapshot, atomic states/idempotency, receipt verification, and confirmed-only debit. Gate remains closed pending audit/counsel/owner checks.
 - [x] **Burn cap locked 2026-08-17 (owner decision)** — 200M cumulative cap across fee-burn + DAO buy-back/burn → 800M supply floor; post-cap 20% redirects to stakers (70/30) — synced with TOKENOMICS.md v1.3
 - [x] **Readiness section added 2026-08-20** — §15 Agentic Payments Readiness (verified 2026-08-20 explorer pulls; positioning draft)
 - [ ] Community/DAO charter drafted

@@ -1,6 +1,6 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const { cpSync, mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync } = require("node:fs");
+const { cpSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, symlinkSync, rmSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 const { spawnSync } = require("node:child_process");
@@ -10,7 +10,7 @@ const { spawnSync } = require("node:child_process");
 describe("Phase 1 deployment script", function () {
   this.timeout(180_000);
 
-  async function runDeploy(overrides = {}) {
+  async function runDeploy(overrides = {}, envOverrides = {}) {
     const root = join(__dirname, "..");
     const scratch = mkdtempSync(join(tmpdir(), "aitt-deploy-test-"));
     const signers = await ethers.getSigners();
@@ -28,6 +28,7 @@ describe("Phase 1 deployment script", function () {
       pointsConversionReserve: "0",
       operator: signers[8].address,
       stakersPool: signers[9].address,
+      governanceOwner: signers[10].address,
       ammPair: ethers.ZeroAddress,
     };
     const cfg = {
@@ -46,12 +47,15 @@ describe("Phase 1 deployment script", function () {
       writeFileSync(join(scratch, "deploy.config.json"), JSON.stringify(cfg, null, 2));
 
       const hardhat = join(root, "node_modules", ".bin", "hardhat");
-      return spawnSync(hardhat, ["run", "scripts/deploy.js", "--network", "hardhat"], {
+      const run = spawnSync(hardhat, ["run", "scripts/deploy.js", "--network", "hardhat"], {
         cwd: scratch,
         encoding: "utf8",
-        env: { ...process.env, PRIVATE_KEY: "" },
+        env: { ...process.env, PRIVATE_KEY: "", ...envOverrides },
         timeout: 150_000,
       });
+      const journalPath = join(scratch, "deployment-journal.json");
+      run.journal = existsSync(journalPath) ? JSON.parse(readFileSync(journalPath, "utf8")) : null;
+      return run;
     } finally {
       rmSync(scratch, { recursive: true, force: true });
     }
@@ -61,7 +65,23 @@ describe("Phase 1 deployment script", function () {
     const run = await runDeploy();
     expect(run.status, `${run.stdout}\n${run.stderr}`).to.equal(0);
     expect(run.stdout).to.include("AMM pair NOT set");
+    expect(run.stdout).to.include("AITTFeeRouter");
+    expect(run.stdout).to.include("EcosystemEmission");
+    expect(run.stdout).to.include("TreasuryVault");
+    expect(run.stdout).to.include("PartnersVault");
+    expect(run.stdout).to.include("CommunityVault");
+    expect(run.stdout).to.include("ReserveVault");
+    expect(run.stdout).to.include("direct wallet allocations: 0 AITT");
     expect(run.stdout).to.include("=== DONE ===");
+    expect(run.journal?.status).to.equal("completed");
+  });
+
+  it("journals a partial deployment before a simulated post-token failure", async function () {
+    const run = await runDeploy({}, { AITT_DEPLOY_FAIL_AFTER: "token" });
+    expect(run.status).to.not.equal(0);
+    expect(run.journal?.status).to.equal("in_progress");
+    expect(run.journal?.contracts?.token).to.match(/^0x[0-9a-fA-F]{40}$/);
+    expect(run.journal?.steps?.[0]?.txHashes?.[0]).to.match(/^0x[0-9a-fA-F]{64}$/);
   });
 
   it("rejects a conversion reserve above the 300M ecosystem pool before deployment", async function () {

@@ -13,7 +13,9 @@ AITT ERC-20, allocation vesting, points→AITT converter, deploy + verify script
 - Vesting: cliff + linear (team 12-mo cliff + 36-mo linear · advisors 12-mo cliff + 24-mo linear)
 - Converter: 1:1 points→AITT, operator-approved snapshots, reserve-funded, pausable
 - Allocation (sums to 1,000,000,000): ecosystem 300M · treasury 200M · team 150M · partners 100M · community 100M · reserve 100M · advisors 50M. Points-conversion reserve draws from the ecosystem pool.
-- Audit gate: tooling pass re-run 2026-08-23 (**40/40 tests, Slither 0H/0M; Mythril AITT clean with expected vesting/generic converter notices**). Pre-launch review verdict is HOLD. External audit timing and real-value gate require owner/counsel resolution. Never present tooling as an external audit.
+- Burn authority: `AITTFeeRouter` is the sole external protocol-burn path; swap/router burns share AITT's 800M floor; dead-address burns are prohibited. Platform fees are 50/20/30 before floor and 64/36 after burn-share redirect.
+- Allocation custody: only converter reserve is directly claimable; ecosystem uses 48-month linear vesting; treasury/partners/community/reserve use separate 48h milestone vaults.
+- Audit gate: 58/58 tests, Slither 0H/0M, AITT Mythril clean; router Mythril incomplete after local OOM. Pre-launch HOLD remains until external audit, refreshed counsel and owner gates pass.
 - Network: IOST L2, chain 182 (`https://l2-mainnet.iost.io`), gas = BNB, explorer `https://l2-scan.iost.io`.
 
 ## Work Guidance
@@ -22,7 +24,7 @@ AITT ERC-20, allocation vesting, points→AITT converter, deploy + verify script
 - Design-doc edits (supply, allocations, schedules, burn mechanics) must stay in sync with `../docs/TOKENOMICS.md` AND `../docs/AITT-Whitepaper-v1.0.md` (same mechanics; the public whitepaper is a condensed copy that omits the internal §15 appendix — edit TOKENOMICS first, then mirror public-facing changes).
 
 ## Verification
-- `npm test` — 40 tests, all must pass before any deploy/PR.
+- `npm test` — 58 tests, all must pass before any deploy/PR.
 - `npx hardhat run scripts/deploy.js --network iostL2` then `scripts/verify.js` (with AITT_ADDRESS) — allocation checks must read OK.
 
 ## Child DOX Index

@@ -507,6 +507,10 @@ async function renderPoints() {
   }
   let d;
   try { d = await api('/api/points'); } catch (e) { el.innerHTML = `<div class="card empty">Points unavailable: ${esc(e.message)}</div>`; return; }
+  let walletBinding = null;
+  try { walletBinding = (await api('/api/aitt/wallet')).binding || null; } catch { /* optional */ }
+  let claimInfo = { claims: [], converterAddress: null };
+  try { claimInfo = await api('/api/aitt/claims'); } catch { /* optional */ }
   const rows = (d.ledger || []).map(e => {
     const detail = e.meta?.signalId ? `signal ${String(e.meta.signalId).slice(0, 8)}…` : e.meta?.referee ? `referee ${String(e.meta.referee).slice(0, 12)}…` : e.meta?.followerId ? `follower ${String(e.meta.followerId).slice(0, 12)}…` : e.meta?.week ? `week ${esc(e.meta.week)}` : e.meta?.rating ? `rating ${e.meta.rating}/5` : (e.meta?.comment ? esc(e.meta.comment).slice(0, 60) : '');
     return `<tr>
@@ -522,6 +526,13 @@ async function renderPoints() {
       <div class="card kpi"><span class="k-label">Points balance</span><span class="k-value">${d.balance}</span><span class="k-sub">1 point → 1 AITT design target (planned, not guaranteed) · not spendable</span></div>
     </div>
     <div class="card" style="margin-bottom:16px">
+      <div class="section-title" style="margin-bottom:8px">Conversion wallet <span class="sub">EIP-191 signature only · no transaction or payment authority</span></div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <span class="mono">${walletBinding ? esc(walletBinding.address) : 'not connected'}</span>
+        ${walletBinding ? '<span class="chip ok">verified</span>' : '<button class="btn sm" id="bindEvmBtn">Connect MetaMask</button>'}
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:16px">
       <div class="section-title" style="margin-bottom:8px">AITT conversion <span class="sub">1 point → 1 AITT design target · pre-launch hold · no token issued</span></div>
       <div class="aitt-conv">
         <div class="conv-cell"><span class="k-label">Design target</span><span class="k-value">≈ ${d.balance} AITT</span></div>
@@ -530,6 +541,13 @@ async function renderPoints() {
       </div>
       <p class="muted" style="font-size:11px;margin-top:8px">Conversion remains closed pending deployment, reserve, verified EVM-wallet binding, atomic on-chain reconciliation, corrected release gates, legal review, and owner sign-off. <strong>Planned, not guaranteed.</strong></p>
     </div>
+    ${claimInfo.claims?.length ? `<div class="card" style="margin-bottom:16px">
+      <div class="section-title" style="margin-bottom:8px">Conversion claims <span class="sub">receipt-reconciled on IOST L2</span></div>
+      ${claimInfo.claims.map(c => `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:6px 0">
+        <span class="mono">${esc(c.id.slice(0, 12))}…</span><span>${c.points} points</span><span class="chip neut">${esc(c.status)}</span>
+        ${c.status === 'approved_onchain' && claimInfo.converterAddress ? `<button class="btn sm" data-convert-claim="${esc(c.id)}" data-converter="${esc(claimInfo.converterAddress)}">Convert in MetaMask</button>` : ''}
+      </div>`).join('')}
+    </div>` : ''}
     <div class="card" style="margin-bottom:16px">
       <div class="section-title" style="margin-bottom:8px">Referral program <span class="sub">share your code — you earn +50, the new trader earns +10 · self-referral blocked</span></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
@@ -549,12 +567,77 @@ async function renderPoints() {
   $('#refCopy')?.addEventListener('click', () => {
     navigator.clipboard?.writeText(d.referralLink).then(() => toast('Referral link copied')).catch(() => toast('Copy failed — select the link manually'));
   });
+  $('#bindEvmBtn')?.addEventListener('click', async () => {
+    if (!window.ethereum) return toast('MetaMask or another EVM wallet is required');
+    const btn = $('#bindEvmBtn');
+    btn.disabled = true;
+    try {
+      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+      const address = accounts?.[0];
+      if (!address) throw new Error('No wallet account selected');
+      const challengeRes = await fetch('/api/aitt/wallet/challenge', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ address }),
+      });
+      const challenge = await challengeRes.json();
+      if (!challengeRes.ok) throw new Error(challenge.error || 'Challenge failed');
+      const signature = await window.ethereum.request({ method: 'personal_sign', params: [challenge.message, address] });
+      const verifyRes = await fetch('/api/aitt/wallet/verify', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ challengeId: challenge.challengeId, signature }),
+      });
+      const verified = await verifyRes.json();
+      if (!verifyRes.ok) throw new Error(verified.error || 'Signature verification failed');
+      toast('EVM conversion wallet verified');
+      await renderPoints();
+    } catch (e) {
+      toast('Wallet binding failed: ' + e.message);
+      btn.disabled = false;
+    }
+  });
+  $$('[data-convert-claim]').forEach((button) => button.addEventListener('click', async () => {
+    if (!window.ethereum || !walletBinding) return toast('Verified MetaMask wallet required');
+    button.disabled = true;
+    try {
+      const txHash = await window.ethereum.request({
+        method: 'eth_sendTransaction',
+        params: [{ from: walletBinding.address, to: button.dataset.converter, data: '0x91bbdcc7', value: '0x0' }],
+      });
+      toast('Conversion submitted — waiting for IOST L2 confirmation');
+      let receipt = null;
+      for (let i = 0; i < 45 && !receipt; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        receipt = await window.ethereum.request({ method: 'eth_getTransactionReceipt', params: [txHash] });
+      }
+      if (!receipt) throw new Error('Confirmation pending; reopen Points to reconcile later');
+      const minedAt = Number.parseInt(receipt.blockNumber, 16);
+      let confirmations = 0;
+      for (let i = 0; i < 45 && confirmations < 12; i++) {
+        const latestHex = await window.ethereum.request({ method: 'eth_blockNumber' });
+        confirmations = Number.parseInt(latestHex, 16) - minedAt + 1;
+        if (confirmations < 12) await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+      if (confirmations < 12) throw new Error(`Waiting for 12 confirmations; currently ${confirmations}`);
+      const reconcile = await fetch(`/api/aitt/claims/${encodeURIComponent(button.dataset.convertClaim)}/reconcile`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ txHash }),
+      });
+      const result = await reconcile.json();
+      if (!reconcile.ok) throw new Error(result.error || 'Receipt reconciliation failed');
+      toast('AITT conversion confirmed and points reconciled');
+      await renderPoints();
+    } catch (e) {
+      toast('Conversion failed: ' + e.message);
+      button.disabled = false;
+    }
+  }));
   // AITT claim — gate-first: while closed the server answers honestly (400 + message), no write.
   $('#claimBtn')?.addEventListener('click', async () => {
     const btn = $('#claimBtn');
     btn.disabled = true;
     try {
-      const res = await fetch('/api/points/claim', { method: 'POST' });
+      const res = await fetch('/api/points/claim', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ idempotencyKey: crypto.randomUUID() }),
+      });
       const r = await res.json().catch(() => ({}));
       toast(r.message || (res.ok ? 'Claimed — see Points ledger' : 'Conversion not available yet'));
     } catch (e) { toast('Claim unavailable: ' + e.message); }
@@ -572,7 +655,7 @@ async function renderAITT() {
   const t = d.token || {};
   const conv = d.conversion || {};
   const ALLOC = [
-    ['Ecosystem & agent rewards', 30, '300M', '48-mo declining emission · revenue-backed'],
+    ['Ecosystem & agent rewards', 30, '300M', '48-mo linear emission vault'],
     ['Treasury (DAO)', 20, '200M', 'milestone-gated'],
     ['Team & core contributors', 15, '150M', '12-mo cliff + 36-mo linear'],
     ['Strategic partners', 10, '100M', 'milestone-gated · contracts only'],
@@ -586,10 +669,10 @@ async function renderAITT() {
       <div class="card kpi"><span class="k-label">Total supply</span><span class="k-value">${esc(t.totalSupply || '1,000,000,000')}</span><span class="k-sub">fixed · no minting</span></div>
       <div class="card kpi"><span class="k-label">Standard</span><span class="k-value">ERC-20</span><span class="k-sub">OpenZeppelin-based · custom AMM tax</span></div>
       <div class="card kpi"><span class="k-label">Decimals</span><span class="k-value">${t.decimals ?? 8}</span><span class="k-sub">home chain ${esc(t.chain || 'IOST L2')}</span></div>
-      <div class="card kpi"><span class="k-label">Contract</span><span class="k-value">${d.contractAddress ? '<a href="' + esc(d.explorerUrl || '') + '/address/' + esc(d.contractAddress) + '" target="_blank" rel="noopener">' + esc(d.contractAddress.slice(0, 8)) + '…' + esc(d.contractAddress.slice(-6)) + '</a>' : 'pending deploy'}</span><span class="k-sub">40/40 tests · tooling-reviewed · external audit pending</span></div>
+      <div class="card kpi"><span class="k-label">Contract</span><span class="k-value">${d.contractAddress ? '<a href="' + esc(d.explorerUrl || '') + '/address/' + esc(d.contractAddress) + '" target="_blank" rel="noopener">' + esc(d.contractAddress.slice(0, 8)) + '…' + esc(d.contractAddress.slice(-6)) + '</a>' : 'pending deploy'}</span><span class="k-sub">58/58 tests · tooling-reviewed · external audit pending</span></div>
     </div>
     <div class="card" style="margin-bottom:16px">
-      <div class="section-title" style="margin-bottom:8px">Allocation <span class="sub">1B fixed-supply design · team/advisor vesting implemented · other release controls pending</span></div>
+      <div class="section-title" style="margin-bottom:8px">Allocation <span class="sub">1B fixed-supply design · every pool contract-locked · converter reserve only claimable after gates</span></div>
       ${ALLOC.map(([name, pct, amt, vest]) => `<div class="alloc-row"><span class="alloc-name">${name}</span><span class="alloc-bar"><i style="width:${pct}%"></i></span><span class="alloc-pct mono">${amt} · ${pct}%</span><span class="alloc-vest">${vest}</span></div>`).join('')}
     </div>
     <div class="card" style="margin-bottom:16px">

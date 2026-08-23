@@ -4,6 +4,12 @@ pragma solidity ^0.8.20;
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
+interface IAITTFeeRouterBinding {
+    function token() external view returns (address);
+    function treasury() external view returns (address);
+    function stakersPool() external view returns (address);
+}
+
 /// @title Agent Intelligence Trading Token (AITT)
 /// @notice ERC-20 utility token of IOST Terminal (iostcallister.com).
 /// @dev Fixed supply, minted exactly once at deployment. Swap tax per
@@ -43,8 +49,13 @@ contract AITT is ERC20, Ownable {
     /// The taxed AMM pair. Set once via {setAmmPair}; thereafter immutable.
     address public ammPair;
 
+    /// Sole external protocol-burn caller. Set once after the router deploys.
+    address public feeRouter;
+
     /// @dev Emitted when the swap-tax pair is locked in.
     event AmmPairSet(address indexed pair);
+    event FeeRouterSet(address indexed router);
+    event ProtocolBurn(address indexed source, uint256 requested, uint256 burned, uint256 redirectedToStakers, uint256 redirectedToTreasury);
 
     /// @dev Design locked: 8 decimals (TOKENOMICS.md §2). OZ ERC-20 defaults to
     ///      18 — override it.
@@ -88,6 +99,46 @@ contract AITT is ERC20, Ownable {
         emit AmmPairSet(pair);
     }
 
+    /// @notice Locks the only external protocol-burn caller. One-time and permanent.
+    function setFeeRouter(address router) external onlyOwner {
+        require(feeRouter == address(0), "AITT: fee router already set");
+        require(router != address(0), "AITT: zero fee router");
+        require(router.code.length > 0, "AITT: fee router has no code");
+        require(IAITTFeeRouterBinding(router).token() == address(this), "AITT: router token mismatch");
+        require(IAITTFeeRouterBinding(router).treasury() == treasury, "AITT: router treasury mismatch");
+        require(IAITTFeeRouterBinding(router).stakersPool() == stakersPool, "AITT: router stakers mismatch");
+        feeRouter = router;
+        emit FeeRouterSet(router);
+    }
+
+    /// @notice Burns AITT held by the locked fee router under the shared 800M floor.
+    /// @dev Platform-fee and DAO burns must route here; dead-address burns are forbidden.
+    function protocolBurn(uint256 amount)
+        external
+        returns (uint256 burned, uint256 redirectedToStakers, uint256 redirectedToTreasury)
+    {
+        require(msg.sender == feeRouter, "AITT: fee router only");
+        (burned, redirectedToStakers, redirectedToTreasury) = _routeBurn(msg.sender, amount);
+        emit ProtocolBurn(msg.sender, amount, burned, redirectedToStakers, redirectedToTreasury);
+    }
+
+    /// @dev Consumes `requested` from `from`: burn within headroom, then redirect
+    ///      any unburnable remainder 70/30. Every burn path uses this function.
+    function _routeBurn(address from, uint256 requested)
+        internal
+        returns (uint256 burned, uint256 redirectedToStakers, uint256 redirectedToTreasury)
+    {
+        uint256 headroom = totalSupply() - SUPPLY_FLOOR;
+        burned = requested > headroom ? headroom : requested;
+        uint256 excess = requested - burned;
+        redirectedToStakers = (excess * REDIRECT_STAKERS_NUM) / REDIRECT_DENOM;
+        redirectedToTreasury = excess - redirectedToStakers;
+
+        if (burned > 0) super._update(from, address(0), burned);
+        if (redirectedToStakers > 0) super._update(from, stakersPool, redirectedToStakers);
+        if (redirectedToTreasury > 0) super._update(from, treasury, redirectedToTreasury);
+    }
+
     /// @notice Applies the 3% swap tax on AMM-pair transfers only.
     /// @dev Every balance movement flows through this hook (mints, burns, and
     ///      transfers). The tax applies only when one side is the AMM pair —
@@ -107,19 +158,9 @@ contract AITT is ERC20, Ownable {
         uint256 treasuryShare = (value * TREASURY_BPS) / BPS;
         uint256 toRecipient = value - burnShare - stakersShare - treasuryShare;
 
-        // Cumulative burn cap: total supply never falls below the 800M floor.
-        uint256 headroom = totalSupply() - SUPPLY_FLOOR;
-        if (burnShare > headroom) {
-            uint256 excess = burnShare - headroom;
-            burnShare = headroom;
-            uint256 toStakers = (excess * REDIRECT_STAKERS_NUM) / REDIRECT_DENOM;
-            stakersShare += toStakers;
-            treasuryShare += excess - toStakers;
-        }
-
         if (stakersShare > 0) super._update(from, stakersPool, stakersShare);
         if (treasuryShare > 0) super._update(from, treasury, treasuryShare);
-        if (burnShare > 0) super._update(from, address(0), burnShare);
+        _routeBurn(from, burnShare);
         super._update(from, to, toRecipient);
     }
 }

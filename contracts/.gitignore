@@ -7,6 +7,7 @@ typechain-types/
 # Secrets & local deploy config
 .env
 deploy.config.json
+deployment-journal.json
 
 # Reports
 slither-report.json

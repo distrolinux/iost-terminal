@@ -7,7 +7,7 @@
     "lib": "lib"
   },
   "scripts": {
-    "test": "node tests/rails-check.mjs && node tests/live-proposals-check.mjs && node tests/agent-wallet-check.mjs && node tests/live-self-custody-check.mjs && node tests/auth-security-check.mjs && node tests/server-security-contract-check.mjs"
+    "test": "node tests/rails-check.mjs && node tests/live-proposals-check.mjs && node tests/agent-wallet-check.mjs && node tests/live-self-custody-check.mjs && node tests/auth-security-check.mjs && node tests/server-security-contract-check.mjs && node tests/aitt-conversion-check.mjs"
   },
   "keywords": [],
   "author": "",
@@ -17,6 +17,7 @@
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "bs58": "^6.0.0",
+    "ethers": "6.17.0",
     "express": "^5.2.1",
     "express-rate-limit": "^8.6.2",
     "express-session": "^1.19.0",

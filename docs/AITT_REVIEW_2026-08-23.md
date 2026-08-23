@@ -2,9 +2,9 @@
 
 ## Verdict
 
-**HOLD — do not deploy AITT, set an AMM pair, fund/open conversion, or create external liquidity yet.**
+**REMEDIATION IMPLEMENTED IN SOURCE — still HOLD for deployment/conversion.** The original findings below are preserved as the discovery record. Owner-approved v1.9 source changes resolve unified burn accounting, allocation custody, conversion plumbing, phase-gate enforcement, deployment preflight, and exact verification. Remaining external gates: independent audit (including FeeRouter Mythril rerun on a larger worker), refreshed counsel approval, governance Safe/config completion, and explicit owner deployment approval. Phase 4 remains disabled.
 
-The fixed-supply ERC-20, swap-tax arithmetic, team/advisor vesting, and converter reserve invariant are tested. The complete launch design is not yet enforceable end-to-end. This is an engineering/economic consistency review, not a legal opinion or an external smart-contract audit.
+The fixed-supply ERC-20, swap-tax arithmetic, corrected team/advisor vesting, FeeRouter, allocation vaults, conversion state machine, and release gates are tested. This is an engineering/economic consistency review, not a legal opinion or an external smart-contract audit.
 
 ## Verified strengths
 
@@ -13,7 +13,7 @@ The fixed-supply ERC-20, swap-tax arithmetic, team/advisor vesting, and converte
 - Contract-level burns stop at an 800M `totalSupply()` floor.
 - Team 150M and advisor 50M allocations use immutable cliff + linear vesting.
 - `PointsConverter` keeps `totalOutstanding <= reserve`, prevents approval below already claimed, and protects conversion/withdraw paths.
-- Hardhat: 40 tests pass, including isolated deployment-script preflight tests.
+- Hardhat: 58 tests pass after owner-approved remediation, including unified burn, vault custody, snapshot units, and exact deployment verification.
 - Slither: no High/Medium findings; expected vesting timestamp and batch-loop gas notices.
 - Mythril: AITT clean; expected vesting timestamp/external-call notices; generic `fundReserve` external-call/state-order warning, constrained by the immutable vanilla AITT dependency but worth defense-in-depth hardening.
 - IOST L2 RPC answers chain ID 182.
