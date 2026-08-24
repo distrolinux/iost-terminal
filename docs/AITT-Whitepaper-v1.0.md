@@ -24,7 +24,7 @@
 
 AITT is designed to power the platform's **agentic payments economy** as the trust and fee layer for machine-executed transactions, with staking and governance planned for Phase 2+. It is **not** the settlement asset — agent spending settles in stablecoin/USD credits so budgets never fluctuate. Any future earned distribution or staking use remains proposed, not active or guaranteed; AITT is not sold.
 
-- **Standard:** **ERC-20 on IOST L2** (fully EVM-compatible, OP Stack rollup; IOST's official recommendation for high-frequency/low-cost scenarios — MetaMask, OpenZeppelin, x402/AP2 SDKs compatible). IOST L1 remains home to the platform's producer node (`iost_4_life`) as the payments facilitator/verifier.
+- **Standard:** **ERC-20 on IOST L2** (fully EVM-compatible, OP Stack rollup; IOST's official recommendation for high-frequency/low-cost scenarios — MetaMask, OpenZeppelin, x402/AP2 SDKs compatible). **AITT requires an EVM wallet (e.g. MetaMask) on IOST L2 chain 182 — it is not supported by the official IOST L1 wallet (iostaccount.io), which manages native IOST mainnet accounts only.** IOST L1 remains home to the platform's producer node (`iost_4_life`) as the payments facilitator/verifier.
 - **Total supply:** 1,000,000,000 (1B) — fixed, no uncapped minting
 - **Core roles:** proposed future trust-staking collateral · fee utility · earned activity rewards · planned Phase 2+ governance
 - **Proposed future Phase 2+ mechanics (not active at Phase 1):** platform-fee parameters of 50% stakers / 20% protocol burn / 30% treasury, staking lock-up, FeeRouter/DAO buy-back burns, and a Phase 4 DEX buy/sell swap tax of 3% (1.8% protocol burn / 0.8% stakers / 0.4% treasury); all protocol burns share the 800M supply floor

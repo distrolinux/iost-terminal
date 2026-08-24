@@ -16,8 +16,9 @@
 - Real-money execution requires a signed-in human, enabled venue, hard order rails, and owner-approved agent proposals.
 - Agent-wallet spending uses server-side limits and an active wallet-bound Pact; commit identity comes from the reservation, not the client.
 - AITT remains pre-launch until its hash-bound audit/counsel/owner/governance approval artifact, deployment manifest, live chain/reserve checks, and explicit CALLY approval all pass.
-- AITT conversion and DEX controls fail closed. Phase 4 buy/swap requires a verified BSC pair and allowlisted PancakeSwap URL; no web surface may deploy contracts or flip release gates.
+- AITT conversion and DEX controls fail closed. Phase 4 buy/swap requires live BSC wrapper/pair/factory/quote verification and an allowlisted PancakeSwap URL targeting that exact wrapper; no web surface may deploy contracts or flip release gates.
 - Secrets, reset tokens, private keys, and raw API credentials must never appear in source, responses, logs, or tests.
+- IOST account opening is FREE (no creation fee since 2026-08-24; official signup iostaccount.io/en/create). `lib/iost-accounts.js` FEE_IOST = 0; the platform creates wallets via auth.iost/signUp on users' behalf, keys generated in-browser only. AITT itself is ERC-20 on L2 (chain 182) — EVM wallets only, not the L1 wallet.
 - Server and boot-cached page changes require a production container restart; static asset changes require cache-version bumps.
 
 ## Work Guidance
