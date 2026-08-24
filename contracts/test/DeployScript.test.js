@@ -85,8 +85,9 @@ describe("Phase 1 deployment script", function () {
     expect(run.stdout).to.include("=== DONE ===");
     expect(run.journal?.status).to.equal("completed");
     expect(run.journal?.releaseApprovalHash).to.match(/^0x[0-9a-fA-F]{64}$/);
-    expect(run.journal?.steps?.find((step) => step.step === "allocationFunding")?.txHashes).to.have.length(7);
-    expect(run.journal?.steps?.find((step) => step.step === "governanceHandoff")?.txHashes).to.have.length(5);
+    expect(run.journal?.steps?.filter((step) => step.step.startsWith("allocation."))).to.have.length(7);
+    expect(run.journal?.steps?.filter((step) => step.step.startsWith("ownership."))).to.have.length(5);
+    expect(run.journal?.steps?.every((step) => step.status === "confirmed" && step.blockNumber != null)).to.equal(true);
   });
 
   it("journals a partial deployment before a simulated post-token failure", async function () {
