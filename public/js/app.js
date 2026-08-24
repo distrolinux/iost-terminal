@@ -1,5 +1,6 @@
 // IOST Terminal frontend — all views, live SSE updates, charts, chat
 import bs58 from '/js/vendor/bs58.mjs'; // vendored base58 (MIT) — for wallet key display
+import { AITT_CHAIN_ID, chainIdNumber, claimGateReason, requestClaimIfOpen, shouldAllowClaim } from '/js/wallet-claims.js';
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -497,23 +498,39 @@ async function renderAgents() {
 // ---------------- Points (tokenomics vision §6: off-chain, 1:1 AITT planned) ----------------
 // Honest framing: points are accrual-only platform credits. NO token is issued;
 // 1:1 AITT conversion is planned at TGE and explicitly labeled "not guaranteed".
+const aittWalletFlow = { address: '', chainId: null, challenge: null, error: '', notice: '' };
+let aittProviderListenersAttached = false;
 async function ensureIostL2Wallet() {
   if (!window.ethereum) throw new Error('MetaMask or another EVM wallet is required');
   const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-  if (Number.parseInt(chainId, 16) === 182) return;
+  if (chainIdNumber(chainId) === AITT_CHAIN_ID) return;
   try {
     await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0xb6' }] });
   } catch (error) {
     if (Number(error?.code) !== 4902) throw error;
-    await window.ethereum.request({
-      method: 'wallet_addEthereumChain',
-      params: [{
-        chainId: '0xb6', chainName: 'IOST L2',
-        nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
-        rpcUrls: ['https://l2-mainnet.iost.io'], blockExplorerUrls: ['https://l2-scan.iost.io'],
-      }],
-    });
+    await window.ethereum.request({ method: 'wallet_addEthereumChain', params: [{ chainId: '0xb6', chainName: 'IOST L2', nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 }, rpcUrls: ['https://l2-mainnet.iost.io'], blockExplorerUrls: ['https://l2-scan.iost.io'] }] });
   }
+}
+function clearAittPending(message = '') { aittWalletFlow.challenge = null; aittWalletFlow.error = message; }
+function attachAittProviderListeners() {
+  if (aittProviderListenersAttached || !window.ethereum?.on) return;
+  aittProviderListenersAttached = true;
+  window.ethereum.on('accountsChanged', (accounts) => {
+    const next = accounts?.[0] || '';
+    aittWalletFlow.address = next;
+    clearAittPending(next ? 'Wallet account changed. Review and sign a new binding message.' : 'Wallet disconnected.');
+    if (state.activeView === 'points') renderPoints();
+  });
+  window.ethereum.on('chainChanged', (chainId) => {
+    aittWalletFlow.chainId = chainIdNumber(chainId);
+    clearAittPending(`Network changed to chain ${aittWalletFlow.chainId}; AITT binding requires IOST L2 chain 182.`);
+    if (state.activeView === 'points') renderPoints();
+  });
+  window.ethereum.on('disconnect', () => {
+    aittWalletFlow.address = ''; aittWalletFlow.chainId = null;
+    clearAittPending('Wallet disconnected. Reconnect only when you are ready to bind.');
+    if (state.activeView === 'points') renderPoints();
+  });
 }
 async function renderPoints() {
   const el = $('#view-points');
@@ -523,12 +540,21 @@ async function renderPoints() {
     $('#authGateBtn')?.addEventListener('click', () => window.Auth?.open('login'));
     return;
   }
-  let d;
-  try { d = await api('/api/points'); } catch (e) { el.innerHTML = `<div class="card empty">Points unavailable: ${esc(e.message)}</div>`; return; }
-  let walletBinding = null;
-  try { walletBinding = (await api('/api/aitt/wallet')).binding || null; } catch { /* optional */ }
-  let claimInfo = { claims: [], converterAddress: null };
-  try { claimInfo = await api('/api/aitt/claims'); } catch { /* optional */ }
+  attachAittProviderListeners();
+  let d, walletResponse, claimInfo, gate;
+  try {
+    [d, walletResponse, claimInfo, gate] = await Promise.all([api('/api/points'), api('/api/aitt/wallet'), api('/api/aitt/claims'), api('/api/aitt/info')]);
+  } catch (e) {
+    if (/^40[13]\b/.test(e.message)) {
+      clearAittPending('Your signed-in session expired or is not authorized. Sign in again before viewing wallet or claims.');
+      el.innerHTML = '<div class="card empty" role="alert">Sign in required — <button class="btn sm" id="authGateBtn">open sign in</button></div>';
+      $('#authGateBtn')?.addEventListener('click', () => window.Auth?.open('login'));
+    } else el.innerHTML = `<div class="card empty">AITT dashboard unavailable: ${esc(e.message)}</div>`;
+    return;
+  }
+  const walletBinding = walletResponse.binding || null;
+  const gateReason = claimGateReason(gate);
+  const claims = claimInfo.claims || [];
   const rows = (d.ledger || []).map(e => {
     const detail = e.meta?.signalId ? `signal ${String(e.meta.signalId).slice(0, 8)}…` : e.meta?.referee ? `referee ${String(e.meta.referee).slice(0, 12)}…` : e.meta?.followerId ? `follower ${String(e.meta.followerId).slice(0, 12)}…` : e.meta?.week ? `week ${esc(e.meta.week)}` : e.meta?.rating ? `rating ${e.meta.rating}/5` : (e.meta?.comment ? esc(e.meta.comment).slice(0, 60) : '');
     return `<tr>
@@ -543,29 +569,34 @@ async function renderPoints() {
     <div class="stat-cards">
       <div class="card kpi"><span class="k-label">Points balance</span><span class="k-value">${d.balance}</span><span class="k-sub">1 point → 1 AITT design target (planned, not guaranteed) · not spendable</span></div>
     </div>
-    <div class="card" style="margin-bottom:16px">
-      <div class="section-title" style="margin-bottom:8px">Conversion wallet <span class="sub">EIP-191 signature only · no transaction or payment authority</span></div>
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <span class="mono">${walletBinding ? esc(walletBinding.address) : 'not connected'}</span>
-        ${walletBinding ? '<span class="chip ok">verified</span>' : '<button class="btn sm" id="bindEvmBtn">Connect MetaMask</button>'}
+    <section class="card" style="margin-bottom:16px" aria-labelledby="aittWalletTitle">
+      <div class="section-title" id="aittWalletTitle" style="margin-bottom:8px">AITT conversion wallet <span class="sub">EIP-191 signature only · no transaction or payment authority</span></div>
+      <div aria-live="polite">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <span class="k-label">Binding</span><span class="mono">${walletBinding ? esc(walletBinding.address) : 'unbound'}</span>
+          ${walletBinding ? '<span class="chip ok">verified</span>' : '<span class="chip neut">not bound</span>'}
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px"><span class="k-label">Network</span><span class="mono">${aittWalletFlow.chainId === AITT_CHAIN_ID ? 'IOST L2 · chain 182' : aittWalletFlow.chainId ? `wrong network · chain ${aittWalletFlow.chainId}` : 'not checked'}</span></div>
+        <p class="muted" style="font-size:11px">${walletBinding ? 'This address is bound to this signed-in account. Disconnecting in MetaMask does not delete the server binding; rebinds require review.' : 'Connect an EIP-1193 wallet, confirm chain 182, then explicitly review and sign the server-provided message.'}</p>
+        ${walletBinding ? '<span class="chip neut">rebind requires review</span>' : '<button class="btn sm" id="bindEvmBtn">Connect wallet</button>'}
+        ${aittWalletFlow.challenge ? `<div class="card" style="margin-top:12px;background:var(--surface-2)"><label for="aittChallengeMessage" class="k-label">Exact message to sign</label><pre id="aittChallengeMessage" tabindex="0" style="white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto">${esc(aittWalletFlow.challenge.message)}</pre><button class="btn sm" id="signEvmBtn">Sign this message</button></div>` : ''}
+        ${aittWalletFlow.error || aittWalletFlow.notice ? `<p role="status" class="muted" style="margin-top:8px">${esc(aittWalletFlow.error || aittWalletFlow.notice)}</p>` : ''}
       </div>
-    </div>
+    </section>
     <div class="card" style="margin-bottom:16px">
       <div class="section-title" style="margin-bottom:8px">AITT conversion <span class="sub">1 point → 1 AITT design target · pre-launch hold · no token issued</span></div>
       <div class="aitt-conv">
         <div class="conv-cell"><span class="k-label">Design target</span><span class="k-value">≈ ${d.balance} AITT</span></div>
         <div class="conv-cell"><span class="k-label">Status</span><span class="chip ${d.conversion?.open ? 'ok' : 'neut'}">${esc((d.conversion?.status || 'planned at TGE — not open yet'))}</span></div>
-        <button class="btn sm" id="claimBtn" ${d.conversion?.open ? '' : 'disabled'} aria-label="Claim AITT for your points" title="${d.conversion?.open ? '' : 'Conversion is under pre-launch review — planned, not guaranteed'}">Claim AITT</button>
+        <button class="btn sm" id="claimBtn" ${gateReason ? 'disabled' : ''} aria-label="Claim AITT for your points" title="${esc(gateReason)}">Claim AITT</button>
       </div>
-      <p class="muted" style="font-size:11px;margin-top:8px">Conversion remains closed pending deployment, reserve, verified EVM-wallet binding, atomic on-chain reconciliation, corrected release gates, legal review, and owner sign-off. <strong>Planned, not guaranteed.</strong></p>
+      <p class="muted" style="font-size:11px;margin-top:8px" role="status">${esc(gateReason || 'Conversion is enabled by the server release gates.')}</p>
     </div>
-    ${claimInfo.claims?.length ? `<div class="card" style="margin-bottom:16px">
-      <div class="section-title" style="margin-bottom:8px">Conversion claims <span class="sub">receipt-reconciled on IOST L2</span></div>
-      ${claimInfo.claims.map(c => `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:6px 0">
-        <span class="mono">${esc(c.id.slice(0, 12))}…</span><span>${c.points} points</span><span class="chip neut">${esc(c.status)}</span>
-        ${c.status === 'approved_onchain' && claimInfo.converterAddress ? `<button class="btn sm" data-convert-claim="${esc(c.id)}" data-converter="${esc(claimInfo.converterAddress)}">Convert in MetaMask</button>` : ''}
-      </div>`).join('')}
-    </div>` : ''}
+    <div class="card" style="margin-bottom:16px">
+      <div class="section-title" style="margin-bottom:8px">Conversion claims <span class="sub">only this signed-in account</span></div>
+      <div class="stat-cards"><div class="conv-cell"><span class="k-label">Available points</span><span class="k-value">${claimInfo.availablePoints ?? d.balance}</span></div><div class="conv-cell"><span class="k-label">Approved</span><span class="k-value">${claims.filter(c => c.status === 'approved_onchain').reduce((n, c) => n + c.points, 0)}</span></div><div class="conv-cell"><span class="k-label">Claimed</span><span class="k-value">${claims.filter(c => c.status === 'claimed_onchain').reduce((n, c) => n + c.points, 0)}</span></div></div>
+      ${claims.length ? claims.map(c => `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:6px 0"><span class="mono">${esc(c.id.slice(0, 12))}…</span><span>${c.points} points</span><span class="chip neut">${esc(c.status)}</span></div>`).join('') : '<p class="muted">No claims yet. Conversion remains closed during the pre-launch hold.</p>'}
+    </div>
     <div class="card" style="margin-bottom:16px">
       <div class="section-title" style="margin-bottom:8px">Referral program <span class="sub">share your code — you earn +50, the new trader earns +10 · self-referral blocked</span></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
@@ -591,6 +622,8 @@ async function renderPoints() {
     btn.disabled = true;
     try {
       await ensureIostL2Wallet();
+      aittWalletFlow.chainId = chainIdNumber(await window.ethereum.request({ method: 'eth_chainId' }));
+      if (aittWalletFlow.chainId !== AITT_CHAIN_ID) throw new Error('Wrong network. Switch MetaMask to IOST L2 chain 182, then try again.');
       const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
       const address = accounts?.[0];
       if (!address) throw new Error('No wallet account selected');
@@ -599,6 +632,19 @@ async function renderPoints() {
       });
       const challenge = await challengeRes.json();
       if (!challengeRes.ok) throw new Error(challenge.error || 'Challenge failed');
+      aittWalletFlow.address = address; aittWalletFlow.challenge = challenge; aittWalletFlow.error = ''; aittWalletFlow.notice = 'Review the exact message before signing.';
+      await renderPoints();
+    } catch (e) {
+      aittWalletFlow.challenge = null; aittWalletFlow.error = e?.code === 4001 ? 'Signature or wallet request rejected.' : e.message;
+      toast('Wallet binding unavailable: ' + aittWalletFlow.error);
+      await renderPoints();
+    }
+  });
+  $('#signEvmBtn')?.addEventListener('click', async () => {
+    const btn = $('#signEvmBtn'); const challenge = aittWalletFlow.challenge; const address = aittWalletFlow.address;
+    if (!challenge || !address || !window.ethereum) return;
+    btn.disabled = true;
+    try {
       const signature = await window.ethereum.request({ method: 'personal_sign', params: [challenge.message, address] });
       const verifyRes = await fetch('/api/aitt/wallet/verify', {
         method: 'POST', headers: { 'content-type': 'application/json' },
@@ -606,60 +652,26 @@ async function renderPoints() {
       });
       const verified = await verifyRes.json();
       if (!verifyRes.ok) throw new Error(verified.error || 'Signature verification failed');
+      aittWalletFlow.challenge = null; aittWalletFlow.notice = 'Wallet bound to this signed-in account.';
       toast('EVM conversion wallet verified');
       await renderPoints();
     } catch (e) {
-      toast('Wallet binding failed: ' + e.message);
-      btn.disabled = false;
+      aittWalletFlow.challenge = null; aittWalletFlow.error = e?.code === 4001 ? 'Signature rejected; nothing was bound.' : e.message;
+      toast('Wallet binding failed: ' + aittWalletFlow.error);
+      await renderPoints();
     }
   });
-  $$('[data-convert-claim]').forEach((button) => button.addEventListener('click', async () => {
-    if (!window.ethereum || !walletBinding) return toast('Verified MetaMask wallet required');
-    button.disabled = true;
-    try {
-      await ensureIostL2Wallet();
-      const txHash = await window.ethereum.request({
-        method: 'eth_sendTransaction',
-        params: [{ from: walletBinding.address, to: button.dataset.converter, data: '0x91bbdcc7', value: '0x0' }],
-      });
-      toast('Conversion submitted — waiting for IOST L2 confirmation');
-      let receipt = null;
-      for (let i = 0; i < 45 && !receipt; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        receipt = await window.ethereum.request({ method: 'eth_getTransactionReceipt', params: [txHash] });
-      }
-      if (!receipt) throw new Error('Confirmation pending; reopen Points to reconcile later');
-      const minedAt = Number.parseInt(receipt.blockNumber, 16);
-      let confirmations = 0;
-      for (let i = 0; i < 45 && confirmations < 12; i++) {
-        const latestHex = await window.ethereum.request({ method: 'eth_blockNumber' });
-        confirmations = Number.parseInt(latestHex, 16) - minedAt + 1;
-        if (confirmations < 12) await new Promise((resolve) => setTimeout(resolve, 2000));
-      }
-      if (confirmations < 12) throw new Error(`Waiting for 12 confirmations; currently ${confirmations}`);
-      const reconcile = await fetch(`/api/aitt/claims/${encodeURIComponent(button.dataset.convertClaim)}/reconcile`, {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ txHash }),
-      });
-      const result = await reconcile.json();
-      if (!reconcile.ok) throw new Error(result.error || 'Receipt reconciliation failed');
-      toast('AITT conversion confirmed and points reconciled');
-      await renderPoints();
-    } catch (e) {
-      toast('Conversion failed: ' + e.message);
-      button.disabled = false;
-    }
-  }));
+
   // AITT claim — gate-first: while closed the server answers honestly (400 + message), no write.
   $('#claimBtn')?.addEventListener('click', async () => {
     const btn = $('#claimBtn');
+    if (!shouldAllowClaim(gate)) return;
     btn.disabled = true;
     try {
-      const res = await fetch('/api/points/claim', {
-        method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ idempotencyKey: crypto.randomUUID() }),
-      });
-      const r = await res.json().catch(() => ({}));
-      toast(r.message || (res.ok ? 'Claimed — see Points ledger' : 'Conversion not available yet'));
+      let r;
+      const result = await requestClaimIfOpen({ gate, request: async () => { const res = await fetch('/api/points/claim', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ idempotencyKey: crypto.randomUUID() }) }); r = await res.json().catch(() => ({})); if (!res.ok) throw new Error(r.error || r.message || 'Claim unavailable'); } });
+      if (!result.sent) return toast(result.reason);
+      toast(r.message || 'Claim submitted — see claims status');
     } catch (e) { toast('Claim unavailable: ' + e.message); }
     btn.disabled = false;
   });
@@ -2438,7 +2450,7 @@ function applyAuthGate() {
     const el = $('#' + id);
     if (el) { el.disabled = !ok; el.title = ok ? '' : 'Sign in required'; }
   });
-  if (['portfolio', 'journal', 'performance'].includes(state.activeView) && !ok) refreshView(state.activeView);
+  if (['portfolio', 'journal', 'performance', 'points', 'wallet'].includes(state.activeView) && !ok) refreshView(state.activeView);
   // topbar balance follows the signed-in user's account
   const bal = $('#tbBalance');
   if (!ok && bal) bal.textContent = '--';
@@ -2448,6 +2460,7 @@ function applyAuthGate() {
 window.addEventListener('authchange', (e) => {
   applyAuthGate();
   if (e.detail?.loggedIn) renderCommandRail(); // show the user's balance immediately on sign-in
+  if (e.detail?.loggedIn && ['portfolio', 'journal', 'performance', 'points', 'wallet'].includes(state.activeView)) refreshView(state.activeView);
 });
 setTimeout(applyAuthGate, 2500); // safety re-run once auth.js has settled
 

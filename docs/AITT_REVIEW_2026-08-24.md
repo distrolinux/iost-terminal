@@ -1,6 +1,6 @@
 # AITT Token Smart-Contract Independent Review — 2026-08-24
 
-> **Post-review remediation:** The same-day readiness pass addressed the actionable source findings: protocol-burn wording now excludes arbitrary sink transfers; verification checks every token binding/allocation/clean state with a derived count; governance claims are labeled proposed; new approvals can be closed irreversibly; claim snapshots are resumable with receipt-event and canonical claim evidence; deployment approval is bound to the exact config plus creation and deployed bytecode; every deployment transaction is journaled at submission/confirmation; DEX activation requires live pair verification; and live release accounting survives legitimate claims/releases. The full platform suite and **73 contract tests** pass. Remaining holds are external audit/toolchain migration, refreshed counsel, governance Safe configuration, final snapshot/reserve, and Phase 4 bridge/liquidity design. No public-chain deployment occurred.
+> **Post-review remediation:** The same-day readiness pass addressed the actionable source findings: protocol-burn wording now excludes arbitrary sink transfers; verification checks every token binding/allocation/clean state with a derived count; governance claims are labeled proposed; new approvals can be closed irreversibly; claim snapshots are resumable with receipt-event and canonical claim evidence; deployment approval is bound to the exact config plus creation and deployed bytecode; every deployment transaction is journaled at submission/confirmation; DEX activation requires live pair verification; and live release accounting survives legitimate claims/releases. The full platform suite and **73 contract tests** pass. Refreshed counsel review cleared the Phase 1 utility framing on 2026-08-24; it did not approve future staking revenue/APY, external transferability, or Phase 4 liquidity. Remaining holds include external audit/toolchain migration, governance Safe configuration, final snapshot/reserve, deployment and owner gates, Phase 4 bridge/liquidity design, and separate counsel/owner/audit approval for those future proposals. No public-chain deployment occurred.
 
 ## Current disposition
 
@@ -12,7 +12,9 @@
 | Deployment approval | Resolved in source: approval is bound to the exact config, chain and compiled contract bundle before the first transaction. |
 | Deployment/claim recovery | Resolved in source: every transaction is journaled at submission/confirmation and chunked claim approvals resume only from confirmed manifest evidence. |
 | Wallet/DEX activation | Resolved in source: Add Token requires live deployment verification; DEX activation requires live pair/factory/assets verification and exact swap-token URL binding. |
-| External audit, counsel, Safe, final reserve, Phase 4 bridge/liquidity | **Still HOLD.** These require external evidence and explicit CALLY approval. |
+| Phase 1 utility counsel framing | **CLEARED 2026-08-24.** Limited to the inactive, pre-launch Phase 1 utility framing; this is not blanket approval for revenue, yield, transferability or liquidity. |
+| Future staking revenue/APY, external transferability and Phase 4 liquidity | **Still HOLD / inactive proposals.** Each requires separate counsel, owner and audit approval before activation. |
+| External audit, Safe, final reserve, deployment and owner gates | **Still HOLD.** These require external evidence and explicit CALLY approval. |
 
 The remainder of this document is the **historical pre-remediation review snapshot**. Findings marked open below describe the source as it existed when reviewed and are superseded by the current disposition above plus `AITT_LAUNCH_READINESS.md`.
 

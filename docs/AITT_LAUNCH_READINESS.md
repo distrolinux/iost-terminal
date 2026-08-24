@@ -1,6 +1,6 @@
 # AITT Launch-Readiness Matrix
 
-> Status: **SOURCE COMPLETE FOR PRE-LAUNCH REVIEW — HOLD.** No token is deployed, conversion is closed, and Phase 4 liquidity is disabled. This matrix is the operational checklist; `TOKENOMICS.md` remains the economic source of truth.
+> Status: **SOURCE COMPLETE FOR PRE-LAUNCH REVIEW — HOLD.** Counsel cleared the Phase 1 utility framing on 2026-08-24; this is not approval for future staking revenue/APY, external transferability, or Phase 4 liquidity. No token is deployed, conversion is closed, and Phase 4 liquidity is disabled. This matrix is the operational checklist; `TOKENOMICS.md` remains the economic source of truth.
 
 ## Component coverage
 
@@ -13,8 +13,8 @@
 | Token website | Complete in source | `/aitt` and `/token`; identity, allocation, utility, roadmap, wallet dashboard, explorer and swap status | Production restart/cache refresh when CALLY chooses to publish source changes |
 | Wallet connection | Complete in source | Public EVM connection/network switch/add-token controls; signed conversion-wallet binding in Points view | Add-token remains disabled until the deployment manifest and live chain probe verify the contract |
 | Token dashboard | Complete in source | Public status dashboard plus Terminal AITT view | Live contract/reserve data appears only after verified deployment config |
-| Buy/swap interface | Prepared, fail-closed | Requires Phase 4 status, BSC wrapper/pair/factory/quote addresses, live pair bytecode/assets/factory verification, and an approved PancakeSwap HTTPS URL whose `outputCurrency` exactly matches the wrapper | Audited bridge/wrapper, real liquidity pair, refreshed counsel, Phase 4 approval |
-| Tokenomics page | Complete | `docs/TOKENOMICS.md` v2.0 | Keep public mechanics synchronized after any owner-approved design change |
+| Buy/swap interface | Prepared, fail-closed | Requires Phase 4 status, BSC wrapper/pair/factory/quote addresses, live pair bytecode/assets/factory verification, and an approved PancakeSwap HTTPS URL whose `outputCurrency` exactly matches the wrapper | Audited bridge/wrapper, real liquidity pair, and separate counsel/owner/audit approval for Phase 4 |
+| Tokenomics page | Complete | `docs/TOKENOMICS.md` v2.3 | Keep public mechanics synchronized after any owner-approved design change |
 | Whitepaper | Complete | `/whitepaper` serves `docs/AITT-Whitepaper-v1.0.md` | External review and final deployed-address appendix |
 | Deployment scripts | Complete, not run on a public chain | Address/Phase-4 preflight, release approval bound to exact config plus creation/deployed bytecode, complete transaction journal, custody deployment, governance handoff, provider-only exact verification | Explicit owner approval; private key supplied by owner only |
 | AMM lock script | Complete, Phase 4 only | `scripts/setAmmPair.js` validates chain, bytecode, factory pair, assets, owner and typed confirmation | Phase 4 approval; irreversible after execution |
@@ -34,7 +34,7 @@ Trading opens only when every Phase 4 check passes: explicit trading request, Ph
 ## External items that code cannot manufacture
 
 - Independent smart-contract audit, including FeeRouter symbolic-analysis rerun.
-- Refreshed Canadian counsel decision for staker revenue, transferability and external liquidity.
+- Separate Canadian counsel, owner and audit approval before activating any future staking revenue/APY, external transferability or Phase 4 liquidity proposal. The Phase 1 utility framing alone was cleared on 2026-08-24.
 - Governance Safe owners/thresholds and final public addresses.
 - Final eligible-points snapshot and funded converter reserve.
 - Audited BSC bridge/wrapped-token global-supply/burn design and real PancakeSwap liquidity.

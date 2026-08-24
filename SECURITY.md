@@ -34,6 +34,9 @@ This project is an AI-agent-native trading platform. The rules in `AGENTS.md` ar
 - **Secrets never appear in source, responses, logs, tests, or screenshots** — exchange keys (Kraken v2, withdrawals disabled by design), agent API keys, wallet private keys, reset tokens, and raw credentials are injected at runtime via environment only. An exposed secret is treated as compromised and rotated immediately.
 - **Money boundaries are human-gated** — real-money execution requires a signed-in human, enabled venue, hard order rails, and owner-approved agent proposals. No agent code may bypass per-trade approval.
 - **Agent keys are least-privilege** — scoped per agent (`read` / `trade-paper` / `trade-live`); wallet spending is bounded by server-side Pacts and spend limits, never by client-side checks.
+- **Authentication is step-bound** — TOTP and backup-code completion require a short-lived, server-side pending state created by a successful password step; an email plus second factor alone is never sufficient.
+- **Agent data is scoped** — pending autopilot proposals and strategy reasoning are owner-only; anonymous MCP exposes no proposal queue or execution reasoning.
+- **Sensitive stores are owner-only** — session secrets, sessions, user records, agent-key stores, and audit material must be mode `0600`; deployment must fail closed if permissions cannot be secured, and session-secret rotation is required after permission exposure.
 - **Fail closed** — live orders reject when a trustworthy price is unavailable; the notional cap always applies; reservation leases prevent duplicate orders.
 - **Before release** — `npm test` (offline safety suite), `node --check server.js` + syntax-check changed modules, and `npm audit --omit=dev --audit-level=high`.
 

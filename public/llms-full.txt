@@ -47,7 +47,7 @@
 - [/app](/app) — AI command center: scanner, scores, risk, portfolio, on-chain, news, assistant, journal
 - [/hub](/hub) — 3D automation hub (8 strategy bots)
 - [/aitt](/aitt) and [/token](/token) — AITT token page (SSR, no JS required)
-- [/whitepaper](/whitepaper) — AITT tokenomics draft v1.9 (pre-launch remediation, markdown)
+- [/whitepaper](/whitepaper) — AITT tokenomics draft v2.3 (pre-launch remediation, markdown)
 
 ## Data model
 
@@ -159,7 +159,7 @@
 
 Endpoint: `POST /mcp` (streamable HTTP, JSON-RPC 2.0). Tools:
 `market_snapshot`, `asset_scores`, `analyze_symbol`, `news_sentiment`, `chain_status`,
-`proposals`, `platform_help`, `health`. Execution stays on the REST API with scoped
+`platform_help`, `health`. Execution stays on the REST API with scoped
 agent keys + owner-approved proposals.
 
 ## AITT — Agent Intelligence Trading Token

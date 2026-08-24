@@ -13,7 +13,7 @@
 <meta property="og:image" content="https://iostcallister.com/img/aitt-hex.png">
 <meta name="twitter:card" content="summary_large_image">
 <title>AITT — Agent Intelligence Trading Token | IOST Terminal</title>
-<script src="/js/token.js?v=1.0" defer></script>
+<script src="/js/token.js?v=1.1" defer></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Sora:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -155,7 +155,7 @@ footer a:hover { color: var(--mint); }
     <h1>AITT — Agent Intelligence <span class="tick">Trading Token</span></h1>
     <p class="lede">The proposed utility layer for machine-executed finance on IOST Terminal: trust staking, fee utility, and planned Phase 2+ stake-weighted governance. Phase 1 has no on-chain DAO voting.</p>
     <div class="cta">
-      <a class="btn primary" href="/whitepaper">Read the tokenomics draft v2.2</a>
+      <a class="btn primary" href="/whitepaper">Read the tokenomics draft v2.3</a>
       <a class="btn ghost" href="/app">Open IOST Terminal</a>
     </div>
 
@@ -200,11 +200,11 @@ footer a:hover { color: var(--mint); }
 
   <!-- wallet + token access -->
   <section id="access">
-    <h2>Wallet &amp; token dashboard</h2>
-    <p class="sub">Prepared now, fail-closed until verified deployment. Connecting only requests your public wallet address; no payment or approval transaction is requested. <strong>AITT is an ERC-20 on IOST L2 (EVM) — it requires an EVM wallet such as MetaMask on chain 182; it is not supported by the official IOST L1 wallet (iostaccount.io), which manages native IOST mainnet accounts only.</strong></p>
+    <h2>Wallet readiness</h2>
+    <p class="sub">Read-only wallet readiness preview. This page only reflects the connected EVM account and network; wallet binding and claims remain inside the signed-in Terminal. No signing, payment, approval, or claim request is made here. <strong>AITT is an ERC-20 on IOST L2 (EVM) — it requires an EVM wallet such as MetaMask on chain 182; it is not supported by the official IOST L1 wallet (iostaccount.io), which manages native IOST mainnet accounts only.</strong></p>
     <div class="access-grid">
       <div class="card">
-        <span class="tag">Wallet connection</span>
+        <span class="tag">Wallet readiness</span>
         <h3>IOST L2 wallet</h3>
         <div class="access-row"><span class="name">Wallet</span><span class="mono" id="walletAddress">not connected</span></div>
         <div class="access-row"><span class="name">Network</span><span class="mono" id="walletNetwork">chain 182 required</span></div>
@@ -220,7 +220,7 @@ footer a:hover { color: var(--mint); }
         <div class="access-row"><span class="name">Explorer</span><span>IOST L2 Scan</span></div>
         <div class="cta">
           <a class="btn ghost" id="tokenExplorerBtn" href="https://l2-scan.iost.io" target="_blank" rel="noopener">Open IOST L2 explorer</a>
-          <button class="btn primary" id="addTokenBtn" type="button" disabled>Add AITT to wallet</button>
+          <button class="btn primary" id="addTokenBtn" type="button" disabled>Add AITT to wallet (disabled until launch)</button>
         </div>
       </div>
     </div>
@@ -248,7 +248,7 @@ footer a:hover { color: var(--mint); }
     <div class="card">
       <div class="road">
         <div class="step live"><span class="num">0</span><div><h4>Points — live now</h4><p>Off-chain points ledger: signals +10 · followers +5 · referrals +50/+10 · weekly top paper trader +500. 1:1 AITT conversion planned at TGE.</p></div></div>
-        <div class="step"><span class="num">1</span><div><h4>ERC-20 deployment — pre-launch hold</h4><p>Remediation contracts compile and the full contract suite passes. External audit, refreshed counsel, deployment and owner release gates remain closed; Phase 4 is disabled.</p></div></div>
+        <div class="step"><span class="num">1</span><div><h4>ERC-20 deployment — pre-launch hold</h4><p>Remediation contracts compile and the full contract suite passes. Counsel cleared the Phase 1 utility framing on 2026-08-24; external audit, hash-bound approval evidence, deployment and owner release gates remain closed. Phase 4 is disabled.</p></div></div>
         <div class="step"><span class="num">2</span><div><h4>Agent wallet</h4><p>Trust staking, spend limits, approval flows, slashing; consent/intent/payment token mandates.</p></div></div>
         <div class="step"><span class="num">3</span><div><h4>x402 agent payments on IOST</h4><p>Pay-per-request API payments; IOST Terminal's producer node as the ecosystem x402 facilitator.</p></div></div>
         <div class="step"><span class="num">4</span><div><h4>External liquidity</h4><p>DEX listing + EVM bridges (BSC first — PancakeSwap, CMC price data) only after full legal review.</p></div></div>
@@ -259,11 +259,11 @@ footer a:hover { color: var(--mint); }
   <!-- conversion -->
   <section id="conversion">
     <h2>Points → AITT conversion</h2>
-    <p class="sub">Design target: earned platform points convert 1:1. The on-chain conversion plumbing (EVM-wallet binding, base-unit snapshots, atomic claim states, receipt verification, confirmed-only debit) is built and tooling-reviewed; deployment, reserve funding, external audit, counsel, and owner gates remain closed.</p>
+    <p class="sub">Design target: earned platform points convert 1:1. The on-chain conversion plumbing (EVM-wallet binding, base-unit snapshots, atomic claim states, receipt verification, confirmed-only debit) is built and tooling-reviewed. Phase 1 utility counsel framing was cleared on 2026-08-24; deployment, reserve funding, external audit, hash-bound approval evidence and owner gates remain closed.</p>
     <div class="card conv">
       <h3>Status: gate closed — pre-launch review hold</h3>
       <div class="rate">1 point → 1 AITT</div>
-      <p class="note">Conversion stays closed until the token, reserve, verified EVM-wallet binding, atomic claim/reconciliation flow, corrected release gates, legal review, and explicit owner sign-off are complete. Points remain accrual-only and non-spendable: <strong>planned, not guaranteed</strong>.</p>
+      <p class="note">Conversion stays closed until the token, reserve, verified EVM-wallet binding, atomic claim/reconciliation flow, corrected release gates, independent audit, hash-bound evidence of the cleared Phase 1 utility counsel framing, and explicit owner sign-off are complete. Future staking revenue/APY, external transferability and Phase 4 liquidity require separate counsel, owner and audit approval. Points remain accrual-only and non-spendable: <strong>planned, not guaranteed</strong>.</p>
     </div>
   </section>
 

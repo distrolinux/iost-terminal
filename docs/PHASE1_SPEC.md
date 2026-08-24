@@ -1,6 +1,6 @@
 # Phase 1 build spec — AITT on IOST L2
 > Status: **BUILT + TOOLING-REVIEWED, PRE-LAUNCH HOLD, not deployed.** Do not deploy until the blockers in `AITT_REVIEW_2026-08-23.md` are resolved and the owner explicitly approves.
-> Source of truth for numbers: `docs/TOKENOMICS.md` v2.2 remediation design.
+> Source of truth for numbers: `docs/TOKENOMICS.md` v2.3 remediation design.
 
 ## What this delivers
 
@@ -104,7 +104,7 @@ Oyente is unmaintained (Python 2) — its successor Mythril is run instead.
 - [x] Points conversion plumbing: EIP-191 address binding, `points × 10**8` snapshots, idempotent reservation, approval/conversion receipt verification, confirmed-only debit and UI status are built. The gate remains closed.
 - [ ] Reserve amount = live points-ledger total (needs the final snapshot)
 - [ ] Independent external audit and FeeRouter symbolic-analysis rerun
-- [x] Refreshed counsel approval for revenue sharing/transferability (cleared 2026-08-24 — utility framing confirmed; staker revenue reframed future/inactive)
+- [x] Refreshed counsel review for the Phase 1 utility framing (cleared 2026-08-24). Future staking revenue/APY, external transferability and Phase 4 liquidity remain inactive proposals requiring separate counsel, owner and audit approval.
 - [ ] Governance Safe/config and final beneficiary review
 - [ ] Supply/allocation modeling on ≥3 months real fee data
 - [ ] Contract addresses recorded in TOKENOMICS.md §2 + whitepaper once deployed

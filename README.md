@@ -12,11 +12,11 @@ money moves without exchange keys + explicit enablement.
 | [`docs/PHASE2_WALLET.md`](docs/PHASE2_WALLET.md) | **Phase 2 non-custodial wallet design** (2026-08-20): Safe 2-of-3 + AllowanceModule + Zodiac scoping, agent session keys, TEE/MPC custody, trust-stake ceilings, recovery, funding layer (deposits/bridge/gas/on-ramp), and 7 sections of Coinbase CDP research folded in (§9.20–9.26: security policies, policy engine, agentic wallet CLI/skills, x402 seller side + MCP) |
 | [`docs/PHASE2_SPEC.md`](docs/PHASE2_SPEC.md) | Phase 2 agent-wallet engine (off-chain): trust staking, spend limits, approvals, AP2 mandate chain (Phase 3) — engine built + tested |
 | [`docs/AITT_LAUNCH_READINESS.md`](docs/AITT_LAUNCH_READINESS.md) | Component-by-component AITT readiness matrix, machine-enforced holds and remaining external gates |
-| [`docs/AITT_REVIEW_2026-08-23.md`](docs/AITT_REVIEW_2026-08-23.md) | **Current AITT pre-launch review verdict and blockers** — deployment/conversion hold |
+| [`docs/AITT_REVIEW_2026-08-24.md`](docs/AITT_REVIEW_2026-08-24.md) | **Current AITT pre-launch review disposition** — deployment/conversion hold |
 | [`docs/AITT_PRELAUNCH_REMEDIATION_SPEC.md`](docs/AITT_PRELAUNCH_REMEDIATION_SPEC.md) | Owner-approved burn, custody, conversion, gate, legal and bridge remediation architecture |
 | [`docs/AITT_COUNSEL_REVIEW_BRIEF.md`](docs/AITT_COUNSEL_REVIEW_BRIEF.md) | Refreshed counsel questions and required written launch approval |
-| [`docs/TOKENOMICS.md`](docs/TOKENOMICS.md) | AITT tokenomics v2.0 source (pre-launch hold) |
-| [`docs/AITT-Whitepaper-v1.0.md`](docs/AITT-Whitepaper-v1.0.md) | Public AITT whitepaper draft synchronized to v2.0 mechanics |
+| [`docs/TOKENOMICS.md`](docs/TOKENOMICS.md) | AITT tokenomics v2.3 source (pre-launch hold) |
+| [`docs/AITT-Whitepaper-v1.0.md`](docs/AITT-Whitepaper-v1.0.md) | Public AITT whitepaper draft synchronized to v2.3 mechanics |
 | [`docs/PHASE1_SPEC.md`](docs/PHASE1_SPEC.md) | Phase 1 contracts spec |
 | [`docs/COMPETITIVE-NOTE-etoro.md`](docs/COMPETITIVE-NOTE-etoro.md) | Competitive note: eToro copy-trading vs our agent marketplace |
 

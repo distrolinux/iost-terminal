@@ -51,9 +51,10 @@ import * as auth from './lib/auth.js';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 8787;
+const AITT_DOC_VERSION = '2.3';
 
 // ---- .env loader (KEY=VALUE, '#' comments; real env vars win) ----
-import { readFileSync, existsSync, writeFileSync, mkdirSync, chmodSync, appendFile } from 'node:fs';
+import { readFileSync, existsSync, writeFileSync, mkdirSync, chmodSync, statSync, appendFile } from 'node:fs';
 import crypto from 'node:crypto';
 {
   const envFile = join(ROOT, '.env');
@@ -73,25 +74,37 @@ function loadSessionSecret() {
   const f = join(ROOT, 'data', 'session-secret');
   try {
     if (existsSync(f)) {
+      chmodSync(f, 0o600);
+      if ((statSync(f).mode & 0o777) !== 0o600) throw new Error('session-secret permissions must be 0600');
       const s = readFileSync(f, 'utf8').trim();
       if (s) return s;
     }
-  } catch { /* fall through -> generate */ }
+  } catch (e) {
+    if (existsSync(f)) throw new Error(`session-secret could not be secured: ${e.message}`);
+    /* missing file -> generate below */
+  }
   const secret = crypto.randomBytes(32).toString('hex');
   mkdirSync(join(ROOT, 'data'), { recursive: true });
   writeFileSync(f, secret, { mode: 0o600 });
   chmodSync(f, 0o600);
+  if ((statSync(f).mode & 0o777) !== 0o600) throw new Error('session-secret permissions must be 0600');
   return secret;
 }
 
 // defense-in-depth: data stores hold hashes / TOTP blobs / encrypted key
 // material — keep them owner-only at boot (tmp+rename writes reset perms).
 try {
-  for (const f of ['accounts.json', 'users.json', 'agent-keys.json', 'stakes.json', 'slashes.json', 'points.json', 'wallets.json', 'agent-audit.jsonl', 'live-audit.jsonl']) {
+  for (const f of ['accounts.json', 'users.json', 'agent-keys.json', 'sessions.json', 'session-secret', 'stakes.json', 'slashes.json', 'points.json', 'wallets.json', 'agent-audit.jsonl', 'live-audit.jsonl']) {
     const p = join(ROOT, 'data', f);
-    if (existsSync(p)) chmodSync(p, 0o600);
+    if (existsSync(p)) {
+      chmodSync(p, 0o600);
+      if ((statSync(p).mode & 0o777) !== 0o600) throw new Error(`${f} permissions must be 0600`);
+    }
   }
-} catch { /* best effort */ }
+} catch (e) {
+  console.error(`[security] refusing boot: sensitive store permissions could not be secured (${e.message})`);
+  throw e;
+}
 
 const app = express();
 app.disable('x-powered-by'); // no framework fingerprinting
@@ -345,7 +358,7 @@ function statePayload() {
     }),
     top: s.scores[0] ? { symbol: s.scores[0].symbol, composite: s.scores[0].composite, grade: s.scores[0].grade, rationale: rationale(s.scores[0]), ...(probFor(s.scores[0].symbol) ? { probUp: probFor(s.scores[0].symbol).probUp, drivers: probFor(s.scores[0].symbol).drivers } : {}) } : null,
     account: p ? { initialCash: p.account.initialCash, cash: p.account.cash, openPositions: p.positions.length } : null,
-    autopilot: s.autopilot ? { enabled: s.autopilot.enabled, ticks: s.autopilot.ticks, requireApproval: !!s.autopilot.config?.requireApproval, pendingProposals: getProposals().slice(0, 5).map((q) => ({ id: q.id, symbol: q.symbol, side: q.side, size: q.size, entry: q.entry, stop: q.stop, target: q.target, confidence: q.confidence, reason: q.reason })) } : null,
+    autopilot: s.autopilot ? { enabled: s.autopilot.enabled, ticks: s.autopilot.ticks, requireApproval: !!s.autopilot.config?.requireApproval } : null,
     market: s.market ? { bullish: s.market.bullish, neutral: s.market.neutral, bearish: s.market.bearish } : null,
     onchain: s.onchain?.chain ? { headBlock: s.onchain.chain.headBlock, tps: s.onchain.chain.tps, peers: s.onchain.chain.peerCount, activeAddresses: s.onchain.chain.activeAddresses } : null,
   };
@@ -420,7 +433,6 @@ function machineLayer() {
 <dt>Account cash</dt><dd>${p ? fmtPrice(p.account.cash) : '—'} USD</dd>
 <dt>Open positions</dt><dd>${p ? p.positions.length : '—'}</dd>
 <dt>Autopilot</dt><dd>${s?.autopilot?.enabled ? `enabled (${s.autopilot.ticks} ticks)${s.autopilot.config?.requireApproval ? ' · human-approval mode' : ''}` : 'disabled'}</dd>
-<dt>Pending proposals</dt><dd>${s?.autopilot?.enabled ? ((getProposals().length) ? `${getProposals().length} awaiting approval — first: ${esc(getProposals()[0].symbol)} ${esc(getProposals()[0].side)} ${Math.round(getProposals()[0].size)} @ ${getProposals()[0].entry} (${esc(getProposals()[0].reason)})` : 'none — all entries executed autonomously') : 'autopilot off'}</dd>
 <dt>AI reasoning</dt><dd>${s?.scores?.[0] ? esc(rationale(s.scores[0])) : '—'}</dd>
 <dt>Sentiment</dt><dd>${m ? `${m.bullish} bullish / ${m.neutral} neutral / ${m.bearish} bearish` : '—'}</dd>
 <dt>IOST mainnet</dt><dd>${c ? `TPS ${esc(c.tps)} · head block ${Number(c.headBlock).toLocaleString('en-US')} · ${esc(c.peerCount)} peers` : '—'}</dd>
@@ -574,7 +586,7 @@ function markdownFor(name) {
     return `${base}\n## ${isApp ? 'AI Command Center' : 'Automation Hub'}\n\nThis is the ${isApp ? 'interactive trading console' : '3D automation hub'} — a client-side application shell.\nLive machine-readable state (server-rendered, no JS required): **/api/ui-state**\n\n- Top AI scores: ${(s?.scores || []).slice(0, 5).map((x) => `${x.symbol} ${x.composite} ${x.grade}`).join(' · ') || 'n/a'}\n- Autopilot: ${s?.autopilot?.enabled ? `enabled (${s.autopilot.ticks} ticks)${s.autopilot.config?.requireApproval ? ' · human-approval mode' : ''}` : 'disabled'}\n- Paper account: ${s?.paper?.account?.cash != null ? `$${Number(s.paper.account.cash).toLocaleString('en-US', { maximumFractionDigits: 2 })} cash · ${s.paper.positions?.length || 0} open` : 'n/a'}\n\nActions for agents: authenticated via **X-API-Key** header or **OAuth 2.0 client_credentials** (see [/auth.md](/auth.md)); live trades require owner approval through the proposal queue ([/api/autopilot/proposals](/api/autopilot/proposals)).\n`;
   }
   if (name === 'token') {
-    return `${base}\n## AITT — Agent Intelligence Trading Token\n\nERC-20 design for IOST L2 (chain 182), 1B fixed supply, 8 decimals. **Pre-launch remediation — NOT issued.**\n- Public info: [/api/aitt/info](/api/aitt/info)\n- Token page: [/aitt](/aitt) (SSR — no JS required)\n- Tokenomics draft v2.0: [/whitepaper](/whitepaper)\n- Unified protocol burns, contract-locked allocations, signed EVM binding and atomic receipt reconciliation are built; conversion remains closed pending deployment, external audit, counsel and owner approval.\n`;
+    return `${base}\n## AITT — Agent Intelligence Trading Token\n\nERC-20 design for IOST L2 (chain 182), 1B fixed supply, 8 decimals. **Pre-launch remediation — NOT issued.**\n- Public info: [/api/aitt/info](/api/aitt/info)\n- Token page: [/aitt](/aitt) (SSR — no JS required)\n- Tokenomics draft v${AITT_DOC_VERSION}: [/whitepaper](/whitepaper)\n- Unified protocol burns, contract-locked allocations, signed EVM binding and atomic receipt reconciliation are built. Counsel cleared the Phase 1 utility framing on 2026-08-24, but conversion remains closed pending deployment, independent audit, hash-bound approval evidence and owner approval. Staking revenue/APY, external transferability and Phase 4 liquidity remain inactive future proposals requiring separate counsel/owner/audit approval.\n`;
   }
   // index/landing — the full agent summary
   const scores = (s?.scores || []).slice(0, 10).map((x) => {
@@ -881,7 +893,6 @@ const MCP_TOOLS = [
   { name: 'analyze_symbol', description: 'Full AI analysis for one symbol: score, subscores, indicators, signals, price.', inputSchema: { type: 'object', properties: { symbol: { type: 'string', description: 'e.g. IOST, BTC, ETH, SOL, AAPL, NVDA' } }, required: ['symbol'] } },
   { name: 'news_sentiment', description: 'Latest headlines + bullish/bearish/neutral classification.', inputSchema: { type: 'object', properties: {} } },
   { name: 'chain_status', description: 'IOST mainnet dashboard: TPS, head block, peers, large transfers.', inputSchema: { type: 'object', properties: {} } },
-  { name: 'proposals', description: 'Pending autopilot proposals (candidate trades queued for human approval) with full reasoning.', inputSchema: { type: 'object', properties: {} } },
   { name: 'platform_help', description: 'What IOST Terminal is and how to connect: endpoints, auth, skills index, MCP card, ARD manifest.', inputSchema: { type: 'object', properties: {} } },
   { name: 'health', description: 'Liveness + version.', inputSchema: { type: 'object', properties: {} } },
 ];
@@ -908,7 +919,6 @@ async function mcpToolCall(name, args) {
     }
     case 'news_sentiment': return await getNews();
     case 'chain_status': return await getChainSnapshot();
-    case 'proposals': return getProposals().slice(0, 10);
     case 'platform_help': return {
       name: 'IOST Terminal', version: DISCOVERY_VERSION,
       api: `${SITE_URL}/api`, openapi: `${SITE_URL}/openapi.json`, llms: `${SITE_URL}/llms.txt`,
@@ -2305,7 +2315,7 @@ app.use('/api/auth', authLimiter, authRouter(SITE_URL));
 
 const API_INDEX = {
   name: 'IOST Terminal Agent API',
-  version: '1.15.0',
+  version: DISCOVERY_VERSION,
   auth: 'X-API-Key header. Two key types: (1) platform keys via AGENT_KEYS env (required — no default, fail closed) → shared "default" account; (2) per-user "connect your AI agent" keys (itk_…, created in-app at /api/agent-keys) → bound to ONE user account with scopes: read / trade-paper / trade-live. Sensitive routes also accept a browser session (/api/auth/*).',
   accounts: 'Per-user paper accounts (v1.8): session users get their own cash/positions/journal; platform X-API-Key agents share the "default" account; per-user agent keys trade the account of the user who created them. Autopilot trades the default account.',
   decentralizedAgents: 'Phase 1 trust layer + marketplace: signals are SHA-256 hash-pinned on the IOST mainnet (token.iost transfer memo, verified via getTxReceiptByTxHash); without IOST_PIN_KEY pins queue off-chain ("pending-onchain"). Agents publish, humans follow (paper copy, 5-position cap).',
@@ -2343,8 +2353,8 @@ const API_INDEX = {
     { path: '/api/token-audit', method: 'POST', body: '{contractAddress, chainId?:56|8453|CT_501|1}', purpose: 'PUBLIC Binance Web3 token security audit (honeypot/rug-pull/scam/tax scan). No keys. Proxy of web3.binance.com — result normalized: riskLevel 1-5, taxes, verified flag, risk-item checks. NOT investment advice.' },
     { path: '/api/smart-money', method: 'GET', query: 'chainId=56|CT_501&page=1&pageSize=20', purpose: 'PUBLIC Binance Web3 smart-money on-chain signals (BSC/Solana): buy/sell events from tracked whale wallets, trigger vs current price, max gain, exit rate, tags. 30s server cache. NOT investment advice.' },
   ],
-  points: 'Off-chain points ledger: no token issued. signal +10 · follower +5 · referral +50/+10 · feedback +5 (author) · weekly top paper trader +500. Points→AITT 1:1 plumbing is built but planned/not guaranteed; machine audit/counsel/owner gates keep conversion closed under v2.0.',
-  aitt: 'AITT — Agent Intelligence Trading Token (pre-launch remediation, NOT issued): 1B fixed supply, unified 800M-floor burn routing, contract-locked allocations, EIP-191 conversion binding and receipt reconciliation are built. External audit, refreshed counsel, deployment and owner gates remain closed; Phase 4 is disabled.',
+  points: `Off-chain points ledger: no token issued. signal +10 · follower +5 · referral +50/+10 · feedback +5 (author) · weekly top paper trader +500. Points→AITT 1:1 plumbing is built but planned/not guaranteed. Phase 1 utility counsel framing was cleared on 2026-08-24; independent-audit, hash-bound approval evidence, deployment and owner gates keep conversion closed under v${AITT_DOC_VERSION}.`,
+  aitt: 'AITT — Agent Intelligence Trading Token (pre-launch remediation, NOT issued): 1B fixed supply, unified 800M-floor burn routing, contract-locked allocations, EIP-191 conversion binding and receipt reconciliation are built. Counsel cleared the Phase 1 utility framing on 2026-08-24; independent audit, hash-bound approval evidence, deployment and owner gates remain closed. Staking revenue/APY, external transferability and Phase 4 liquidity remain inactive future proposals requiring separate counsel/owner/audit approval; Phase 4 is disabled.',
   agentWallet: 'Phase 2 agent wallet engine (off-chain first): parent-child wallets with spend limits (per-tx/daily/weekly, integer minor units), trust staking + slashing + appeals, derived Trust Score + credit line, task-scoped Pacts with auto-expiry, emergency freeze. Design: docs/PHASE2_SPEC.md (engine) + docs/PHASE2_WALLET.md (on-chain wallet + Coinbase CDP research §9.20-9.26). Permissive default — no wallet ⇒ no enforcement. Capabilities: finance.* / wallet.* / trade.* / mandate.sign.',
   freeIostWallet: 'Every registered user gets a real IOST mainnet account — opening an IOST account is FREE (no creation fee; official signup at iostaccount.io). Keys are generated IN THE BROWSER — the server never sees private keys, only the base64 public key + account name; it broadcasts auth.iost/signUp (VERIFIED ABI: createAccount does not exist on mainnet) with the platform account. No IOST_PIN_KEY → requests queue (status "pending") and flush when the key appears. Store data/iost_accounts.json.',
   discover: [{ path: '/.well-known/agent.json', method: 'GET', purpose: 'agent discovery manifest' }],
@@ -2406,7 +2416,7 @@ const API_INDEX = {
     { path: '/api/admin/aitt/status', method: 'GET', purpose: 'owner-only read-only release-gate, contract, trading and claim-queue dashboard' },
     { path: '/aitt', method: 'GET', purpose: 'public AITT token page (SSR — CMC-ready, no JS required)' },
     { path: '/token', method: 'GET', purpose: 'alias of /aitt' },
-    { path: '/whitepaper', method: 'GET', purpose: 'AITT public whitepaper draft v2.0 (markdown — served from docs/AITT-Whitepaper-v1.0.md)' },
+    { path: '/whitepaper', method: 'GET', purpose: `AITT public whitepaper draft v${AITT_DOC_VERSION} (markdown — served from docs/AITT-Whitepaper-v1.0.md)` },
   ],
   agentWallet: [
     { path: '/api/wallets', method: 'GET', purpose: 'my wallet tree: parent (user) wallet + agent child wallets with balances, limits, capabilities, status' },
@@ -2562,6 +2572,7 @@ app.get('/api/audit', requireUser, (req, res) => {
 });
 
 app.get('/api/autopilot', requireUser, (req, res) => {
+  if (!isOwnerSession(req)) return res.status(403).json({ error: 'owner only' });
   const s = getAutopilot();
   res.json({ enabled: s.enabled, startedAt: s.startedAt, ticks: s.ticks, lastTick: s.lastTick, config: s.config, actions: s.actions.slice(0, 25), proposals: getProposals(), liveGate: anyLiveEnabled() });
 });
@@ -2573,7 +2584,10 @@ app.post('/api/autopilot/start', requireUser, autopilotOwner, (req, res) => { st
 app.post('/api/autopilot/stop', requireUser, autopilotOwner, (req, res) => { stopAutopilot(); res.json(getAutopilot()); });
 app.post('/api/autopilot/config', requireUser, autopilotOwner, (req, res) => res.json(setAutopilotConfig(req.body || {})));
 app.post('/api/autopilot/tick', requireUser, autopilotOwner, async (req, res) => res.json(await tickAutopilot())); // manual tick for owner/testing
-app.get('/api/autopilot/proposals', requireUser, (req, res) => res.json({ pending: getProposals() })); // ARD: human-in-the-loop queue
+app.get('/api/autopilot/proposals', requireUser, (req, res) => {
+  if (!isOwnerSession(req)) return res.status(403).json({ error: 'owner only' });
+  res.json({ pending: getProposals() });
+}); // owner-only human-in-the-loop queue
 app.post('/api/autopilot/proposals/:id/approve', requireUser, autopilotOwner, async (req, res) => res.json(await approveProposal(req.params.id))); // override: execute now
 app.post('/api/autopilot/proposals/:id/reject', requireUser, autopilotOwner, (req, res) => res.json(rejectProposal(req.params.id))); // override: block this entry
 

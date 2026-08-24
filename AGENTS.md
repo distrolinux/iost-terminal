@@ -14,8 +14,10 @@
 - Security policy and vulnerability reporting live in `SECURITY.md`; it is binding alongside this file.
 - Production is the only writer to `data/`; never start a second server against production stores.
 - Real-money execution requires a signed-in human, enabled venue, hard order rails, and owner-approved agent proposals.
+- Authentication uses password-bound, expiring server-side TOTP state; login must fail closed if session regeneration fails. Sensitive stores remain mode `0600`.
+- Autopilot state, live proposals, and audit reasoning are owner-session-only; anonymous SSR and MCP surfaces must not expose them.
 - Agent-wallet spending uses server-side limits and an active wallet-bound Pact; commit identity comes from the reservation, not the client.
-- AITT remains pre-launch until its hash-bound audit/counsel/owner/governance approval artifact, deployment manifest, live chain/reserve checks, and explicit CALLY approval all pass.
+- AITT remains pre-launch until its hash-bound audit/counsel/owner/governance approval artifact, deployment manifest, live chain/reserve checks, and explicit CALLY approval all pass. Phase 1 utility-framing counsel is cleared; future staking revenue/APY, external transferability, and Phase 4 liquidity remain inactive and separately gated.
 - AITT conversion and DEX controls fail closed. Phase 4 buy/swap requires live BSC wrapper/pair/factory/quote verification and an allowlisted PancakeSwap URL targeting that exact wrapper; no web surface may deploy contracts or flip release gates.
 - Secrets, reset tokens, private keys, and raw API credentials must never appear in source, responses, logs, or tests.
 - IOST account opening is FREE (no creation fee since 2026-08-24; official signup iostaccount.io/en/create). `lib/iost-accounts.js` FEE_IOST = 0; the platform creates wallets via auth.iost/signUp on users' behalf, keys generated in-browser only. AITT itself is ERC-20 on L2 (chain 182) — EVM wallets only, not the L1 wallet.
