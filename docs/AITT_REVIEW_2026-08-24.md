@@ -1,8 +1,22 @@
 # AITT Token Smart-Contract Independent Review — 2026-08-24
 
-> **Post-review remediation:** The same-day readiness pass addressed the actionable source findings: protocol-burn wording now excludes arbitrary sink transfers; verification checks every token binding/allocation/clean state with a derived count; governance claims are labeled proposed; new approvals can be closed irreversibly; claim snapshots are chunked and journaled; deployment approval is bound to the exact config and compiled bytecode; and live release accounting survives legitimate claims/releases. The full platform suite and **68 contract tests** pass. Remaining holds are external audit/toolchain migration, refreshed counsel, governance Safe configuration, final snapshot/reserve, and Phase 4 bridge/liquidity design. No public-chain deployment occurred.
+> **Post-review remediation:** The same-day readiness pass addressed the actionable source findings: protocol-burn wording now excludes arbitrary sink transfers; verification checks every token binding/allocation/clean state with a derived count; governance claims are labeled proposed; new approvals can be closed irreversibly; claim snapshots are resumable and journaled; deployment approval is bound to the exact config and compiled bytecode; every deployment transaction is journaled at submission/confirmation; DEX activation requires live pair verification; and live release accounting survives legitimate claims/releases. The full platform suite and **70 contract tests** pass. Remaining holds are external audit/toolchain migration, refreshed counsel, governance Safe configuration, final snapshot/reserve, and Phase 4 bridge/liquidity design. No public-chain deployment occurred.
 
-## 1. Executive summary
+## Current disposition
+
+| Area | Current status |
+|---|---|
+| Protocol-burn guarantee | Resolved: 200M protocol-burn cap is derived from fixed 1B supply and the shared 800M `totalSupply()` floor; arbitrary sink transfers are explicitly excluded. |
+| Verification | Resolved: token bindings, allocations, schedules, initial state and derived assertion count are checked with negative tests. |
+| Conversion closure | Resolved: new approvals can be closed irreversibly while existing approved claims remain payable. |
+| Deployment approval | Resolved in source: approval is bound to the exact config, chain and compiled contract bundle before the first transaction. |
+| Deployment/claim recovery | Resolved in source: every transaction is journaled at submission/confirmation and chunked claim approvals resume only from confirmed manifest evidence. |
+| Wallet/DEX activation | Resolved in source: Add Token requires live deployment verification; DEX activation requires live pair/factory/assets verification and exact swap-token URL binding. |
+| External audit, counsel, Safe, final reserve, Phase 4 bridge/liquidity | **Still HOLD.** These require external evidence and explicit CALLY approval. |
+
+The remainder of this document is the **historical pre-remediation review snapshot**. Findings marked open below describe the source as it existed when reviewed and are superseded by the current disposition above plus `AITT_LAUNCH_READINESS.md`.
+
+## Historical review snapshot (pre-remediation)
 
 **Verdict: NOT SOUND for deployment.** The fixed-supply ERC-20, swap-tax arithmetic, FeeRouter split, vesting math, converter liability accounting, and milestone-vault timelock are internally sound, but the locked global burn-cap promise is still not enforceable against dead-address transfers and several verification, governance, tooling, bridge, and counsel-level gaps remain open.
 

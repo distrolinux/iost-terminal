@@ -1,6 +1,6 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const { buildApprovalBatch, serializeApprovalClaims, chunkApprovalBatch } = require("../scripts/claim-snapshot-lib");
+const { buildApprovalBatch, serializeApprovalClaims, chunkApprovalBatch, planApprovalResume } = require("../scripts/claim-snapshot-lib");
 const { mkdtempSync, writeFileSync, readFileSync, rmSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
@@ -48,5 +48,26 @@ describe("AITT claim snapshot builder", function () {
     expect(chunks.map((chunk) => chunk.claims.length)).to.deep.equal([2, 1]);
     expect(chunks.flatMap((chunk) => chunk.users)).to.deep.equal(batch.users);
     expect(() => chunkApprovalBatch(batch, 251)).to.throw("chunk size");
+  });
+
+  it("resumes after confirmed chunks without resubmitting them", async function () {
+    const [, alice, bob, carol] = await ethers.getSigners();
+    const canonicalRows = [row("a", alice.address, 1), row("b", bob.address, 2), row("c", carol.address, 3)];
+    const fullBatch = buildApprovalBatch(canonicalRows, 6n * TOKEN);
+    const enriched = [
+      row("a", alice.address, 1, 1n * TOKEN, 0n),
+      row("b", bob.address, 2, 2n * TOKEN, 0n),
+      row("c", carol.address, 3, 0n, 0n),
+    ];
+    const plan = planApprovalResume(enriched, fullBatch, new Set(["a", "b"]), 6n * TOKEN);
+    expect(plan.existingOutstanding).to.equal(3n * TOKEN);
+    expect(plan.pendingRows.map((claim) => claim.claimId)).to.deep.equal(["c"]);
+  });
+
+  it("rejects on-chain approvals that lack confirmed manifest evidence", async function () {
+    const [, alice] = await ethers.getSigners();
+    const fullBatch = buildApprovalBatch([row("a", alice.address, 1)], TOKEN);
+    expect(() => planApprovalResume([row("a", alice.address, 1, TOKEN, 0n)], fullBatch, new Set(), TOKEN))
+      .to.throw("lacks confirmed manifest evidence");
   });
 });

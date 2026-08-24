@@ -59,4 +59,27 @@ function chunkApprovalBatch(batch, chunkSize = 100) {
   return chunks;
 }
 
-module.exports = { buildApprovalBatch, serializeApprovalClaims, chunkApprovalBatch };
+function planApprovalResume(enrichedRows, fullBatch, confirmedClaimIds, converterReserve) {
+  const expectedById = new Map(fullBatch.claims.map((claim) => [claim.claimId, claim]));
+  const confirmed = new Set(confirmedClaimIds || []);
+  let existingOutstanding = 0n;
+  const pendingRows = [];
+  for (const row of enrichedRows) {
+    const expected = expectedById.get(String(row.claimId));
+    if (!expected) throw new Error(`claim missing from canonical snapshot: ${row.claimId}`);
+    const approved = BigInt(row.approvedBaseUnits);
+    const claimed = BigInt(row.claimedBaseUnits);
+    if (confirmed.has(expected.claimId)) {
+      if (approved !== expected.approvalBaseUnits) throw new Error(`confirmed manifest/on-chain approval mismatch for ${expected.claimId}`);
+      existingOutstanding += approved - claimed;
+      continue;
+    }
+    if (approved === expected.approvalBaseUnits) throw new Error(`on-chain approval lacks confirmed manifest evidence for ${expected.claimId}`);
+    if (approved !== claimed) throw new Error(`unexpected outstanding prior approval for ${expected.address}`);
+    pendingRows.push(row);
+  }
+  if (existingOutstanding > BigInt(converterReserve)) throw new Error("existing approvals exceed converter reserve");
+  return { existingOutstanding, pendingRows };
+}
+
+module.exports = { buildApprovalBatch, serializeApprovalClaims, chunkApprovalBatch, planApprovalResume };

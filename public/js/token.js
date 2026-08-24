@@ -53,7 +53,9 @@ async function loadDashboard() {
   const response = await fetch('/api/aitt/info', { headers: { accept: 'application/json' } });
   if (!response.ok) throw new Error('AITT status API unavailable');
   const info = await response.json();
-  const deployed = info.status === 'deployed' && ADDRESS_RE.test(String(info.contractAddress || ''));
+  const deployed = info.status === 'deployed'
+    && info.conversion?.releaseGate?.live?.verified === true
+    && ADDRESS_RE.test(String(info.contractAddress || ''));
   const trade = info.trading || {};
   const swapUrl = trade.ready ? approvedSwapUrl(trade.swapUrl) : '';
 

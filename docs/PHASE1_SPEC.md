@@ -1,6 +1,6 @@
 # Phase 1 build spec — AITT on IOST L2
 > Status: **BUILT + TOOLING-REVIEWED, PRE-LAUNCH HOLD, not deployed.** Do not deploy until the blockers in `AITT_REVIEW_2026-08-23.md` are resolved and the owner explicitly approves.
-> Source of truth for numbers: `docs/TOKENOMICS.md` v2.0 remediation design.
+> Source of truth for numbers: `docs/TOKENOMICS.md` v2.1 remediation design.
 
 ## What this delivers
 
@@ -41,7 +41,7 @@ cp deploy.config.example.json deploy.config.json
 #    allocations.partners|community|reserve                         -> address records; token custody remains in milestone vaults
 #    allocations.teamBeneficiary / advisorBeneficiary               -> the actual people
 #    operator                                                       -> platform backend key
-#    stakersPool                                                    -> staker-rewards recipient (Phase 1: DAO wallet; Phase 2: staking contract — pre-TGE redeploy is the escape hatch)
+#    stakersPool                                                    -> staker-rewards recipient (Phase 1: reviewed Safe; Phase 2: staking contract — pre-TGE redeploy is the escape hatch)
 #    ammPair / ammFactory / quoteToken                              -> MUST remain zero in canonical Phase 1
 #    pointsConversionReserve                                        -> 0 for now (set at TGE)
 
@@ -70,15 +70,16 @@ npx hardhat run scripts/verify.js --network iostL2
 3. Deploys team/advisor vesting and the 48-month ecosystem emission contract.
 4. Deploys four 48-hour milestone vaults for treasury, partners, community and reserve.
 5. Deploys and optionally funds `PointsConverter` from the ecosystem allocation.
-6. Moves the full 1B into contract custody and transfers every owner role to governance.
+6. Moves the full 1B into contract custody and transfers every single-address owner role to the reviewed Safe.
 7. Runs exact post-deploy verification and writes a hash-bound completion journal.
 
 ### Post-deploy hygiene
 - **Deployer holds 0 AITT** when all moves land (verify.js checks this).
 - AITT has no mint and no public burn. Its owner retains only the one-time
-  `setAmmPair` lock after the FeeRouter is bound. Router DAO burns, converter
-  pause/operator/reserve controls, milestone queues and custody ownership remain
-  governance-controlled and must be held by the reviewed Safe.
+  `setAmmPair` lock after the FeeRouter is bound. The owner-only `executeDaoBurn`,
+  converter pause/operator/reserve controls, milestone queues and custody ownership
+  are single-address owner roles that must be held by the reviewed Safe. Phase 1 has
+  no on-chain DAO vote, quorum, category restriction, fee-ratio adjustment, or council veto.
 - LP add/remove touch the pair and are taxed like buy/sell (standard
   fee-token behavior; LPs price it in). The 3% tax is buy+sell on the single
   locked pair; wallet-to-wallet, staking, airdrops and platform transfers are 0%.

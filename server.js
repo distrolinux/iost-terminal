@@ -1896,7 +1896,7 @@ app.delete('/api/account/kraken', requireUser, (req, res) => {
   res.json({ ok: true });
 });
 
-// ---- free IOST mainnet wallet (subsidized — platform pays the ~11 IOST fee) ----
+// ---- free IOST mainnet wallet (no creation fee — IOST accounts are free to open) ----
 // Key custody rule: the SERVER never generates or holds user private keys. The
 // browser generates the Ed25519 keypair; only the PUBLIC key (base64, 32 bytes)
 // + account name reach the server, which broadcasts auth.iost/signUp with the
@@ -2346,7 +2346,7 @@ const API_INDEX = {
   points: 'Off-chain points ledger: no token issued. signal +10 · follower +5 · referral +50/+10 · feedback +5 (author) · weekly top paper trader +500. Points→AITT 1:1 plumbing is built but planned/not guaranteed; machine audit/counsel/owner gates keep conversion closed under v2.0.',
   aitt: 'AITT — Agent Intelligence Trading Token (pre-launch remediation, NOT issued): 1B fixed supply, unified 800M-floor burn routing, contract-locked allocations, EIP-191 conversion binding and receipt reconciliation are built. External audit, refreshed counsel, deployment and owner gates remain closed; Phase 4 is disabled.',
   agentWallet: 'Phase 2 agent wallet engine (off-chain first): parent-child wallets with spend limits (per-tx/daily/weekly, integer minor units), trust staking + slashing + appeals, derived Trust Score + credit line, task-scoped Pacts with auto-expiry, emergency freeze. Design: docs/PHASE2_SPEC.md (engine) + docs/PHASE2_WALLET.md (on-chain wallet + Coinbase CDP research §9.20-9.26). Permissive default — no wallet ⇒ no enforcement. Capabilities: finance.* / wallet.* / trade.* / mandate.sign.',
-  freeIostWallet: 'Every registered user gets a subsidized IOST mainnet account (platform pays ~11 IOST). Keys are generated IN THE BROWSER — the server never sees private keys, only the base64 public key + account name; it broadcasts auth.iost/signUp (VERIFIED ABI: createAccount does not exist on mainnet) with the platform account. No IOST_PIN_KEY → requests queue (status "pending") and flush when the key appears. Store data/iost_accounts.json.',
+  freeIostWallet: 'Every registered user gets a real IOST mainnet account — opening an IOST account is FREE (no creation fee; official signup at iostaccount.io). Keys are generated IN THE BROWSER — the server never sees private keys, only the base64 public key + account name; it broadcasts auth.iost/signUp (VERIFIED ABI: createAccount does not exist on mainnet) with the platform account. No IOST_PIN_KEY → requests queue (status "pending") and flush when the key appears. Store data/iost_accounts.json.',
   discover: [{ path: '/.well-known/agent.json', method: 'GET', purpose: 'agent discovery manifest' }],
   market: [
     { path: '/api/scanner', method: 'GET', purpose: 'real-time analysis for all watchlist assets (signals, indicators, whale tape, rank, market cap)' },
@@ -2421,14 +2421,14 @@ const API_INDEX = {
     { path: '/api/stake/unstake | /withdraw', method: 'POST', body: '{stakeId}', purpose: 'start 7-day cooldown / withdraw after cooldown' },
     { path: '/api/trust/score', method: 'GET', purpose: 'derived Trust Score + credit line + components (never stored)' },
     { path: '/api/slashes', method: 'POST', body: '{ownerId, reason: unauthorized-spend|failed-settlement}', purpose: 'owner only — slash (unauthorized −10% + score reset · failed settlement −5%)' },
-    { path: '/api/slashes/:id/appeal | /decide', method: 'POST', purpose: '14-day appeal window; decide = owner/DAO review' },
+    { path: '/api/slashes/:id/appeal | /decide', method: 'POST', purpose: '14-day appeal window; decide = owner review (future DAO policy)' },
     { path: '/api/pacts', method: 'GET|POST', purpose: 'task-scoped Pacts: intent + plan + policies + completion (time/budget/goal) with auto-expiry' },
     { path: '/api/pacts/:id/approve | /reject | /terminate', method: 'POST', purpose: 'human control over pacts (owner)' },
     { path: '/api/freeze', method: 'POST', body: '{on:true, reason?} | {on:false}', purpose: 'owner only — emergency freeze: stops ALL agent operations instantly' },
   ],
   wallets: [
-    { path: '/api/account/iost/status', method: 'GET', purpose: 'public honesty endpoint (no auth): subsidized?, fee (~11 IOST), platform funding configured?, account-name rules, explorer base' },
-    { path: '/api/account/iost', method: 'POST', body: '{publicKey (base64 of 32-byte Ed25519 public key), accountName?}', purpose: 'request a free platform-subsidized IOST mainnet wallet for the signed-in user — the browser generates the Ed25519 keypair and the server only ever receives the PUBLIC key; creation is broadcast via auth.iost/signUp with the platform funded account, or queued (status pending) until funding is configured' },
+    { path: '/api/account/iost/status', method: 'GET', purpose: 'public honesty endpoint (no auth): free to open (no creation fee), platform funding configured?, account-name rules, explorer base' },
+    { path: '/api/account/iost', method: 'POST', body: '{publicKey (base64 of 32-byte Ed25519 public key), accountName?}', purpose: 'request a free IOST mainnet wallet for the signed-in user (opening is now free, no creation fee) — the browser generates the Ed25519 keypair and the server only ever receives the PUBLIC key; creation is broadcast via auth.iost/signUp with the platform funded account, or queued (status pending) until funding is configured' },
     { path: '/api/account/iost', method: 'GET', purpose: 'my wallet status (session user): none/pending/created/failed + account name + creation tx + block' },
   ],
   autonomy: [

@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const src = readFileSync(join(ROOT, 'server.js'), 'utf8');
+const tokenUi = readFileSync(join(ROOT, 'public', 'js', 'token.js'), 'utf8');
+const appUi = readFileSync(join(ROOT, 'public', 'js', 'app.js'), 'utf8');
 let failures = 0;
 const ok = (name, cond) => {
   console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}`);
@@ -31,6 +33,8 @@ const aittAdminRoute = route("app.get('/api/admin/aitt/status'", "app.post('/api
 ok('AITT owner dashboard endpoint requires owner session', /isOwnerSession\(req\)/.test(aittAdminRoute));
 ok('AITT owner dashboard exposes release gates and claims without mutation controls', /releaseGate/.test(aittAdminRoute) && /listClaims\(\)/.test(aittAdminRoute) && !/conversionOpen\s*=|phase4Enabled\s*=|writeFile|child_process/.test(aittAdminRoute));
 ok('whitepaper route serves the public distribution copy', /app\.get\('\/whitepaper'[\s\S]*AITT-Whitepaper-v1\.0\.md/.test(src));
+ok('public Add Token requires a successful live deployment probe', /releaseGate\?\.live\?\.verified === true/.test(tokenUi));
+ok('conversion wallet flow enforces IOST L2 before signing or sending', /ensureIostL2Wallet/.test(appUi) && /wallet_switchEthereumChain/.test(appUi) && /await ensureIostL2Wallet\(\)/.test(appUi));
 
 console.log(failures === 0 ? '\nALL PASS ✅' : `\n${failures} FAILURES ❌`);
 process.exit(failures === 0 ? 0 : 1);

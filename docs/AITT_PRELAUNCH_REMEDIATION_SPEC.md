@@ -34,14 +34,14 @@ Make AITT's locked 1B supply, shared 800M protocol-burn floor, allocation custod
 
 - Immutable AITT, stakers recipient, treasury recipient.
 - `payPlatformFee(amount)`: pulls exact AITT from payer; routes 50% stakers, 20% through `AITT.protocolBurn`, 30% treasury. At/near floor the token redirects unburnable remainder 70/30.
-- `executeDaoBurn(amount)`: owner/DAO queues or submits owned AITT through the same protocol-burn path; protocol tooling does not use sink-address transfers.
+- `executeDaoBurn(amount)`: the single-address owner submits owned AITT through the same protocol-burn path; the DAO name is forward-looking and no Phase 1 governance vote is enforced. Protocol tooling does not use sink-address transfers.
 - Exact-balance-delta checks; nonReentrant; events for fee, burn, and redirect amounts.
 
 ### Allocation vaults
 
 - `AITTLinearEmissionVault`: 48-month linear release, fixed total, immutable beneficiary; ecosystem allocation minus converter reserve.
 - Existing `AITTVesting`: team 12-month cliff + 36-month linear; advisors 12-month cliff + 24-month linear.
-- `AITTMilestoneVault`: fixed allocation; owner must be governance Safe; queue `(recipient, amount, evidenceHash)`; execute only after 48 hours; cancelable before execution; cumulative release cannot exceed allocation.
+- `AITTMilestoneVault`: fixed allocation; deployment policy requires the single-address owner role to be the reviewed Safe; that owner may queue any `(recipient, amount, evidenceHash)` within the allocation without an on-chain DAO vote, quorum, category rule, or council veto. Execution is delayed by an immutable 48 hours, cancelable before execution, and cumulative release cannot exceed allocation.
 - Separate milestone vaults: treasury 200M, partners 100M, community 100M, reserve 100M.
 - Directly transferable at deployment: only PointsConverter reserve.
 

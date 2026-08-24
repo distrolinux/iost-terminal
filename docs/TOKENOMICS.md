@@ -1,4 +1,4 @@
-# AITT Tokenomics — Professional Design Draft (v2.0)
+# AITT Tokenomics — Professional Design Draft (v2.1)
 
 > **Status: DESIGN DRAFT — pre-launch. No public sale; utility-only; not an investment (§10).**
 > Supersedes `docs/tokenomics-vision.md` (v0.1) in design intent; that file remains as historical record.
@@ -14,6 +14,7 @@
 > v1.8 (2026-08-23): **pre-launch consistency review hold** — no locked economics changed; deployment/conversion remain frozen pending remediation of global burn accounting, allocation custody, conversion plumbing, phase gates, bridge/tax portability, and legal wording. Review: `docs/AITT_REVIEW_2026-08-23.md`.
 > v1.9 (2026-08-23): **owner-approved remediation architecture implemented, still pre-launch** — authoritative FeeRouter burn path with shared 800M floor; all allocations contract-locked except converter reserve; 48h milestone vaults; 48-month linear ecosystem emission; EIP-191 wallet binding, atomic claim states and receipt verification; Phase 4 hard-disabled; refreshed counsel and external audit gates remain false.
 > v2.0 (2026-08-24): **burn guarantee corrected (owner-approved)** — all protocol burns (swap + FeeRouter/DAO) share the 800M `totalSupply()` floor, deriving a 200M cumulative protocol-burn cap. User transfers to arbitrary nonzero sink addresses are excluded because spendability cannot be proven on-chain; prior global/dead-address wording is superseded.
+> v2.1 (2026-08-24): **governance claims aligned to enforceable scope (owner-approved)** — DAO voting/fee adjustability relabeled future policy; Phase 1 enforcement = Safe-controlled 48h milestone-vault releases + immutable fee ratios.
 
 ---
 
@@ -21,14 +22,14 @@
 
 **AITT (Agent Intelligence Trading Token)** is the utility token of the **IOST Terminal** platform — a real-time AI trading command center for crypto & stocks, live at iostcallister.com, built for humans and designed for AI agents.
 
-AITT powers the platform's **agentic payments economy**: it is the trust, fee, and governance layer for machine-executed transactions. It is **not** the settlement asset — agent spending settles in stablecoin/USD credits so budgets never fluctuate. AITT is earned and staked, not sold.
+AITT is designed to power the platform's **agentic payments economy** as the trust and fee layer for machine-executed transactions, with governance planned for Phase 2+. It is **not** the settlement asset — agent spending settles in stablecoin/USD credits so budgets never fluctuate. AITT is earned and staked, not sold.
 
 - **Standard:** **ERC-20 on IOST L2** (fully EVM-compatible, OP Stack rollup; IOST's official recommendation for high-frequency/low-cost scenarios — MetaMask, OpenZeppelin, x402/AP2 SDKs compatible). IOST L1 remains home to the platform's producer node (`iost_4_life`) as the payments facilitator/verifier.
 - **Total supply:** 1,000,000,000 (1B) — fixed, no uncapped minting
-- **Core roles:** Trust staking collateral · fee utility · rewards · governance
+- **Core roles:** Trust staking collateral · fee utility · rewards · planned Phase 2+ governance
 - **Value drivers:** real fee revenue (50% stakers / 20% protocol burn / 30% treasury) + staking lock-up + FeeRouter/DAO buy-back burns + 3% DEX buy/sell swap tax (1.8% protocol burn / 0.8% stakers / 0.4% treasury); all protocol burns share the 800M supply floor
 - **Emission discipline:** rewards funded by revenue first; emission pool releases linearly over 48 months; team fully vested over 4 years
-- **Community-first:** 70% of supply is community/DAO-controlled (30% ecosystem rewards + 10% community + 10% reserve + 20% DAO treasury) vs 30% insider (team, partners, advisors)
+- **Community-first target:** 70% of supply is allocated to pools intended for future community/DAO policy (30% ecosystem rewards + 10% community + 10% reserve + 20% treasury) vs 30% insider (team, partners, advisors). Phase 1 custody is not controlled by on-chain DAO voting.
 
 ---
 
@@ -56,17 +57,17 @@ AITT powers the platform's **agentic payments economy**: it is the trust, fee, a
 | Category | % | Amount | Vesting / Release |
 |---|---|---|---|
 | Ecosystem & Agent Rewards Pool | 30% | 300M | 48-month linear emission vault; converter reserve deducted first |
-| Treasury (DAO-controlled) | 20% | 200M | 48-hour queued milestone vault |
+| Treasury (future DAO policy) | 20% | 200M | Safe-controlled 48-hour queued milestone vault in Phase 1 |
 | Team & Core Contributors | 15% | 150M | 12-mo cliff + 36-mo linear (4 yrs total) |
 | Strategic Partners & Ecosystem | 10% | 100M | 48-hour queued milestone vault; evidence hash required |
 | Community & Adoption Fund | 10% | 100M | 48-hour queued milestone vault; earned programs only |
-| Reserve Fund | 10% | 100M | 48-hour queued milestone vault; insurance/DAO actions |
+| Reserve Fund | 10% | 100M | 48-hour queued milestone vault; insurance/future DAO actions |
 | Early Supporters & Advisors | 5% | 50M | 12-mo cliff + 24-mo linear |
 
 - No founder/team tokens are tradable before month 12.
 - Future governance target: category reallocations require a supermajority DAO vote (>66% of staked AITT). Phase 1 milestone-vault releases are Safe-controlled with a 48-hour public delay; this voting rule is not yet enforced on-chain.
 - Unallocated/unearned rewards at end of emission schedule return to Treasury.
-- **Community-first ratio:** community/DAO-controlled pools total 70% (30% Ecosystem + 10% Community + 10% Reserve + 20% Treasury) vs 30% insider — the honest analog of IOST 3.0's 97/3 community-first framing for its Growth Reserve.
+- **Community-first ratio:** pools intended for future community/DAO policy total 70% (30% Ecosystem + 10% Community + 10% Reserve + 20% Treasury) vs 30% insider. Phase 1 release authority is held by single-address owner roles configured to the reviewed Safe; no governance contract enforces community voting.
 
 ---
 
@@ -100,14 +101,16 @@ Agents and agent-operators stake AITT as **collateral** to obtain a **Trust Scor
 - Referrals, AI-feedback rewards (rate-limited), agent-compute providers
 - All rewards are **earned**, never sold
 
-### 4.4 Governance
-Stake-weighted voting on platform policy parameters:
+### 4.4 Future Governance Target (Phase 2+, not active in Phase 1)
+Proposed stake-weighted voting policy for future separately audited governance contracts:
 - Spend-limit defaults & approval thresholds for agent transactions
 - Merchant/counterparty allowlists
 - Slashing rules and appeal process
 - Fee schedule
 - Treasury allocations & buy-back/burn decisions
-- Proposal threshold: 0.1% of staked supply; quadratic voting optional
+- Proposed threshold: 0.1% of staked supply; quadratic voting optional
+
+Phase 1 has no governance contracts. FeeRouter ratios are immutable, and each owner-controlled contract exposes a single-address owner role intended to be configured to the reviewed Safe rather than enforcing token voting, quorum, category restrictions, or council veto on-chain.
 
 ### 4.5 Access & Tiers
 - Minimum stake for agent API tiers (public tier planned)
@@ -167,7 +170,7 @@ Live off-chain points (per the v0.1 mapping: signals +10, followers +5, referral
 
 **Accrual summary:** demand from fee discount + trust staking + rewards; supply pressure from burn, vesting locks, and staking lock-up; no naked inflation.
 
-**Growth Acceleration Pool:** the DAO-controlled Treasury runs a named program funding bridge-liquidity support (Phase 4), developer grants, merchant-adoption incentives, and the security-audit fund — allocations DAO-voted, mirroring IOST 3.0's Growth Reserve priorities.
+**Future Growth Acceleration Pool policy:** a future DAO may direct Treasury funding for bridge-liquidity support (Phase 4), developer grants, merchant-adoption incentives, and the security-audit fund. Phase 1 does not enforce DAO voting over these allocations; milestone-vault releases are controlled by the configured Safe owner and delayed publicly for 48 hours.
 
 ---
 
@@ -186,7 +189,7 @@ Live off-chain points (per the v0.1 mapping: signals +10, followers +5, referral
 ### 6.2 Fee split (locked)
 - **50% → stakers** — participants who secure the network with AITT staking receive the majority share (revenue-backed, never minted)
 - **20% → protocol burn** — deflation benefiting all holders equally; shares the 800M `totalSupply()` floor with swap and FeeRouter/DAO burns; post-floor this share redirects 70/30
-- **30% → treasury** — development + DAO-voted buy-back/burn; transparent on-chain
+- **30% → treasury** — development + proposed future DAO-voted buy-back/burn; Phase 1 routing is immutable and transparent on-chain
 - **Swap tax (v1.4, separate from platform fees):** 3% on DEX buy/sell only, split 1.8% protocol burn / 0.8% stakers / 0.4% treasury; shares the same token-owned 800M floor; 0% on wallet-to-wallet and platform-internal transfers
 
 ### 6.3 Fairness commitments (why costs stay low for everyone)
@@ -230,12 +233,14 @@ The linear vault releases exactly 100% over four years; no monthly percentage ta
 | Unstake cooldown | 7 days |
 | Slashing — unauthorized spend | −10% stake + score reset |
 | Slashing — failed settlement | −5% stake |
-| Appeal window | 14 days, DAO review |
+| Appeal window | 14 days, owner review in Phase 1; future DAO review proposed |
 | Fee share APY | Variable — derived from real fee volume, never guaranteed |
 
 ---
 
 ## 9. Proposed Governance Parameters (not active in Phase 1)
+
+These values are future Phase 2+ policy targets only. No Phase 1 contract enforces token voting, proposal thresholds, quorum, supermajority, category restrictions, or council veto. Phase 1 FeeRouter ratios are immutable at deployment. Milestone-vault owner roles are single-address controls intended for the reviewed Safe; that owner may queue any recipient and amount within the fixed allocation, subject only to the immutable 48-hour public delay and cancellation/release accounting.
 
 | Parameter | Value |
 |---|---|
@@ -243,7 +248,7 @@ The linear vault releases exactly 100% over four years; no monthly percentage ta
 | Proposal threshold | 0.1% of staked supply |
 | Quorum | 20% of staked supply |
 | Pass threshold | >50% (supermajority 66% for allocation changes) |
-| Veto | Proposed timelock + DAO council veto (24-hr); Phase 1 uses Safe ownership + 48-hour milestone-vault delay |
+| Veto | Proposed timelock + DAO council veto (24-hr); not enforced in Phase 1 |
 
 ---
 
@@ -288,7 +293,7 @@ The linear vault releases exactly 100% over four years; no monthly percentage ta
 | Risk | Mitigation |
 |---|---|
 | Regulatory recharacterization | Utility-only design, no sale, counsel gate, geo-blocks |
-| Token concentration | Team 15% fully vested over 4 yrs; earned-only distribution; supermajority rules |
+| Token concentration | Team 15% fully vested over 4 yrs; earned-only distribution; future supermajority policy target (not enforced in Phase 1) |
 | Adoption shortfall | Phased rollout; token deferred until real demand (Phase 0 → 4 sequence) |
 | Smart-contract risk | Independent audit before TGE; bug-bounty; timelock on treasury |
 | Market volatility | AITT never the settlement asset; budgets in USD credits/stablecoin |
@@ -332,7 +337,7 @@ The linear vault releases exactly 100% over four years; no monthly percentage ta
 ### 15.2 FinOps Circuit Breakers (Phase 2–3)
 - Beyond static spend limits (§4.1) and payment sessions (§4.7): continuous anomaly detection on agent spend — velocity spikes, category shifts, failed-settlement clusters — **revokes payment permissions mid-flight** until human review.
 - Ex-ante complement to slashing (ex-post); answers Accenture's machine-speed fraud vector.
-- Implementation: session-level tripwires + DAO-configurable thresholds (§4.4 governance already owns policy parameters).
+- Implementation target: session-level tripwires + thresholds proposed to become DAO-configurable under future Phase 2+ governance (§4.4); Phase 1 has no governance contract.
 
 ### 15.3 KYA/AML Posture (legal extension)
 - §10 covers CSA utility framing; this adds explicit **KYA** (Know Your Agent, FIDO-standardized) and AML responsibility language: agent operators (principals) are the accountable parties; the chain of intent (mandates + on-chain audit trail) is the evidence trail for KYC/AML inquiries.

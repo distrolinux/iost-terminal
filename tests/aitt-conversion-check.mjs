@@ -49,19 +49,29 @@ try {
   ok('complete intent plus successful live probe can authorize conversion', liveReady.ready);
   ok('Phase 4 flag blocks conversion during canonical launch', !gates.evaluateReleaseGates({ ...readyConfig, phase4Enabled: true }).ready);
   const prelaunchTrade = gates.evaluateTradingAccess({
-    status: 'design', contractAddress: '', phase4Enabled: false,
-    trading: { enabled: false, dex: 'PancakeSwap', chainId: 56, pairAddress: '', swapUrl: '' },
+    status: 'design', phase4Enabled: false,
+    trading: { enabled: false, dex: 'PancakeSwap', chainId: 56, tokenAddress: '', pairAddress: '', factoryAddress: '', quoteToken: '', swapUrl: '' },
   });
   ok('buy/swap access remains disabled before deployment', !prelaunchTrade.ready && prelaunchTrade.failed.includes('phase4_enabled'));
   const maliciousTrade = gates.evaluateTradingAccess({
-    status: 'deployed', contractAddress: `0x${'1'.repeat(40)}`, phase4Enabled: true,
-    trading: { enabled: true, dex: 'PancakeSwap', chainId: 56, pairAddress: `0x${'2'.repeat(40)}`, swapUrl: 'https://evil.example/swap' },
-  });
+    status: 'deployed', phase4Enabled: true,
+    trading: { enabled: true, dex: 'PancakeSwap', chainId: 56, tokenAddress: `0x${'1'.repeat(40)}`, pairAddress: `0x${'2'.repeat(40)}`, factoryAddress: `0x${'3'.repeat(40)}`, quoteToken: `0x${'4'.repeat(40)}`, swapUrl: 'https://evil.example/swap' },
+  }, { liveVerified: true });
   ok('buy/swap access rejects non-PancakeSwap URLs', !maliciousTrade.ready && maliciousTrade.failed.includes('approved_swap_url'));
-  const readyTrade = gates.evaluateTradingAccess({
-    status: 'deployed', contractAddress: `0x${'1'.repeat(40)}`, phase4Enabled: true,
-    trading: { enabled: true, dex: 'PancakeSwap', chainId: 56, pairAddress: `0x${'2'.repeat(40)}`, swapUrl: 'https://pancakeswap.finance/swap?outputCurrency=0x1111111111111111111111111111111111111111' },
+  const mismatchedTokenTrade = gates.evaluateTradingAccess({
+    status: 'deployed', phase4Enabled: true,
+    trading: { enabled: true, dex: 'PancakeSwap', chainId: 56, tokenAddress: `0x${'1'.repeat(40)}`, pairAddress: `0x${'2'.repeat(40)}`, factoryAddress: `0x${'3'.repeat(40)}`, quoteToken: `0x${'4'.repeat(40)}`, swapUrl: `https://pancakeswap.finance/swap?outputCurrency=0x${'5'.repeat(40)}` },
+  }, { liveVerified: true });
+  ok('buy/swap access rejects a route for another token', !mismatchedTokenTrade.ready && mismatchedTokenTrade.failed.includes('swap_url_token_match'));
+  const unverifiedTrade = gates.evaluateTradingAccess({
+    status: 'deployed', phase4Enabled: true,
+    trading: { enabled: true, dex: 'PancakeSwap', chainId: 56, tokenAddress: `0x${'1'.repeat(40)}`, pairAddress: `0x${'2'.repeat(40)}`, factoryAddress: `0x${'3'.repeat(40)}`, quoteToken: `0x${'4'.repeat(40)}`, swapUrl: `https://pancakeswap.finance/swap?outputCurrency=0x${'1'.repeat(40)}` },
   });
+  ok('buy/swap access requires live pair verification', !unverifiedTrade.ready && unverifiedTrade.failed.includes('live_pair_verified'));
+  const readyTrade = gates.evaluateTradingAccess({
+    status: 'deployed', phase4Enabled: true,
+    trading: { enabled: true, dex: 'PancakeSwap', chainId: 56, tokenAddress: `0x${'1'.repeat(40)}`, pairAddress: `0x${'2'.repeat(40)}`, factoryAddress: `0x${'3'.repeat(40)}`, quoteToken: `0x${'4'.repeat(40)}`, swapUrl: `https://pancakeswap.finance/swap?outputCurrency=0x${'1'.repeat(40)}` },
+  }, { liveVerified: true });
   ok('buy/swap access requires every Phase 4 integration field', readyTrade.ready);
   const postActivityAccounting = chain.verifyReleaseAccounting({
     configuredReserve: 1_000n, reserve: 700n, outstanding: 200n, reserved: 100n, converterBalance: 700n,

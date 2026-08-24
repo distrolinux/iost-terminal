@@ -497,6 +497,24 @@ async function renderAgents() {
 // ---------------- Points (tokenomics vision §6: off-chain, 1:1 AITT planned) ----------------
 // Honest framing: points are accrual-only platform credits. NO token is issued;
 // 1:1 AITT conversion is planned at TGE and explicitly labeled "not guaranteed".
+async function ensureIostL2Wallet() {
+  if (!window.ethereum) throw new Error('MetaMask or another EVM wallet is required');
+  const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+  if (Number.parseInt(chainId, 16) === 182) return;
+  try {
+    await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0xb6' }] });
+  } catch (error) {
+    if (Number(error?.code) !== 4902) throw error;
+    await window.ethereum.request({
+      method: 'wallet_addEthereumChain',
+      params: [{
+        chainId: '0xb6', chainName: 'IOST L2',
+        nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
+        rpcUrls: ['https://l2-mainnet.iost.io'], blockExplorerUrls: ['https://l2-scan.iost.io'],
+      }],
+    });
+  }
+}
 async function renderPoints() {
   const el = $('#view-points');
   el.innerHTML = skeleton();
@@ -572,6 +590,7 @@ async function renderPoints() {
     const btn = $('#bindEvmBtn');
     btn.disabled = true;
     try {
+      await ensureIostL2Wallet();
       const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
       const address = accounts?.[0];
       if (!address) throw new Error('No wallet account selected');
@@ -598,6 +617,7 @@ async function renderPoints() {
     if (!window.ethereum || !walletBinding) return toast('Verified MetaMask wallet required');
     button.disabled = true;
     try {
+      await ensureIostL2Wallet();
       const txHash = await window.ethereum.request({
         method: 'eth_sendTransaction',
         params: [{ from: walletBinding.address, to: button.dataset.converter, data: '0x91bbdcc7', value: '0x0' }],
@@ -661,11 +681,11 @@ async function renderAITT() {
   const trade = d.trading || {};
   const ALLOC = [
     ['Ecosystem & agent rewards', 30, '300M', '48-mo linear emission vault'],
-    ['Treasury (DAO)', 20, '200M', 'milestone-gated'],
+    ['Treasury (future DAO policy)', 20, '200M', 'Safe-controlled · 48h queued release'],
     ['Team & core contributors', 15, '150M', '12-mo cliff + 36-mo linear'],
     ['Strategic partners', 10, '100M', 'milestone-gated · contracts only'],
     ['Community & adoption', 10, '100M', 'earned airdrops · grants'],
-    ['Reserve fund', 10, '100M', 'insurance · buy-back/burn (DAO)'],
+    ['Reserve fund', 10, '100M', 'insurance · future DAO policy'],
     ['Advisors', 5, '50M', '12-mo cliff + 24-mo linear'],
   ];
   el.innerHTML = `
@@ -685,7 +705,7 @@ async function renderAITT() {
       <div class="util-grid">
         <div class="util"><span class="chip ok">Trust staking</span><p>Agents stake AITT → Trust Score → spend limits. Slashing for unauthorized spend — KYA with teeth.</p></div>
         <div class="util"><span class="chip neut">Fee utility</span><p>Design target: 50% discount · 50/20/30 split. Not active; global burn accounting and legal posture remain under review.</p></div>
-        <div class="util"><span class="chip ok">Governance</span><p>1 staked AITT = 1 vote · spend limits, slashing rules, fee schedule, treasury allocations.</p></div>
+        <div class="util"><span class="chip neut">Governance roadmap</span><p>Phase 2+ target only: stake-weighted voting, quorum and policy controls. Phase 1 has immutable fee ratios and Safe-controlled 48h milestone releases; no on-chain DAO vote or veto.</p></div>
         <div class="util"><span class="chip ok">Agentic payments</span><p>AP2 consent/intent/payment mandates + x402 rails on IOST — Phase 3.</p></div>
       </div>
     </div>
@@ -717,7 +737,7 @@ async function renderAITT() {
     <div class="card empty" style="text-align:center">Full public page: <a href="/aitt" target="_blank" rel="noopener" style="color:var(--cyan)">iostcallister.com/aitt</a> · Whitepaper: <a href="/whitepaper" target="_blank" rel="noopener" style="color:var(--cyan)">iostcallister.com/whitepaper</a></div>`;
 }
 
-// ---------------- Your IOST Wallet (free · platform-subsidized · self-custody) ----------------
+// ---------------- Your IOST Wallet (free to open · self-custody) ----------------
 // Security model: the Ed25519 keypair is generated in THIS browser (tweetnacl). The
 // server only ever receives the PUBLIC key (base64 of the 32-byte pubkey) + account
 // name and broadcasts auth.iost/signUp with the platform's funded account. The SECRET
@@ -741,12 +761,12 @@ async function renderWallet() {
   const st = mine?.status || 'none';
   const cfg = pub?.configured ? 'platform funding configured' : 'platform funding not configured yet';
   const statusLabel = st === 'none' ? 'not created' : st;
-  const fee = pub?.feeIost ?? 11;
+  const fee = pub?.feeIost ?? 0;
   let body = '';
   if (st === 'none') {
     body = `<div class="card" style="margin-bottom:16px">
-      <div class="section-title" style="margin-bottom:8px">Create my free wallet <span class="sub">platform pays the ~${fee} IOST fee · you hold the keys</span></div>
-      <p class="muted" style="max-width:680px;line-height:1.55">Every registered account gets a real IOST mainnet wallet. Your browser generates the private key — it is shown to you <strong>once</strong> for backup and <strong>never sent to the server</strong> (only your public key is). We pay the creation fee; if platform funding is not configured yet, your request queues and is created automatically once it is.</p>
+      <div class="section-title" style="margin-bottom:8px">Create my free wallet <span class="sub">free to open · you hold the keys</span></div>
+      <p class="muted" style="max-width:680px;line-height:1.55">Every registered account gets a real IOST mainnet wallet — opening an IOST account is now <strong>free</strong> (no creation fee; official signup at <a href="https://iostaccount.io/en/create" target="_blank" rel="noopener">iostaccount.io ↗</a>). Your browser generates the private key — it is shown to you <strong>once</strong> for backup and <strong>never sent to the server</strong> (only your public key is).</p>
       <div style="margin-top:14px"><button class="btn" id="walletCreate" aria-label="Generate my IOST wallet keys and request creation">Create my free wallet</button></div>
     </div>`;
   } else if (st === 'pending') {
@@ -770,10 +790,10 @@ async function renderWallet() {
     </div>`;
   }
   el.innerHTML = `
-    <div class="section-title">Your IOST Wallet <span class="sub">free · platform-subsidized · self-custody keys · ${esc(pub?.action || 'auth.iost/signUp')}</span></div>
+    <div class="section-title">Your IOST Wallet <span class="sub">free to open · self-custody keys · ${esc(pub?.action || 'auth.iost/signUp')}</span></div>
     <div class="stat-cards">
       <div class="card kpi"><span class="k-label">Status</span><span class="k-value">${esc(statusLabel)}</span><span class="k-sub">${esc(cfg)}</span></div>
-      <div class="card kpi"><span class="k-label">Subsidized</span><span class="k-value">${pub?.subsidized ? 'yes — we pay' : 'no'}</span><span class="k-sub">~${fee} IOST per wallet · <a href="${esc(pub?.explorer || 'https://explorer.iost.io/tx/')}" target="_blank" rel="noopener">explorer ↗</a></span></div>
+      <div class="card kpi"><span class="k-label">Opening cost</span><span class="k-value">free</span><span class="k-sub">no creation fee · <a href="https://iostaccount.io/en/create" target="_blank" rel="noopener">open at iostaccount.io ↗</a> · <a href="${esc(pub?.explorer || 'https://explorer.iost.io/tx/')}" target="_blank" rel="noopener">explorer ↗</a></span></div>
     </div>
     ${body}
     <div class="card" id="walletFlow" style="display:none"></div>
