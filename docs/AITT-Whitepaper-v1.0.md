@@ -1,11 +1,11 @@
-# AITT Tokenomics — Professional Design Draft (v2.1)
+# AITT Tokenomics — Professional Design Draft (v2.2)
 
 > **Status: DESIGN DRAFT — pre-launch. No public sale; utility-only; not an investment (§10).**
 > Supersedes `docs/tokenomics-vision.md` (v0.1) in design intent; that file remains as historical record.
-> This draft incorporates the Hermes review notes: 1B supply, revenue-backed incentives, legal-first sequencing, utility framing.
+> This draft incorporates the Hermes review notes: 1B supply, proposed future revenue-backed incentive concepts, legal-first sequencing, utility framing.
 > **Go-live gate:** real user base + real fee revenue + legal counsel sign-off (Canada/CSA review). No TGE before that.
-> v1.1 (2026-08-17): burn cap sync with TOKENOMICS.md v1.3 — cumulative burn (fee-burn + DAO buy-back/burn) capped at 200M → 800M supply floor; post-cap the 20% fee share redirects to stakers (70/30 split).
-> v1.2 (2026-08-19): swap tax sync with TOKENOMICS.md v1.4 — 3% buy/sell tax on AMM-pair swaps only (1.8% burn / 0.8% stakers / 0.4% treasury); 0% on wallet-to-wallet, staking, airdrops, platform transfers. Burn share feeds the same 200M cap; post-cap redirects to stakers (70/30). Platform-fee split (50/20/30) unchanged.
+> v1.1 (2026-08-17): burn cap sync with TOKENOMICS.md v1.3 — cumulative burn (fee-burn + DAO buy-back/burn) capped at 200M → 800M supply floor; the proposed future post-cap distribution parameter redirects the 20% fee share to stakers (70/30 split), but is not active at Phase 1.
+> v1.2 (2026-08-19): swap tax sync with TOKENOMICS.md v1.4 — proposed future 3% buy/sell tax on AMM-pair swaps only (1.8% burn / 0.8% stakers / 0.4% treasury), not active at Phase 1; 0% on wallet-to-wallet, staking, airdrops, platform transfers. The proposed burn share uses the same 200M cap and would redirect to stakers (70/30) post-cap. Platform-fee split (50/20/30) unchanged.
 > v1.3 (2026-08-20): Agentic Payments Readiness positioning section added (§15) — verified chain stats + agentic trust rows; H1 version corrected.
 > v1.4 (2026-08-20): status banner reworded to match TOKENOMICS.md v1.5 — "pre-launch"; stays accurate once the token is deployed. Posture unchanged.
 > v1.5 (2026-08-20): Quantum Readiness posture added (§16, condensed from TOKENOMICS §16).
@@ -14,6 +14,7 @@
 > v1.9 (2026-08-23): owner-approved remediation implemented, still pre-launch — authoritative FeeRouter burn path, contract-locked allocations, signed EVM wallet binding, atomic claim states/receipt verification, machine-enforced release gates, and Phase 4 hard-disable. Audit/counsel/owner gates remain closed.
 > v2.0 (2026-08-24): owner-approved burn guarantee correction mirrored from TOKENOMICS.md — swap and FeeRouter/DAO protocol burns share the 800M `totalSupply()` floor, deriving a 200M cumulative protocol-burn cap. Arbitrary user sink-address transfers are excluded because spendability cannot be proven on-chain.
 > v2.1 (2026-08-24): governance claims aligned to enforceable scope (owner-approved), mirrored from TOKENOMICS.md — DAO voting/fee adjustability relabeled future policy; Phase 1 enforcement = Safe-controlled 48h milestone-vault releases + immutable fee ratios.
+> v2.2 (2026-08-24): staker-revenue/fee-share language reframed as future Phase 2+ proposal, inactive at Phase 1; “holders earn nothing” utility posture preserved (owner-approved 2026-08-24).
 
 ---
 
@@ -21,13 +22,13 @@
 
 **AITT (Agent Intelligence Trading Token)** is the utility token of the **IOST Terminal** platform — a real-time AI trading command center for crypto & stocks, live at iostcallister.com, built for humans and designed for AI agents.
 
-AITT is designed to power the platform's **agentic payments economy** as the trust and fee layer for machine-executed transactions, with governance planned for Phase 2+. It is **not** the settlement asset — agent spending settles in stablecoin/USD credits so budgets never fluctuate. AITT is earned and staked, not sold.
+AITT is designed to power the platform's **agentic payments economy** as the trust and fee layer for machine-executed transactions, with staking and governance planned for Phase 2+. It is **not** the settlement asset — agent spending settles in stablecoin/USD credits so budgets never fluctuate. Any future earned distribution or staking use remains proposed, not active or guaranteed; AITT is not sold.
 
 - **Standard:** **ERC-20 on IOST L2** (fully EVM-compatible, OP Stack rollup; IOST's official recommendation for high-frequency/low-cost scenarios — MetaMask, OpenZeppelin, x402/AP2 SDKs compatible). IOST L1 remains home to the platform's producer node (`iost_4_life`) as the payments facilitator/verifier.
 - **Total supply:** 1,000,000,000 (1B) — fixed, no uncapped minting
-- **Core roles:** Trust staking collateral · fee utility · rewards · planned Phase 2+ governance
-- **Value drivers:** real fee revenue (50% stakers / 20% protocol burn / 30% treasury) + staking lock-up + FeeRouter/DAO buy-back burns + 3% DEX buy/sell swap tax (1.8% protocol burn / 0.8% stakers / 0.4% treasury); all protocol burns share the 800M supply floor
-- **Emission discipline:** rewards funded by revenue first; emission pool releases linearly over 48 months; team fully vested over 4 years
+- **Core roles:** proposed future trust-staking collateral · fee utility · earned activity rewards · planned Phase 2+ governance
+- **Proposed future Phase 2+ mechanics (not active at Phase 1):** platform-fee parameters of 50% stakers / 20% protocol burn / 30% treasury, staking lock-up, FeeRouter/DAO buy-back burns, and a Phase 4 DEX buy/sell swap tax of 3% (1.8% protocol burn / 0.8% stakers / 0.4% treasury); all protocol burns share the 800M supply floor
+- **Proposed emission discipline:** any future rewards would be funded by revenue first; emission pool releases linearly over 48 months; team fully vested over 4 years
 
 ---
 
@@ -42,7 +43,7 @@ AITT is designed to power the platform's **agentic payments economy** as the tru
 | Decimals | 8 (ERC-20 supports custom; USDC uses 6) |
 | Home chain | IOST L2 (network ID 182, `l2-mainnet.iost.io`); L1 node as facilitator · BSC bridge for liquidity in Phase 4 |
 | Contract | OpenZeppelin-standard ERC-20 on IOST L2 (subject to final audit) |
-| Inflation | None — rewards drawn from allocation pools + real revenue |
+| Inflation | None — any future proposed rewards would draw from allocation pools + real revenue, not new minting |
 | Deflation | Swap and FeeRouter platform/DAO burns use token-owned `_burn` under one 800M `totalSupply()` floor, deriving a 200M cumulative protocol-burn cap. Arbitrary user sink-address transfers are excluded. |
 | Initial circulating | Only the funded converter reserve is directly claimable; every other allocation is contract-locked. |
 
@@ -84,12 +85,13 @@ Agents and agent-operators stake AITT as **collateral** to obtain a **Trust Scor
 
 ### 4.2 Fee Utility
 - Platform and agent-network fees paid in AITT receive a **50% discount** vs fiat-denominated fees
-- Fee split: **50% stakers / 20% burn / 30% treasury** while burn headroom exists; burn-share redirect yields **64%/36% overall** at the floor
-- **Swap tax (Phase 4, DEX):** 3% on AMM-pair buy/sell only — 1.8% burn / 0.8% stakers / 0.4% treasury. 0% on wallet-to-wallet, staking, airdrops, and platform transfers. Implemented in the token contract via an `_update` override gated on the AMM pair address (one-time lock at setup; no privileged functions after)
-- AITT-denominated fees create ongoing demand + deflation
+- **Staking and fee-revenue distribution are future Phase 2+ proposals and are NOT active; nothing in Phase 1 pays holders or stakers any revenue, yield, APY, or return. Holding AITT earns nothing. Any future reward mechanism requires a separate audited staking contract, refreshed counsel approval, and explicit owner launch, and may be designed differently or never launched.**
+- **Proposed Phase 2+ distribution for the future staking mechanism — not active at Phase 1:** **50% stakers / 20% burn / 30% treasury** while burn headroom exists; burn-share redirect would yield **64%/36% overall** at the floor
+- **Proposed Phase 4 DEX distribution for the future staking mechanism — not active at Phase 1:** 3% on AMM-pair buy/sell only — 1.8% burn / 0.8% stakers / 0.4% treasury. 0% on wallet-to-wallet, staking, airdrops, and platform transfers. The dormant token-contract mechanism uses an `_update` override gated on the AMM pair address (one-time lock at setup; no privileged functions after)
+- Proposed future AITT-denominated fees could create utility demand and protocol burn; neither is a promise of value or return
 - **Authoritative burn mechanism:** swap-tax and FeeRouter platform/DAO burns call token-owned floor/clamp logic and OZ `_burn`. Fixed 1B initial supply plus the 800M floor derives the 200M cumulative protocol-burn cap; no separate counter exists. Protocol tooling never uses sink-address burns. User transfers to arbitrary nonzero sinks are outside the guarantee because spendability cannot be proven on-chain.
-- **Fee rounding:** at most 9 base units remain pending until an exact 50/20/30 split is possible; fragmentation cannot bypass burn/staker shares.
-- **Post-floor behavior:** only the burn share redirects 70/30, preserving the locked base shares.
+- **Fee rounding:** the dormant router keeps at most 9 base units pending until an exact 50/20/30 split is possible; fragmentation cannot alter the proposed future parameters, and no distribution is active at Phase 1.
+- **Proposed post-floor behavior — not active at Phase 1:** only the burn share would redirect 70/30, preserving the locked base shares.
 
 ### 4.3 Rewards
 - Signal providers earn AITT per quality-verified signal (existing hash-pinned-on-IOST mechanic)
@@ -153,15 +155,15 @@ Live off-chain points (per the v0.1 mapping: signals +10, followers +5, referral
           ┌─────────┬────────┴────────┬─────────┐
           ▼         ▼                 ▼         ▼
      50% Stakers  20% BURN*        30% Treasury
-     (fee share)  (deflation)      (DAO: dev, liquidity, buy-back/burn)
+     (proposed future Phase 2+ distribution — not active at Phase 1)
 
-  * Protocol burns are capped at 200M cumulative by the shared 800M `totalSupply()` floor; post-floor the 20% redirects 70/30. User sink-address transfers are outside this guarantee.
+  * Protocol burns are capped at 200M cumulative by the shared 800M `totalSupply()` floor; the proposed future post-floor distribution would redirect the 20% share 70/30 and is not active at Phase 1. User sink-address transfers are outside this guarantee.
 
   Agent stakes AITT ──► Trust Score ──► Spend limits ──► Settles in USD credits/stablecoin
   Slashing events  ──► reduce stake + score (misbehavior penalty)
 ```
 
-**Accrual summary:** demand from fee discount + trust staking + rewards; supply pressure from burn, vesting locks, and staking lock-up; no naked inflation.
+**Proposed future design summary — not active at Phase 1:** potential utility demand from fee discounts and trust staking; supply constraints from burn, vesting locks, and staking lock-up; no naked inflation. This is not a promise of value or return.
 
 ---
 
@@ -177,17 +179,17 @@ Live off-chain points (per the v0.1 mapping: signals +10, followers +5, referral
 | Agent-network fees | 2+ | Platform/agent-network fees for trading & settlement; currently free by design; 50% discount when paid in AITT |
 | Premium tiers | 2+ | Priority settlement, advanced audit tooling, higher agent API limits (individual agents stay free) |
 
-### 6.2 Fee split (locked)
-- **50% → stakers** — participants who secure the network with AITT staking receive the majority share (revenue-backed, never minted)
-- **20% → protocol burn** — shares the 800M `totalSupply()` floor with swap and FeeRouter/DAO burns; post-floor this share redirects 70/30
+### 6.2 Proposed future fee distribution (locked design parameters; not active at Phase 1)
+- **50% → stakers** — proposed Phase 2+ distribution for a future staking mechanism; no holder or staker receives this share at Phase 1
+- **20% → protocol burn** — proposed future burn parameter; shares the 800M `totalSupply()` floor with swap and FeeRouter/DAO burns; post-floor this share would redirect 70/30 if the future mechanism launches
 - **30% → treasury** — development + proposed future DAO-voted buy-back/burn; Phase 1 routing is immutable and transparent on-chain
 
 ### 6.3 Fairness commitments (why costs stay low for everyone)
 - **Sub-cent microtransactions:** IOST fees are fractions of a cent vs cards' $0.30 + 3% floor — agent payments below $1 are only viable on chain-native rails
 - **Batch settlement:** many micro-payments settle in one tx (x402 deferred settlement) — per-payment cost approaches zero
 - **Optional fee discount:** paying fees in AITT saves 50%; nobody is required to hold or buy AITT
-- **Revenue-backed rewards only:** no minting to pay yield — no inflation tax on holders (emission pool is declining, 48-month)
-- **Earned, not sold:** no ICO/IDO; tokens are earned (points, rewards, staking) or vested grants
+- **Future rewards, if launched:** no minting to pay yield — no inflation tax on holders (emission pool is declining, 48-month); no reward, yield, APY, or return is active or promised
+- **Earned, not sold:** no ICO/IDO; tokens may be earned through separately launched activity programs or issued as vested grants; staking does not currently earn tokens or revenue
 - **Progressive pricing:** enterprises pay for premium tiers; individual agents and small operators use core features free
 
 ### 6.4 Economic honesty
@@ -207,7 +209,7 @@ Live off-chain points (per the v0.1 mapping: signals +10, followers +5, referral
 | Partners/Marketing | Milestone-gated: users, volume, agent adoption targets |
 | Initial circulating | Final funded PointsConverter reserve only; no target percentage. The reserve is set from the owner-approved eligible-points snapshot immediately before launch. |
 
-**Hard rule:** if reward emissions would exceed available revenue + pool balance in a period, emissions scale down — the platform **never mints** to pay yield.
+**Proposed future hard rule — not active at Phase 1:** if a separately approved reward mechanism were launched and emissions would exceed available revenue + pool balance in a period, emissions would scale down — the platform **never mints** to pay yield.
 
 ---
 
@@ -222,7 +224,7 @@ Live off-chain points (per the v0.1 mapping: signals +10, followers +5, referral
 | Slashing — unauthorized spend | −10% stake + score reset |
 | Slashing — failed settlement | −5% stake |
 | Appeal window | 14 days, owner review in Phase 1; future DAO review proposed |
-| Fee share APY | Variable — derived from real fee volume, never guaranteed |
+| Future fee-revenue distribution / APY | Not active or promised; any Phase 2+ mechanism would be variable, separately approved, and may never launch |
 
 ---
 
@@ -248,7 +250,7 @@ These values are future Phase 2+ policy targets only. No Phase 1 contract enforc
 - **Geo-restrictions:** platform already blocks restricted jurisdictions; token features inherit the same allowlists.
 - **Public communication:** all docs and UI must state AITT has no guaranteed value, is not an investment, and is not listed/transferable until a compliant path exists.
 - **Before TGE:** contract audit + final numbers modeled on ≥3 months of real fee data. *(Legal opinion ✓ cleared 2026-08-16; ticker ✓ AITT verified 2026-08-16.)*
-- **2026-08-23 hold:** staker fee-revenue/APY and external transferability require refreshed counsel review because they conflict with the current “holders earn nothing/no implied return” wording. These mechanics are not active.
+- **2026-08-24 posture:** staker fee-revenue/APY and external transferability remain future proposals, are not active, and require refreshed counsel review plus explicit owner launch. Holding AITT earns nothing.
 
 ---
 

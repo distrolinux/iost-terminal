@@ -1,4 +1,5 @@
-const { getAddress } = require("ethers");
+const { getAddress, Interface } = require("ethers");
+const APPROVAL_EVENTS = new Interface(["event Approved(address indexed user,uint256 amount)"]);
 
 const TOKEN = 10n ** 8n;
 
@@ -82,4 +83,26 @@ function planApprovalResume(enrichedRows, fullBatch, confirmedClaimIds, converte
   return { existingOutstanding, pendingRows };
 }
 
-module.exports = { buildApprovalBatch, serializeApprovalClaims, chunkApprovalBatch, planApprovalResume };
+function verifyApprovalReceiptEvidence(receipt, converterAddress, claimEvidence) {
+  if (!receipt || Number(receipt.status) !== 1) throw new Error("approval transaction not successful");
+  if (getAddress(receipt.to) !== getAddress(converterAddress)) throw new Error("approval transaction target mismatch");
+  if (!Array.isArray(claimEvidence) || claimEvidence.length === 0) throw new Error("approval claim evidence missing");
+  const actual = new Map();
+  for (const log of receipt.logs || []) {
+    if (getAddress(log.address) !== getAddress(converterAddress)) continue;
+    try {
+      const parsed = APPROVAL_EVENTS.parseLog(log);
+      if (parsed?.name === "Approved") actual.set(getAddress(parsed.args.user), BigInt(parsed.args.amount));
+    } catch { /* unrelated converter event */ }
+  }
+  if (actual.size !== claimEvidence.length) throw new Error("approval event count mismatch");
+  for (const claim of claimEvidence) {
+    const user = getAddress(claim.address);
+    if (!actual.has(user) || actual.get(user) !== BigInt(claim.approvalBaseUnits)) {
+      throw new Error(`approval event evidence mismatch for ${claim.claimId}`);
+    }
+  }
+  return true;
+}
+
+module.exports = { buildApprovalBatch, serializeApprovalClaims, chunkApprovalBatch, planApprovalResume, verifyApprovalReceiptEvidence };

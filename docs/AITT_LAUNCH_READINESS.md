@@ -11,14 +11,14 @@
 | Allocation custody | Complete | Team/advisor/ecosystem vesting plus four 48-hour milestone vaults | Governance Safe owners and final beneficiary review |
 | Points converter | Complete, closed | `PointsConverter.sol`, EIP-191 binding, claim state machine and receipt reconciliation | Final snapshot/reserve + all release gates |
 | Token website | Complete in source | `/aitt` and `/token`; identity, allocation, utility, roadmap, wallet dashboard, explorer and swap status | Production restart/cache refresh when CALLY chooses to publish source changes |
-| Wallet connection | Complete in source | Public EVM connection/network switch/add-token controls; signed conversion-wallet binding in Points view | Add-token remains disabled until verified contract address exists |
+| Wallet connection | Complete in source | Public EVM connection/network switch/add-token controls; signed conversion-wallet binding in Points view | Add-token remains disabled until the deployment manifest and live chain probe verify the contract |
 | Token dashboard | Complete in source | Public status dashboard plus Terminal AITT view | Live contract/reserve data appears only after verified deployment config |
 | Buy/swap interface | Prepared, fail-closed | Requires Phase 4 status, BSC wrapper/pair/factory/quote addresses, live pair bytecode/assets/factory verification, and an approved PancakeSwap HTTPS URL whose `outputCurrency` exactly matches the wrapper | Audited bridge/wrapper, real liquidity pair, refreshed counsel, Phase 4 approval |
 | Tokenomics page | Complete | `docs/TOKENOMICS.md` v2.0 | Keep public mechanics synchronized after any owner-approved design change |
 | Whitepaper | Complete | `/whitepaper` serves `docs/AITT-Whitepaper-v1.0.md` | External review and final deployed-address appendix |
-| Deployment scripts | Complete, not run on a public chain | Address/Phase-4 preflight, release approval bound to exact config + compiled bytecode, complete transaction journal, custody deployment, governance handoff, provider-only exact verification | Explicit owner approval; private key supplied by owner only |
+| Deployment scripts | Complete, not run on a public chain | Address/Phase-4 preflight, release approval bound to exact config plus creation/deployed bytecode, complete transaction journal, custody deployment, governance handoff, provider-only exact verification | Explicit owner approval; private key supplied by owner only |
 | AMM lock script | Complete, Phase 4 only | `scripts/setAmmPair.js` validates chain, bytecode, factory pair, assets, owner and typed confirmation | Phase 4 approval; irreversible after execution |
-| Contract testing | Complete | 70 Hardhat tests; full Solidity compile | Must remain green after audit fixes |
+| Contract testing | Complete | 72 Hardhat tests; full Solidity compile | Must remain green after audit fixes |
 | Platform testing | Complete | Offline safety suite includes AITT release gates, wallet binding, idempotent claims and receipt verification | Must remain green before production restart |
 | Admin/owner functions | Complete for pre-launch | On-chain `onlyOwner` controls; owner-only receipt reconciliation APIs; read-only owner dashboard for gates/claims | Governance Safe/config; no web deploy or gate-flip control by design |
 | Blockchain configuration | Complete | IOST L2 chain 182, BNB gas, canonical RPC | Reconfirm RPC/chain immediately before deployment |

@@ -1,6 +1,6 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const { buildApprovalBatch, serializeApprovalClaims, chunkApprovalBatch, planApprovalResume } = require("../scripts/claim-snapshot-lib");
+const { buildApprovalBatch, serializeApprovalClaims, chunkApprovalBatch, planApprovalResume, verifyApprovalReceiptEvidence } = require("../scripts/claim-snapshot-lib");
 const { mkdtempSync, writeFileSync, readFileSync, rmSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
@@ -69,5 +69,19 @@ describe("AITT claim snapshot builder", function () {
     const fullBatch = buildApprovalBatch([row("a", alice.address, 1)], TOKEN);
     expect(() => planApprovalResume([row("a", alice.address, 1, TOKEN, 0n)], fullBatch, new Set(), TOKEN))
       .to.throw("lacks confirmed manifest evidence");
+  });
+
+  it("binds resumed manifest evidence to Approved receipt events", async function () {
+    const [, converter, alice] = await ethers.getSigners();
+    const iface = new ethers.Interface(["event Approved(address indexed user,uint256 amount)"]);
+    const encoded = iface.encodeEventLog(iface.getEvent("Approved"), [alice.address, TOKEN]);
+    const receipt = {
+      status: 1, to: converter.address,
+      logs: [{ address: converter.address, topics: encoded.topics, data: encoded.data }],
+    };
+    const evidence = [{ claimId: "a", address: alice.address, approvalBaseUnits: TOKEN.toString() }];
+    expect(verifyApprovalReceiptEvidence(receipt, converter.address, evidence)).to.equal(true);
+    expect(() => verifyApprovalReceiptEvidence(receipt, converter.address, [{ ...evidence[0], approvalBaseUnits: (TOKEN + 1n).toString() }]))
+      .to.throw("approval event evidence mismatch");
   });
 });

@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { ethers, network } = require("hardhat");
-const { buildApprovalBatch, serializeApprovalClaims, chunkApprovalBatch, planApprovalResume } = require("./claim-snapshot-lib");
+const { buildApprovalBatch, serializeApprovalClaims, chunkApprovalBatch, planApprovalResume, verifyApprovalReceiptEvidence } = require("./claim-snapshot-lib");
 
 const UNIT = 10n ** 8n;
 
@@ -32,10 +32,9 @@ async function main() {
     }
     if (manifest.status === "completed") throw new Error("approval snapshot already completed");
     for (const approval of manifest.approvals || []) {
-      if (approval.status !== "submitted") continue;
       const receipt = await ethers.provider.getTransactionReceipt(approval.txHash);
-      if (!receipt) throw new Error(`approval transaction still pending: ${approval.txHash}`);
-      if (Number(receipt.status) !== 1) throw new Error(`approval transaction failed: ${approval.txHash}`);
+      if (!receipt) throw new Error(`approval transaction receipt missing: ${approval.txHash}`);
+      verifyApprovalReceiptEvidence(receipt, converterAddress, approval.claimEvidence);
       approval.status = "confirmed";
       approval.blockNumber = receipt.blockNumber;
       approval.confirmedAt = new Date().toISOString();
@@ -52,7 +51,7 @@ async function main() {
   const fullBatch = buildApprovalBatch(canonicalRows, reserve);
   const confirmedIds = new Set((manifest?.approvals || [])
     .filter((approval) => approval.status === "confirmed")
-    .flatMap((approval) => approval.claimIds || []));
+    .flatMap((approval) => (approval.claimEvidence || []).map((claim) => claim.claimId)));
   const { existingOutstanding, pendingRows } = planApprovalResume(enriched, fullBatch, confirmedIds, reserve);
   const pendingBatch = pendingRows.length ? buildApprovalBatch(pendingRows, reserve - existingOutstanding) : { claims: [], users: [], amounts: [], total: 0n };
 
@@ -80,12 +79,16 @@ async function main() {
     const tx = await converter.approveClaims(chunk.users, chunk.amounts);
     const approval = {
       index: manifest.approvals.length, claims: chunk.claims.length,
-      claimIds: chunk.claims.map((claim) => claim.claimId), txHash: tx.hash,
+      claimEvidence: chunk.claims.map((claim) => ({
+        claimId: claim.claimId, address: claim.address, approvalBaseUnits: claim.approvalBaseUnits.toString(),
+      })),
+      txHash: tx.hash,
       status: "submitted", submittedAt: new Date().toISOString(),
     };
     manifest.approvals.push(approval);
     writeManifest();
     const receipt = await tx.wait();
+    verifyApprovalReceiptEvidence(receipt, converterAddress, approval.claimEvidence);
     approval.status = "confirmed";
     approval.blockNumber = receipt.blockNumber;
     approval.confirmedAt = new Date().toISOString();

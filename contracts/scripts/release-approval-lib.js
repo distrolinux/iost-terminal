@@ -47,8 +47,9 @@ function contractBundlePayload(rootDir) {
     const artifactPath = path.join(rootDir, 'artifacts', 'contracts', source, `${name}.json`);
     if (!fs.existsSync(artifactPath)) throw new Error(`compiled artifact missing: ${artifactPath}`);
     const artifact = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
+    if (!artifact.bytecode || artifact.bytecode === '0x') throw new Error(`creation bytecode missing: ${name}`);
     if (!artifact.deployedBytecode || artifact.deployedBytecode === '0x') throw new Error(`deployed bytecode missing: ${name}`);
-    return { name, sourceName: artifact.sourceName, deployedBytecode: artifact.deployedBytecode };
+    return { name, sourceName: artifact.sourceName, bytecode: artifact.bytecode, deployedBytecode: artifact.deployedBytecode };
   });
 }
 

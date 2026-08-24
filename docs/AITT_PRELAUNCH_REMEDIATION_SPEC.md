@@ -11,11 +11,11 @@ Make AITT's locked 1B supply, shared 800M protocol-burn floor, allocation custod
 ## Approved decisions
 
 1. **Burn authority:** one `AITTFeeRouter` is the sole external protocol-burn path. `AITT` keeps internal AMM burns and a one-time-locked router address. Every protocol burn reduces `totalSupply()` via `_burn`; protocol policy and tooling never use sink-address transfers.
-2. **Supply floor:** all protocol burn paths share `totalSupply() - 800M` headroom, deriving a 200M cumulative protocol-burn cap from the fixed 1B initial supply. Excess burn share redirects 70/30 to stakers/treasury. User transfers to arbitrary nonzero sink addresses are excluded because address spendability cannot be proven on-chain.
-3. **Post-cap platform fees:** redirect only the 20% burn share 70/30. Overall platform-fee distribution becomes 64% stakers / 36% treasury at the floor.
+2. **Supply floor:** all protocol burn paths share `totalSupply() - 800M` headroom, deriving a 200M cumulative protocol-burn cap from the fixed 1B initial supply. The proposed future mechanism would redirect excess burn share 70/30 to stakers/treasury; this distribution is not active at Phase 1. User transfers to arbitrary nonzero sink addresses are excluded because address spendability cannot be proven on-chain.
+3. **Proposed post-cap platform-fee distribution — not active at Phase 1:** a future separately launched staking mechanism would redirect only the 20% burn share 70/30, producing the locked design parameter of 64% stakers / 36% treasury at the floor.
 4. **Allocation custody:** no allocation goes directly to a transferable wallet except the funded PointsConverter reserve. Ecosystem uses a 48-month linear emission vault. Team/advisors keep current vesting. Treasury, partners, community, and reserve use separate 48-hour queued milestone vaults.
 5. **Conversion identity:** users bind a MetaMask/EVM address with an EIP-191 challenge/signature. Claims use explicit atomic states and 1 point = 1 whole AITT = `10**8` base units.
-6. **Revenue/legal:** keep the proposed staker-revenue model frozen pending refreshed counsel approval; public surfaces must label it proposed/inactive.
+6. **Revenue/legal:** staking and fee-revenue distribution are future Phase 2+ proposals and are not active; nothing in Phase 1 pays holders or stakers revenue, yield, APY, or return. Holding AITT earns nothing. Any future reward mechanism requires a separate audited staking contract, refreshed counsel approval, and explicit owner launch, and may be designed differently or never launched.
 7. **Bridge:** BSC/PancakeSwap Phase 4 remains blocked until canonical IOST L2 launch is stable and an audited wrapper/supply/burn design exists.
 
 ## Contracts
@@ -27,13 +27,13 @@ Make AITT's locked 1B supply, shared 800M protocol-burn floor, allocation custod
 - One-time `setFeeRouter(address)` and `setAmmPair(address)`; both nonzero and permanent.
 - `protocolBurn(uint256)` callable only by the locked fee router; burns from router balance.
 - Shared internal burn helper clamps at floor and redirects excess 70/30.
-- Swap tax remains 3% on the single canonical pair: 1.8% requested burn, 0.8% stakers, 0.4% treasury.
+- The dormant Phase 4 swap-tax design remains 3% on the single canonical pair: 1.8% requested burn, 0.8% proposed future stakers distribution, 0.4% treasury; it is not active at Phase 1.
 - No protocol sink-address burn path and no mint after construction; arbitrary user sink transfers are not counted as burns.
 
 ### AITTFeeRouter
 
 - Immutable AITT, stakers recipient, treasury recipient.
-- `payPlatformFee(amount)`: pulls exact AITT from payer; routes 50% stakers, 20% through `AITT.protocolBurn`, 30% treasury. At/near floor the token redirects unburnable remainder 70/30.
+- `payPlatformFee(amount)`: dormant Phase 2+ routing code pulls exact AITT from a payer and encodes proposed future parameters of 50% stakers, 20% through `AITT.protocolBurn`, and 30% treasury; at/near floor it encodes a 70/30 redirect of the unburnable remainder. No Phase 1 holder or staker distribution is active.
 - `executeDaoBurn(amount)`: the single-address owner submits owned AITT through the same protocol-burn path; the DAO name is forward-looking and no Phase 1 governance vote is enforced. Protocol tooling does not use sink-address transfers.
 - Exact-balance-delta checks; nonReentrant; events for fee, burn, and redirect amounts.
 

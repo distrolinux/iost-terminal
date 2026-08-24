@@ -134,6 +134,28 @@ describe("Phase 1 deployment script", function () {
     expect(run.journal).to.equal(null);
   });
 
+  it("binds approval evidence to both creation and deployed bytecode", async function () {
+    const root = join(__dirname, "..");
+    const scratch = mkdtempSync(join(tmpdir(), "aitt-artifact-fingerprint-"));
+    try {
+      cpSync(join(root, "artifacts"), join(scratch, "artifacts"), { recursive: true });
+      const cfg = { network: "hardhat", allocations: {}, pointsConversionReserve: "0" };
+      const before = computeReleaseFingerprints(cfg, 31337, scratch).contractBundleHash;
+      const artifactPath = join(scratch, "artifacts", "contracts", "AITT.sol", "AITT.json");
+      const artifact = JSON.parse(readFileSync(artifactPath, "utf8"));
+      artifact.bytecode = `${artifact.bytecode.slice(0, -2)}${artifact.bytecode.endsWith("00") ? "01" : "00"}`;
+      writeFileSync(artifactPath, JSON.stringify(artifact));
+      const afterCreationMutation = computeReleaseFingerprints(cfg, 31337, scratch).contractBundleHash;
+      expect(afterCreationMutation).to.not.equal(before);
+      artifact.deployedBytecode = `${artifact.deployedBytecode.slice(0, -2)}${artifact.deployedBytecode.endsWith("00") ? "01" : "00"}`;
+      writeFileSync(artifactPath, JSON.stringify(artifact));
+      const afterRuntimeMutation = computeReleaseFingerprints(cfg, 31337, scratch).contractBundleHash;
+      expect(afterRuntimeMutation).to.not.equal(afterCreationMutation);
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
+  });
+
   it("rejects approval evidence bound to different compiled bytecode", async function () {
     const run = await runDeploy({}, { AITT_TEST_STALE_BUNDLE_HASH: `0x${'8'.repeat(64)}` });
     expect(run.status).to.not.equal(0);

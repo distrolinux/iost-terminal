@@ -6,6 +6,7 @@
 > Revisit only after: real users, real trading fees, and legal counsel sign-off.
 
 > **Superseded by `docs/TOKENOMICS.md` (v1.0). Decisions 2026-08-16: symbol locked to AITT (verified free — "AIT" taken by AIT Protocol, AiMalls, AICHAIN, AI Trader); name changed from "AIgent Intelligence Trading Token" to "Agent Intelligence Trading Token" (trademark conflict — "AIgent" registered by Ubiquity Global Services, USPTO 2020, actively enforced). This file is a historical record.**
+> **Legal framing note (2026-08-24): the revenue/APY concepts below are rejected legacy proposals, not active or promised. Nothing in Phase 1 pays holders or stakers revenue, yield, APY, or return. Holding AITT earns nothing. Any future mechanism requires a separate audited staking contract, refreshed counsel approval, and explicit owner launch, and may be designed differently or never launched.**
 
 ## 1. Token Overview
 - **Name:** AIgent Intelligence Trading Token
@@ -26,19 +27,19 @@
 
 ## 3. Utility
 - **Governance:** voting on AI algorithms, fee structure, treasury; 0.1% supply proposal threshold; optional quadratic voting.
-- **Staking:** lock AIT → share of trading fees; tiered APY (3-mo → 10%, 2-yr → 25%); rewards minted from Community pool only.
+- **Rejected legacy staking proposal — never active:** lock AIT → proposed share of trading fees; proposed tiered APY parameters (3-mo → 10%, 2-yr → 25%). These figures are historical, not promised, and are superseded by `docs/TOKENOMICS.md` v2.2.
 - **Payments:** 50% fee discount paying with AIT; premium features gated; internal transfers in AIT.
 - **Rewards:** trading bounties (AI-verified), referral program, AI feedback rewards.
 
 ## 4. Mechanisms
-- **Inflation:** staking pool only; ~5% annual starting, −1%/yr.
-- **Deflation:** 20% of trading fees burned; Reserve buy-back/burn at low liquidity.
+- **Rejected legacy inflation proposal — never active:** staking-pool parameter of ~5% annual starting, −1%/yr.
+- **Rejected legacy deflation proposal — never active:** 20% of trading fees burned; Reserve buy-back/burn at low liquidity.
 - **Vesting:** Team 1-yr cliff + 36-mo linear; Marketing/Reserve milestone-gated ($10M TVL, 100k users).
-- **Fee split:** 50% stakers / 20% burn / 30% treasury.
+- **Rejected legacy fee-split proposal — never active:** 50% stakers / 20% burn / 30% treasury.
 
 ## 5. Review Notes (Hermes/Coder review, Aug 2026) — apply before any issuance
 1. **Cut supply to 1B** — 21B is arbitrary (BTC 21M × 1000) and reads as retail-bait. Model supply from fee burn + staking math instead.
-2. **Yield must be revenue-backed** — 10–25% APY is unsustainable with zero fee income; staking rewards come from REAL fees, never naked inflation.
+2. **Rejected yield concept** — the historical 10–25% APY proposal was unsustainable and is not active or promised; see the future/conditional posture in `docs/TOKENOMICS.md` v2.2.
 3. **Legal:** rewards/yield/buy-backs make AIT likely a SECURITY in CA/US. Public sale = unregistered offering risk. Obtain counsel + geo-restrictions (site already blocks restricted countries). No TGE until then.
 4. **Sequence:** users + fees FIRST, then token. Design will be re-modeled on real numbers anyway.
 5. **AI honesty:** token name promises "AI intelligence" — the AI must stay transparent (scores show why; audit logs public) or the name overpromises.
@@ -60,7 +61,8 @@ Points replicate the incentive design 1:1-ready for future AIT conversion.
 
 ## 7. Flow (conceptual)
 ```
-[Users Trade] → [Platform Fees] → (50% stakers) + (20% burn) + (30% treasury)
-[Users Stake] → [Rewards] ← Community pool
+[Rejected legacy proposal — never active]
+[Users Trade] → [Platform Fees] → proposed (50% stakers) + (20% burn) + (30% treasury)
+[Users Stake] → [Proposed Rewards] ← Community pool
 [DAO Votes]   → [Treasury] → marketing, dev, buy-backs
 ```

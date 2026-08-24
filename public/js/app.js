@@ -701,10 +701,10 @@ async function renderAITT() {
       ${ALLOC.map(([name, pct, amt, vest]) => `<div class="alloc-row"><span class="alloc-name">${name}</span><span class="alloc-bar"><i style="width:${pct}%"></i></span><span class="alloc-pct mono">${amt} · ${pct}%</span><span class="alloc-vest">${vest}</span></div>`).join('')}
     </div>
     <div class="card" style="margin-bottom:16px">
-      <div class="section-title" style="margin-bottom:8px">Utility <span class="sub">proposed mechanics · revenue-sharing and transferability under legal/engineering review</span></div>
+      <div class="section-title" style="margin-bottom:8px">Utility <span class="sub">future Phase 2+ proposals · not active · holding AITT earns nothing</span></div>
       <div class="util-grid">
         <div class="util"><span class="chip ok">Trust staking</span><p>Agents stake AITT → Trust Score → spend limits. Slashing for unauthorized spend — KYA with teeth.</p></div>
-        <div class="util"><span class="chip neut">Fee utility</span><p>Design target: 50% discount · 50/20/30 split. Not active; global burn accounting and legal posture remain under review.</p></div>
+        <div class="util"><span class="chip neut">Fee utility</span><p>Proposed Phase 2+ parameters: 50% discount · 50/20/30 split. Phase 1 pays holders and stakers no revenue, yield, APY, or return. Any future reward mechanism requires a separate audited staking contract, refreshed counsel approval and explicit owner launch, and may never launch.</p></div>
         <div class="util"><span class="chip neut">Governance roadmap</span><p>Phase 2+ target only: stake-weighted voting, quorum and policy controls. Phase 1 has immutable fee ratios and Safe-controlled 48h milestone releases; no on-chain DAO vote or veto.</p></div>
         <div class="util"><span class="chip ok">Agentic payments</span><p>AP2 consent/intent/payment mandates + x402 rails on IOST — Phase 3.</p></div>
       </div>

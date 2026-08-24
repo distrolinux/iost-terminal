@@ -271,7 +271,7 @@ Atomic tmp+rename writes, boot-cached stores — same rules as every other store
 
 - AITT is NOT the settlement asset — budgets are USD credits/stablecoin
 - 1B supply, no minting — staking uses existing allocation (ecosystem pool)
-- Utility framing — staking is platform usage, not an investment return
+- Utility framing — staking is proposed platform usage, not an investment return; holding AITT earns nothing
 - Phase 3 (x402) builds on this wallet; Phase 4 (DEX/bridge) only after legal review
 
 ---
@@ -287,7 +287,7 @@ Atomic tmp+rename writes, boot-cached stores — same rules as every other store
 ## Open Items (decision points for the owner)
 
 1. [ ] Credit-line formula calibration (`stakeUSD × multiplier`) — propose numbers after Phase 1 fee data
-2. [ ] Staking rewards: none at Phase 2 start? Or fee-share % (50% stakers split) once fees exist? **Recommend: no rewards until fee revenue exists (revenue-backed rule)**
+2. [ ] Future staking rewards remain undecided and inactive. The 50% stakers split is a proposed Phase 2+ design parameter only; any launch requires a separate audited staking contract, refreshed counsel approval, and explicit owner launch, and may be designed differently or never launched. **Phase 1 pays no holder or staker revenue, yield, APY, or return.**
 3. [ ] Human Present default for ALL live trades (keep option C) — autopilot budgets opt-in
 4. [ ] X agents onboarded gate — propose 20 agents after the wallet ships
 5. [ ] On-chain staking contract — reuse Phase 1 pattern post-deploy; same free audit pass

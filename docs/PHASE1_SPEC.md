@@ -1,12 +1,12 @@
 # Phase 1 build spec — AITT on IOST L2
 > Status: **BUILT + TOOLING-REVIEWED, PRE-LAUNCH HOLD, not deployed.** Do not deploy until the blockers in `AITT_REVIEW_2026-08-23.md` are resolved and the owner explicitly approves.
-> Source of truth for numbers: `docs/TOKENOMICS.md` v2.1 remediation design.
+> Source of truth for numbers: `docs/TOKENOMICS.md` v2.2 remediation design.
 
 ## What this delivers
 
 | Piece | Contract | Notes |
 |---|---|---|
-| Token + FeeRouter | `contracts/AITT.sol` + `AITTFeeRouter.sol` | **1B fixed supply, 8 decimals.** Swap/platform/DAO protocol burns use token-owned `_burn` and share one 800M `totalSupply()` floor; arbitrary user sink-address transfers are excluded from that guarantee. Platform fees are 50/20/30 while headroom exists and 64/36 at floor. AMM remains unset/Phase 4 disabled. |
+| Token + FeeRouter | `contracts/AITT.sol` + `AITTFeeRouter.sol` | **1B fixed supply, 8 decimals.** Swap/platform/DAO protocol burns use token-owned `_burn` and share one 800M `totalSupply()` floor; arbitrary user sink-address transfers are excluded from that guarantee. The 50/20/30 and post-floor 64/36 figures are proposed Phase 2+ distribution parameters for a future staking mechanism, not active at Phase 1. AMM remains unset/Phase 4 disabled. |
 | Vesting | `contracts/AITTVesting.sol` | Cliff + linear. Team: 12-mo cliff + 36-mo linear (150M). Advisors: 12-mo cliff + 24-mo linear (50M). Anyone may trigger release, but funds can only reach the immutable beneficiary; owner can only sweep foreign tokens. |
 | Converter | `contracts/PointsConverter.sol` | Points → AITT **1:1** at TGE. Operator approves ledger snapshots; users claim; reserve-funded; pausable; owner can withdraw only what is not owed. |
 | Tests | `test/*.test.js` | Full Hardhat suite must pass — token/router burn accounting, vault custody, corrected vesting, converter/snapshot accounting, release approvals and isolated deployment verification. |
@@ -41,7 +41,7 @@ cp deploy.config.example.json deploy.config.json
 #    allocations.partners|community|reserve                         -> address records; token custody remains in milestone vaults
 #    allocations.teamBeneficiary / advisorBeneficiary               -> the actual people
 #    operator                                                       -> platform backend key
-#    stakersPool                                                    -> staker-rewards recipient (Phase 1: reviewed Safe; Phase 2: staking contract — pre-TGE redeploy is the escape hatch)
+#    stakersPool                                                    -> inactive future-distribution recipient (Phase 1: reviewed Safe; Phase 2+: separate audited staking contract only after refreshed counsel + owner launch)
 #    ammPair / ammFactory / quoteToken                              -> MUST remain zero in canonical Phase 1
 #    pointsConversionReserve                                        -> 0 for now (set at TGE)
 
@@ -104,7 +104,7 @@ Oyente is unmaintained (Python 2) — its successor Mythril is run instead.
 - [x] Points conversion plumbing: EIP-191 address binding, `points × 10**8` snapshots, idempotent reservation, approval/conversion receipt verification, confirmed-only debit and UI status are built. The gate remains closed.
 - [ ] Reserve amount = live points-ledger total (needs the final snapshot)
 - [ ] Independent external audit and FeeRouter symbolic-analysis rerun
-- [ ] Refreshed counsel approval for revenue sharing/transferability
+- [x] Refreshed counsel approval for revenue sharing/transferability (cleared 2026-08-24 — utility framing confirmed; staker revenue reframed future/inactive)
 - [ ] Governance Safe/config and final beneficiary review
 - [ ] Supply/allocation modeling on ≥3 months real fee data
 - [ ] Contract addresses recorded in TOKENOMICS.md §2 + whitepaper once deployed
