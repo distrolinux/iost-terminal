@@ -7,7 +7,7 @@
     "lib": "lib"
   },
   "scripts": {
-    "test": "node tests/rails-check.mjs && node tests/live-proposals-check.mjs && node tests/agent-wallet-check.mjs && node tests/live-self-custody-check.mjs && node tests/auth-security-check.mjs && node tests/auth-session-regeneration-check.mjs && node tests/server-security-contract-check.mjs && node tests/security-fixes-check.mjs && node tests/aitt-conversion-check.mjs && node tests/aitt-dashboard-check.mjs && node tests/points-auth-hydration-check.mjs"
+    "test": "node tests/rails-check.mjs && node tests/live-proposals-check.mjs && node tests/agent-wallet-check.mjs && node tests/live-self-custody-check.mjs && node tests/auth-security-check.mjs && node tests/auth-session-regeneration-check.mjs && node tests/server-security-contract-check.mjs && node tests/security-fixes-check.mjs && node tests/aitt-conversion-check.mjs && node tests/aitt-dashboard-check.mjs && node tests/points-auth-hydration-check.mjs && node tests/points-signup-check.mjs && node tests/aitt-snapshot-check.mjs"
   },
   "keywords": [],
   "author": "",

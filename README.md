@@ -15,8 +15,8 @@ money moves without exchange keys + explicit enablement.
 | [`docs/AITT_REVIEW_2026-08-24.md`](docs/AITT_REVIEW_2026-08-24.md) | **Current AITT pre-launch review disposition** — deployment/conversion hold |
 | [`docs/AITT_PRELAUNCH_REMEDIATION_SPEC.md`](docs/AITT_PRELAUNCH_REMEDIATION_SPEC.md) | Owner-approved burn, custody, conversion, gate, legal and bridge remediation architecture |
 | [`docs/AITT_COUNSEL_REVIEW_BRIEF.md`](docs/AITT_COUNSEL_REVIEW_BRIEF.md) | Refreshed counsel questions and required written launch approval |
-| [`docs/TOKENOMICS.md`](docs/TOKENOMICS.md) | AITT tokenomics v2.3 source (pre-launch hold) |
-| [`docs/AITT-Whitepaper-v1.0.md`](docs/AITT-Whitepaper-v1.0.md) | Public AITT whitepaper draft synchronized to v2.3 mechanics |
+| [`docs/TOKENOMICS.md`](docs/TOKENOMICS.md) | AITT tokenomics v2.4 source (pre-launch hold) |
+| [`docs/AITT-Whitepaper-v1.0.md`](docs/AITT-Whitepaper-v1.0.md) | Public AITT whitepaper draft synchronized to v2.4 mechanics |
 | [`docs/PHASE1_SPEC.md`](docs/PHASE1_SPEC.md) | Phase 1 contracts spec |
 | [`docs/PHASE4_BRIDGE_DEX_SPEC.md`](docs/PHASE4_BRIDGE_DEX_SPEC.md) | Phase 4B local-only bridge, finality, DEX-verification, and LP-custody specification; deployment and liquidity remain disabled |
 | [`docs/COMPETITIVE-NOTE-etoro.md`](docs/COMPETITIVE-NOTE-etoro.md) | Competitive note: eToro copy-trading vs our agent marketplace |

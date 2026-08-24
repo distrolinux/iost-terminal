@@ -1,6 +1,6 @@
 # Phase 1 build spec — AITT on IOST L2
 > Status: **BUILT + TOOLING-REVIEWED, PRE-LAUNCH HOLD, not deployed.** Do not deploy until the blockers in `AITT_REVIEW_2026-08-23.md` are resolved and the owner explicitly approves.
-> Source of truth for numbers: `docs/TOKENOMICS.md` v2.3 remediation design.
+> Source of truth for numbers: `docs/TOKENOMICS.md` v2.4 remediation design.
 
 ## What this delivers
 
@@ -8,7 +8,7 @@
 |---|---|---|
 | Token + FeeRouter | `contracts/AITT.sol` + `AITTFeeRouter.sol` | **1B fixed supply, 8 decimals.** Swap/platform/DAO protocol burns use token-owned `_burn` and share one 800M `totalSupply()` floor; arbitrary user sink-address transfers are excluded from that guarantee. The 50/20/30 and post-floor 64/36 figures are proposed Phase 2+ distribution parameters for a future staking mechanism, not active at Phase 1. AMM remains unset/Phase 4 disabled. |
 | Vesting | `contracts/AITTVesting.sol` | Cliff + linear. Team: 12-mo cliff + 36-mo linear (150M). Advisors: 12-mo cliff + 24-mo linear (50M). Anyone may trigger release, but funds can only reach the immutable beneficiary; owner can only sweep foreign tokens. |
-| Converter | `contracts/PointsConverter.sol` | Points → AITT **1:1** at TGE. Operator approves ledger snapshots; users claim; reserve-funded; pausable; owner can withdraw only what is not owed. |
+| Converter | `contracts/PointsConverter.sol` | Points → AITT **1:1**. Off-chain finalization excludes provisional points, binds a UTC-millisecond cutoff and configured funded cap in a deterministic hash, and refuses oversubscription without pro-rata reduction. Operator approvals remain reserve-funded and pausable; owner can withdraw only what is not owed. |
 | Tests | `test/*.test.js` | Full Hardhat suite must pass — token/router burn accounting, vault custody, corrected vesting, converter/snapshot accounting, release approvals and isolated deployment verification. |
 | Deploy | `scripts/deploy.js` + `deploy.config.example.json` | Fail-closed preflight, partial-deployment journal, contract custody, reserve funding and governance handoff. |
 | Verify | `scripts/verify.js` + `verify-lib.js` | Derived-count exact chain, bytecode, token-binding, owner, router, reserve, schedule, custody, clean-state and zero-deployer-balance invariants; any mismatch exits nonzero. |
@@ -103,11 +103,13 @@ Oyente is unmaintained (Python 2) — its successor Mythril is run instead.
 ## Open items this phase does NOT close
 - [x] Points conversion plumbing: EIP-191 address binding, `points × 10**8` snapshots, idempotent reservation, approval/conversion receipt verification, confirmed-only debit and UI status are built. The gate remains closed.
 - [ ] Reserve amount = live points-ledger total (needs the final snapshot)
+- [x] Off-chain snapshot/cap tooling: canonical eligible balances, cutoff/cap/total SHA-256 binding, idempotent immutable finalization, and explicit no-snapshot oversubscription failure. Final numeric cap and snapshot still require owner approval.
 - [ ] Independent external audit and FeeRouter symbolic-analysis rerun
 - [x] Refreshed counsel review for the Phase 1 utility framing (cleared 2026-08-24). Future staking revenue/APY, external transferability and Phase 4 liquidity remain inactive proposals requiring separate counsel, owner and audit approval.
 - [ ] Governance Safe/config and final beneficiary review
 - [ ] Supply/allocation modeling on ≥3 months real fee data
 - [ ] Contract addresses recorded in TOKENOMICS.md §2 + whitepaper once deployed
+- [ ] Implement and audit the proposed points release schedule target (25% at TGE, 75% linear over 12 months); intentionally not part of the snapshot/cap slice.
 - [ ] Audited BSC bridge/wrapped-token design and verified PancakeSwap pair before Phase 4 — architecture baseline: `docs/PHASE4_BRIDGE_DEX_SPEC.md`
 
 ## Release gates

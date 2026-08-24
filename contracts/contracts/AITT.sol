@@ -13,7 +13,7 @@ interface IAITTFeeRouterBinding {
 /// @title Agent Intelligence Trading Token (AITT)
 /// @notice ERC-20 utility token of IOST Terminal (iostcallister.com).
 /// @dev Fixed supply, minted exactly once at deployment. Swap tax per
-///      TOKENOMICS.md v2.3 (locked 2026-08-19, burn guarantee corrected
+///      TOKENOMICS.md v2.4 (locked 2026-08-19, burn guarantee corrected
 ///      2026-08-24): 3% on AMM-pair buy/sell only —
 ///      1.8% burn / 0.8% stakers / 0.4% treasury; 0% on wallet-to-wallet,
 ///      staking, airdrops, and platform transfers. Protocol burn shares are

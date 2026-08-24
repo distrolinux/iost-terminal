@@ -17,9 +17,9 @@ Hardhat tests; the prototype is not a deployment or release artifact.
 - Allocation (sums to 1,000,000,000): ecosystem 300M · treasury 200M · team 150M · partners 100M · community 100M · reserve 100M · advisors 50M. Points-conversion reserve draws from the ecosystem pool.
 - Burn authority: `AITTFeeRouter` is the sole external protocol-burn path; swap/router burns share AITT's 800M floor. The protocol never treats sink-address transfers as burns. Platform fees are 50/20/30 before floor and 64/36 after burn-share redirect.
 - Allocation custody: only converter reserve is directly claimable; ecosystem uses 48-month linear vesting; treasury/partners/community/reserve use separate 48h milestone vaults.
-- Audit gate: full Hardhat suite must pass (85 tests as of 2026-08-24); Slither 0H/0M, AITT Mythril clean; router Mythril incomplete after local OOM. Refreshed counsel sign-off CLEARED 2026-08-24 (utility framing; staker revenue reframed future/inactive). Pre-launch HOLD remains until independent external audit and explicit owner gates pass.
+- Audit gate: full Hardhat suite must pass; current local verification is 124 passing tests. Slither 0H/0M, AITT Mythril clean; router Mythril incomplete after local OOM. Refreshed counsel sign-off CLEARED 2026-08-24 (utility framing; staker revenue reframed future/inactive). Pre-launch HOLD remains until independent external audit and explicit owner gates pass.
 - Network: IOST L2, chain 182 (`https://l2-mainnet.iost.io`), gas = BNB, explorer `https://l2-scan.iost.io`.
-- Phase 4 prototype: `Phase4Escrow`, `Phase4Wrapper`, and `Phase4AttestationVerifier` are local Hardhat fixtures only. They must not be deployed, used for public liquidity, or treated as satisfying the Phase 4 release gates. `Phase4MockToken` is a fixed-supply test token, not canonical AITT.
+- Phase 4 prototype/readiness fixtures (`Phase4Escrow`, `Phase4Wrapper`, `Phase4AttestationVerifier`, `Phase4DexHarness`, and `Phase4PancakeV2BscReadiness`) are local Hardhat fixtures only. They must not be deployed, used for public liquidity, or treated as satisfying the Phase 4 release gates. `Phase4MockToken` and the DEX mock contracts are test fixtures, not canonical AITT or PancakeSwap deployments.
 
 ## Work Guidance
 - Secrets never live here: `deploy.config.json` (addresses only) and `.env` are gitignored.

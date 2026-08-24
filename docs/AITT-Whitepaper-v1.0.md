@@ -1,4 +1,4 @@
-# AITT Tokenomics — Professional Design Draft (v2.3)
+# AITT Tokenomics — Professional Design Draft (v2.4)
 
 > **Status: DESIGN DRAFT — pre-launch. No public sale; utility-only; not an investment (§10).**
 > Supersedes `docs/tokenomics-vision.md` (v0.1) in design intent; that file remains as historical record.
@@ -15,6 +15,7 @@
 > v2.0 (2026-08-24): owner-approved burn guarantee correction mirrored from TOKENOMICS.md — swap and FeeRouter/DAO protocol burns share the 800M `totalSupply()` floor, deriving a 200M cumulative protocol-burn cap. Arbitrary user sink-address transfers are excluded because spendability cannot be proven on-chain.
 > v2.1 (2026-08-24): governance claims aligned to enforceable scope (owner-approved), mirrored from TOKENOMICS.md — DAO voting/fee adjustability relabeled future policy; Phase 1 enforcement = Safe-controlled 48h milestone-vault releases + immutable fee ratios.
 > v2.2 (2026-08-24): staker-revenue/fee-share language reframed as future Phase 2+ proposal, inactive at Phase 1; “holders earn nothing” utility posture preserved (owner-approved 2026-08-24). v2.3 (2026-08-24): rewards programs (signal/copy-trading/referral) reframed as proposed future programs — not active at Phase 1 (owner-approved).
+> v2.4 (2026-08-24): final points-snapshot accounting design mirrored from TOKENOMICS.md — eligible points only, deterministic cutoff/hash, configured funded cap, immutable finalization, and fail-closed oversubscription preserving the planned 1:1 rule. No cap amount is approved here.
 
 ---
 
@@ -115,7 +116,9 @@ Phase 1 has no governance contracts. FeeRouter ratios are immutable, and each ow
 - Priority settlement, higher throughput, advanced audit tooling at higher stake
 
 ### 4.6 Points → AITT Conversion
-Live off-chain points (per the v0.1 mapping: signals +10, followers +5, referrals +50/+10, weekly top paper trader +500, AI feedback +5) convert **1:1 to AITT at TGE** — conversion is an earn-event, not a purchase. UI must label this honestly: *"planned, not guaranteed."*
+Live off-chain points include a +1 signup award that remains provisional until explicit activation. Only eligible points at the final approved snapshot are planned to convert **1:1 to AITT** — conversion is an earn-event, not a purchase, and remains *"planned, not guaranteed."* The snapshot uses an explicit UTC-millisecond cutoff, excludes provisional entries, sorts owner balances canonically, and binds the cutoff, configured funded cap, eligible total, and balances in a deterministic SHA-256 hash. Identical finalization is idempotent; a finalized snapshot is immutable.
+
+The funded cap is an owner-approved positive whole-point configuration input backed 1:1 by the intended converter reserve; no numeric amount is set here. If eligible points exceed it, finalization fails with the exact shortfall and creates no snapshot. There is no automatic pro-rata reduction or silent change to the 1:1 rule. Proposed future release target, not implemented or guaranteed in this slice: 25% at TGE and 75% linearly over 12 months, subject to all release gates and final implementation review.
 
 ### 4.7 Payment Sessions & Atomic Budget Enforcement
 - Every agent payment runs inside a **payment session** — a scoped, time-bounded context (task, budget, expiry) with built-in spend-limit enforcement (AWS AgentCore pattern, 2026).
@@ -208,6 +211,7 @@ Live off-chain points (per the v0.1 mapping: signals +10, followers +5, referral
 | Advisors | 12-mo cliff, then 24-mo linear |
 | Partners/Marketing | Milestone-gated: users, volume, agent adoption targets |
 | Initial circulating | Final funded PointsConverter reserve only; no target percentage. The reserve is set from the owner-approved eligible-points snapshot immediately before launch. |
+| Points conversion release target | Proposed only: 25% at TGE, then 75% linearly over 12 months; not implemented or guaranteed until gates and implementation review pass. |
 
 **Proposed future hard rule — not active at Phase 1:** if a separately approved reward mechanism were launched and emissions would exceed available revenue + pool balance in a period, emissions would scale down — the platform **never mints** to pay yield.
 

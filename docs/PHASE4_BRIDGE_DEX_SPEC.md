@@ -326,9 +326,7 @@ The prototype is **not** an implementation of the Phase 4 release architecture a
 does not authorize deployment. This slice adds only a manually driven local source-event
 proof harness: source contracts register lock/burn records, tests explicitly mark those
 records finalized, and destination execution binds and consumes the exact proof fields.
-The local finality toggle is not a real chain finality oracle and provides no production chain or RPC safety. The prototype still lacks multisig/timelocked governance, refunds, incident reconciliation, production-grade rate-limit operations, BSC
-factory/router/pair verification, LP custody, and UI fail-closed integration. These
-remain mandatory before any testnet or public-chain work.
+The local finality toggle is not a real chain finality oracle and provides no production chain or RPC safety. The local-only prototype now includes a DEX/LP harness and a separate fixture pinning the official PancakeSwap v2 BSC chain, factory, and router identities. These fixtures do not prove live BSC code, router/factory state, pair identity, receipt-bound bootstrap amounts, production custody, or UI fail-closed integration. Multisig/timelocked governance, incident reconciliation, production-grade rate-limit operations, live finalized-chain verification, and independently reviewed liquidity custody remain mandatory before any testnet or public-chain work.
 
 The local proof harness also keeps one global operation registry shared by both
 directions: a lock/mint operation ID cannot be reused for burn/release, and vice
