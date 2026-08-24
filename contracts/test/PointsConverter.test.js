@@ -106,6 +106,7 @@ describe("PointsConverter (points → AITT 1:1)", function () {
 
   it("owner can withdraw unused reserve (window closed)", async function () {
     await conv.connect(operator).approveClaims([alice.address], [100n * TOKEN]);
+    await conv.closeApprovals();
     const before = await conv.reserve();
     await conv.withdrawReserve(owner.address, 500n * TOKEN);
     expect(await conv.reserve()).to.equal(before - 500n * TOKEN);
@@ -115,10 +116,21 @@ describe("PointsConverter (points → AITT 1:1)", function () {
 
   it("cannot withdraw below what is still owed to users", async function () {
     await conv.connect(operator).approveClaims([alice.address], [100n * TOKEN]);
+    await conv.closeApprovals();
     await expect(conv.withdrawReserve(owner.address, RESERVE)).to.be.revertedWithCustomError(conv, "ZeroAmount");
   });
 
   it("non-owner cannot withdraw reserve", async function () {
+    await conv.closeApprovals();
     await expect(conv.connect(alice).withdrawReserve(alice.address, 1n)).to.be.reverted;
+  });
+
+  it("permanently closes new approvals while preserving existing claims", async function () {
+    await conv.connect(operator).approveClaims([alice.address], [100n * TOKEN]);
+    await conv.closeApprovals();
+    await expect(conv.connect(operator).approveClaims([alice.address], [200n * TOKEN])).to.be.revertedWithCustomError(conv, "ApprovalWindowClosed");
+    await conv.connect(alice).convert();
+    expect(await aitt.balanceOf(alice.address)).to.equal(100n * TOKEN);
+    await expect(conv.closeApprovals()).to.be.revertedWithCustomError(conv, "ApprovalWindowClosed");
   });
 });

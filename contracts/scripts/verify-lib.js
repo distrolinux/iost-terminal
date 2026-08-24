@@ -4,9 +4,10 @@ const TOKEN = 10n ** 8n;
 const B = (n) => BigInt(n) * TOKEN;
 const ZERO = ethers.ZeroAddress;
 
-async function verifyDeployment(cfg, deployerAddress, { allowLocalChain = false } = {}) {
+async function verifyDeployment(cfg, { allowLocalChain = false } = {}) {
   const failures = [];
-  const pass = (condition, message) => { if (!condition) failures.push(message); };
+  let checks = 0;
+  const pass = (condition, message) => { checks++; if (!condition) failures.push(message); };
   const C = cfg.contracts || {};
   const required = [
     "token", "feeRouter", "ecosystemEmission", "treasuryVault", "partnersVault",
@@ -34,6 +35,8 @@ async function verifyDeployment(cfg, deployerAddress, { allowLocalChain = false 
 
   const reserveAmount = BigInt(cfg.pointsConversionReserve || "0");
   const governance = ethers.getAddress(cfg.governanceOwner);
+  const deployerAddress = ethers.getAddress(cfg.deployerAddress);
+  const verificationTimestamp = BigInt((await ethers.provider.getBlock("latest")).timestamp);
   pass(await token.name() === "Agent Intelligence Trading Token", "wrong token name");
   pass(await token.symbol() === "AITT", "wrong token symbol");
   pass(await token.decimals() === 8n, "wrong decimals");
@@ -51,22 +54,35 @@ async function verifyDeployment(cfg, deployerAddress, { allowLocalChain = false 
   pass(await router.stakersPool() === await token.stakersPool(), "router stakers mismatch");
 
   pass(await converter.owner() === governance, "converter owner not governance");
+  pass(await converter.token() === C.token, "converter token binding mismatch");
   pass(await converter.operator() === ethers.getAddress(cfg.operator), "converter operator mismatch");
   pass(await converter.reserve() === reserveAmount, "converter reserve mismatch");
+  pass(await converter.approvalsClosed() === false, "converter approval window unexpectedly closed");
   pass(await token.balanceOf(C.pointsConverter) === reserveAmount, "converter token balance mismatch");
 
   const ecosystemAmount = B(300_000_000) - reserveAmount;
   pass(await ecosystem.owner() === governance, "ecosystem emission owner mismatch");
+  pass(await ecosystem.token() === C.token, "ecosystem token binding mismatch");
   pass(await ecosystem.beneficiary() === ethers.getAddress(cfg.allocations.ecosystemPool), "ecosystem beneficiary mismatch");
+  pass(await ecosystem.start() > 0n && await ecosystem.start() <= verificationTimestamp, "ecosystem start mismatch");
   pass(await ecosystem.cliffDuration() === 0n && await ecosystem.duration() === 4n * 365n * 24n * 60n * 60n, "ecosystem schedule mismatch");
   pass(await ecosystem.totalAllocated() === ecosystemAmount, "ecosystem allocation mismatch");
+  pass(await ecosystem.released() === 0n, "ecosystem released state not clean");
   pass(await token.balanceOf(C.ecosystemEmission) === ecosystemAmount, "ecosystem vault balance mismatch");
 
   pass(await team.owner() === governance && await team.beneficiary() === ethers.getAddress(cfg.allocations.teamBeneficiary), "team vesting ownership/beneficiary mismatch");
+  pass(await team.token() === C.token, "team token binding mismatch");
+  pass(await team.totalAllocated() === B(150_000_000), "team allocation mismatch");
+  pass(await team.start() > 0n && await team.start() <= verificationTimestamp, "team start mismatch");
   pass(await team.cliffDuration() === 365n * 24n * 60n * 60n && await team.duration() === 3n * 365n * 24n * 60n * 60n, "team schedule mismatch");
+  pass(await team.released() === 0n, "team released state not clean");
   pass(await token.balanceOf(C.teamVesting) === B(150_000_000), "team balance mismatch");
   pass(await advisor.owner() === governance && await advisor.beneficiary() === ethers.getAddress(cfg.allocations.advisorBeneficiary), "advisor vesting ownership/beneficiary mismatch");
+  pass(await advisor.token() === C.token, "advisor token binding mismatch");
+  pass(await advisor.totalAllocated() === B(50_000_000), "advisor allocation mismatch");
+  pass(await advisor.start() > 0n && await advisor.start() <= verificationTimestamp, "advisor start mismatch");
   pass(await advisor.cliffDuration() === 365n * 24n * 60n * 60n && await advisor.duration() === 2n * 365n * 24n * 60n * 60n, "advisor schedule mismatch");
+  pass(await advisor.released() === 0n, "advisor released state not clean");
   pass(await token.balanceOf(C.advisorVesting) === B(50_000_000), "advisor balance mismatch");
 
   const milestoneChecks = [
@@ -77,8 +93,10 @@ async function verifyDeployment(cfg, deployerAddress, { allowLocalChain = false 
   ];
   for (const [vault, address, amount, label] of milestoneChecks) {
     pass(await vault.owner() === governance, `${label} vault owner mismatch`);
+    pass(await vault.token() === C.token, `${label} vault token binding mismatch`);
     pass(await vault.totalAllocated() === amount, `${label} allocation mismatch`);
     pass(await vault.RELEASE_DELAY() === 48n * 60n * 60n, `${label} delay mismatch`);
+    pass(await vault.released() === 0n && await vault.queued() === 0n, `${label} vault initial state not clean`);
     pass(await token.balanceOf(address) === amount, `${label} vault balance mismatch`);
   }
 
@@ -87,7 +105,7 @@ async function verifyDeployment(cfg, deployerAddress, { allowLocalChain = false 
   pass(heldByContracts === B(1_000_000_000), "allocation sum mismatch");
 
   if (failures.length) throw new Error(`AITT verification failed:\n- ${failures.join('\n- ')}`);
-  return { ok: true, chainId: Number(network.chainId), checks: 46 };
+  return { ok: true, chainId: Number(network.chainId), checks };
 }
 
 module.exports = { verifyDeployment };

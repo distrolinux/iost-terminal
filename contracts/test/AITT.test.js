@@ -35,6 +35,9 @@ describe("AITT (ERC-20)", function () {
     const names = aitt.interface.fragments.map((f) => f.name);
     expect(names).to.not.include("mint");
     expect(names).to.not.include("burn");
+    await expect(aitt.transfer(ethers.ZeroAddress, 1n))
+      .to.be.revertedWithCustomError(aitt, "ERC20InvalidReceiver")
+      .withArgs(ethers.ZeroAddress);
   });
 
   it("supports untaxed wallet-to-wallet transfers (0% fee before AND after pair is set)", async function () {

@@ -1,6 +1,7 @@
 {
   "network": "iostL2",
   "comment": "Fill every 0x... address before deploying. Addresses are public — never put private keys here. Amounts are in base units (8 decimals): 100000000 = 1 AITT.",
+  "releaseApprovalFile": "Use AITT_RELEASE_APPROVAL_FILE=/absolute/path/release-approval.json; copy release-approval.example.json and attach real evidence hashes only after every gate is approved.",
   "allocations": {
     "ecosystemPool": "0x0000000000000000000000000000000000000000",
     "treasury": "0x0000000000000000000000000000000000000000",

@@ -574,7 +574,7 @@ function markdownFor(name) {
     return `${base}\n## ${isApp ? 'AI Command Center' : 'Automation Hub'}\n\nThis is the ${isApp ? 'interactive trading console' : '3D automation hub'} — a client-side application shell.\nLive machine-readable state (server-rendered, no JS required): **/api/ui-state**\n\n- Top AI scores: ${(s?.scores || []).slice(0, 5).map((x) => `${x.symbol} ${x.composite} ${x.grade}`).join(' · ') || 'n/a'}\n- Autopilot: ${s?.autopilot?.enabled ? `enabled (${s.autopilot.ticks} ticks)${s.autopilot.config?.requireApproval ? ' · human-approval mode' : ''}` : 'disabled'}\n- Paper account: ${s?.paper?.account?.cash != null ? `$${Number(s.paper.account.cash).toLocaleString('en-US', { maximumFractionDigits: 2 })} cash · ${s.paper.positions?.length || 0} open` : 'n/a'}\n\nActions for agents: authenticated via **X-API-Key** header or **OAuth 2.0 client_credentials** (see [/auth.md](/auth.md)); live trades require owner approval through the proposal queue ([/api/autopilot/proposals](/api/autopilot/proposals)).\n`;
   }
   if (name === 'token') {
-    return `${base}\n## AITT — Agent Intelligence Trading Token\n\nERC-20 design for IOST L2 (chain 182), 1B fixed supply, 8 decimals. **Pre-launch remediation — NOT issued.**\n- Public info: [/api/aitt/info](/api/aitt/info)\n- Token page: [/aitt](/aitt) (SSR — no JS required)\n- Tokenomics draft v1.9: [/whitepaper](/whitepaper)\n- Unified burn, contract-locked allocations, signed EVM binding and atomic receipt reconciliation are built; conversion remains closed pending deployment, external audit, counsel and owner gates.\n`;
+    return `${base}\n## AITT — Agent Intelligence Trading Token\n\nERC-20 design for IOST L2 (chain 182), 1B fixed supply, 8 decimals. **Pre-launch remediation — NOT issued.**\n- Public info: [/api/aitt/info](/api/aitt/info)\n- Token page: [/aitt](/aitt) (SSR — no JS required)\n- Tokenomics draft v2.0: [/whitepaper](/whitepaper)\n- Unified protocol burns, contract-locked allocations, signed EVM binding and atomic receipt reconciliation are built; conversion remains closed pending deployment, external audit, counsel and owner approval.\n`;
   }
   // index/landing — the full agent summary
   const scores = (s?.scores || []).slice(0, 10).map((x) => {
@@ -642,11 +642,11 @@ app.get('/hub', (req, res) => sendPage(req, res, 'hub'));
 app.get('/app', (req, res) => sendPage(req, res, 'app'));
 // AITT token page — public, SSR (CMC-ready: crawlers get full content, no JS required)
 app.get(['/aitt', '/token'], (req, res) => sendPage(req, res, 'token'));
-// Whitepaper (markdown distribution copy of TOKENOMICS.md — kept in sync)
+// Whitepaper (public markdown distribution copy; TOKENOMICS.md remains the internal source of truth)
 app.get('/whitepaper', (req, res) => {
   try {
     res.type('text/markdown; charset=utf-8');
-    res.send(readFileSync(join(ROOT, 'docs', 'TOKENOMICS.md'), 'utf8'));
+    res.send(readFileSync(join(ROOT, 'docs', 'AITT-Whitepaper-v1.0.md'), 'utf8'));
   } catch {
     res.status(404).json({ error: 'whitepaper not available yet' });
   }
@@ -1356,18 +1356,19 @@ app.delete('/api/signals/:id/follow', requireUser, (req, res) => {
 // at TGE (honest label in the UI). Ledger: data/points.json (atomic writes).
 
 // GET /api/points — balance + recent ledger + referral info (session user or X-API-Key)
-app.get('/api/points', requireUser, (req, res) => {
+app.get('/api/points', requireUser, async (req, res) => {
   const ident = signalIdentity(req);
   if (!ident) return res.status(401).json({ error: 'auth required' });
   const ownerId = ident.agentId;
   const code = points.ensureReferralCode(ownerId);
+  const tokenInfo = await aitt.getLiveInfo();
   res.json({
     ok: true, ownerId, balance: points.getBalance(ownerId), ledger: points.getLedger(ownerId, 50),
     referralCode: code, referralLink: `${SITE_URL}/app?ref=${code}`,
     conversion: {
       rate: '1:1', token: 'AITT', spendable: false,
-      status: aitt.getInfo().conversion.statusText,
-      open: aitt.getInfo().conversion.open,
+      status: tokenInfo.conversion.statusText,
+      open: tokenInfo.conversion.open,
     },
   });
 });
@@ -1458,6 +1459,24 @@ app.get('/api/aitt/claims', requireUser, (req, res) => {
   if (!req.session?.userId) return res.status(403).json({ error: 'signed-in human account required' });
   const userId = `user:${req.session.userId}`;
   res.json({ ok: true, availablePoints: aittClaims.availablePoints(userId), converterAddress: aitt.getInfo().converterAddress || null, claims: aittClaims.listClaims(userId) });
+});
+
+// Read-only owner operations dashboard. It exposes release-gate evidence and the
+// reconciliation queue, but deliberately has no deploy, gate-flip or key input.
+app.get('/api/admin/aitt/status', requireUser, async (req, res) => {
+  if (!isOwnerSession(req)) return res.status(403).json({ error: 'owner only' });
+  const info = await aitt.getLiveInfo();
+  res.json({
+    ok: true,
+    status: info.status,
+    releaseGate: info.conversion.releaseGate,
+    trading: info.trading,
+    contracts: {
+      token: info.contractAddress || null,
+      converter: info.converterAddress || null,
+    },
+    claims: aittClaims.listClaims(),
+  });
 });
 app.post('/api/aitt/claims/:id/reconcile', requireUser, async (req, res) => {
   if (!req.session?.userId) return res.status(403).json({ error: 'signed-in human account required' });
@@ -2324,7 +2343,7 @@ const API_INDEX = {
     { path: '/api/token-audit', method: 'POST', body: '{contractAddress, chainId?:56|8453|CT_501|1}', purpose: 'PUBLIC Binance Web3 token security audit (honeypot/rug-pull/scam/tax scan). No keys. Proxy of web3.binance.com — result normalized: riskLevel 1-5, taxes, verified flag, risk-item checks. NOT investment advice.' },
     { path: '/api/smart-money', method: 'GET', query: 'chainId=56|CT_501&page=1&pageSize=20', purpose: 'PUBLIC Binance Web3 smart-money on-chain signals (BSC/Solana): buy/sell events from tracked whale wallets, trigger vs current price, max gain, exit rate, tags. 30s server cache. NOT investment advice.' },
   ],
-  points: 'Off-chain points ledger: no token issued. signal +10 · follower +5 · referral +50/+10 · feedback +5 (author) · weekly top paper trader +500. Points→AITT 1:1 plumbing is built but planned/not guaranteed; machine audit/counsel/owner gates keep conversion closed under v1.9.',
+  points: 'Off-chain points ledger: no token issued. signal +10 · follower +5 · referral +50/+10 · feedback +5 (author) · weekly top paper trader +500. Points→AITT 1:1 plumbing is built but planned/not guaranteed; machine audit/counsel/owner gates keep conversion closed under v2.0.',
   aitt: 'AITT — Agent Intelligence Trading Token (pre-launch remediation, NOT issued): 1B fixed supply, unified 800M-floor burn routing, contract-locked allocations, EIP-191 conversion binding and receipt reconciliation are built. External audit, refreshed counsel, deployment and owner gates remain closed; Phase 4 is disabled.',
   agentWallet: 'Phase 2 agent wallet engine (off-chain first): parent-child wallets with spend limits (per-tx/daily/weekly, integer minor units), trust staking + slashing + appeals, derived Trust Score + credit line, task-scoped Pacts with auto-expiry, emergency freeze. Design: docs/PHASE2_SPEC.md (engine) + docs/PHASE2_WALLET.md (on-chain wallet + Coinbase CDP research §9.20-9.26). Permissive default — no wallet ⇒ no enforcement. Capabilities: finance.* / wallet.* / trade.* / mandate.sign.',
   freeIostWallet: 'Every registered user gets a subsidized IOST mainnet account (platform pays ~11 IOST). Keys are generated IN THE BROWSER — the server never sees private keys, only the base64 public key + account name; it broadcasts auth.iost/signUp (VERIFIED ABI: createAccount does not exist on mainnet) with the platform account. No IOST_PIN_KEY → requests queue (status "pending") and flush when the key appears. Store data/iost_accounts.json.',
@@ -2381,10 +2400,13 @@ const API_INDEX = {
     { path: '/api/points/claim', method: 'POST', purpose: 'attempt points→AITT conversion (1:1, planned at TGE — not guaranteed). Gate closed until deploy + TGE gates: answers honestly, writes nothing' },
   ],
   aitt: [
-    { path: '/api/aitt/info', method: 'GET', purpose: 'public AITT token info: identity, supply, chain, contract/converter addresses, conversion gate state, honesty notice' },
+    { path: '/api/aitt/info', method: 'GET', purpose: 'public AITT token info: identity, supply, chain, contract/converter addresses, conversion gate, fail-closed DEX route and honesty notice' },
+    { path: '/api/aitt/wallet/challenge | /verify', method: 'POST', purpose: 'session-user EIP-191 conversion-wallet binding; signature only, no payment authority' },
+    { path: '/api/aitt/claims', method: 'GET', purpose: 'session user conversion claims and available points' },
+    { path: '/api/admin/aitt/status', method: 'GET', purpose: 'owner-only read-only release-gate, contract, trading and claim-queue dashboard' },
     { path: '/aitt', method: 'GET', purpose: 'public AITT token page (SSR — CMC-ready, no JS required)' },
     { path: '/token', method: 'GET', purpose: 'alias of /aitt' },
-    { path: '/whitepaper', method: 'GET', purpose: 'AITT tokenomics draft v1.9 (markdown — served from docs/TOKENOMICS.md)' },
+    { path: '/whitepaper', method: 'GET', purpose: 'AITT public whitepaper draft v2.0 (markdown — served from docs/AITT-Whitepaper-v1.0.md)' },
   ],
   agentWallet: [
     { path: '/api/wallets', method: 'GET', purpose: 'my wallet tree: parent (user) wallet + agent child wallets with balances, limits, capabilities, status' },

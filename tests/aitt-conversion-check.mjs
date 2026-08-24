@@ -30,6 +30,7 @@ try {
   const readyConfig = {
     conversionOpen: true, status: 'deployed', contractAddress: `0x${'1'.repeat(40)}`,
     deploymentManifestHash: `0x${'b'.repeat(64)}`,
+    releaseApprovalHash: `0x${'e'.repeat(64)}`,
     feeRouterAddress: `0x${'2'.repeat(40)}`, converterAddress: `0x${'3'.repeat(40)}`,
     vaultAddresses: {
       ecosystemEmission: `0x${'4'.repeat(40)}`, treasury: `0x${'5'.repeat(40)}`,
@@ -40,14 +41,40 @@ try {
     reserveVerification: { verified: true },
     releaseGates: { auditApproved: true, counselApproved: true, ownerApproved: true },
     governanceOwner: `0x${'c'.repeat(40)}`,
+    deployerAddress: `0x${'d'.repeat(40)}`,
     phase4Enabled: false,
   };
   ok('approval booleans and fabricated addresses cannot authorize conversion', !gates.evaluateReleaseGates(readyConfig).ready);
   const liveReady = await gates.evaluateLiveReleaseGates(readyConfig, { probe: async () => ({ verified: true }) });
   ok('complete intent plus successful live probe can authorize conversion', liveReady.ready);
   ok('Phase 4 flag blocks conversion during canonical launch', !gates.evaluateReleaseGates({ ...readyConfig, phase4Enabled: true }).ready);
+  const prelaunchTrade = gates.evaluateTradingAccess({
+    status: 'design', contractAddress: '', phase4Enabled: false,
+    trading: { enabled: false, dex: 'PancakeSwap', chainId: 56, pairAddress: '', swapUrl: '' },
+  });
+  ok('buy/swap access remains disabled before deployment', !prelaunchTrade.ready && prelaunchTrade.failed.includes('phase4_enabled'));
+  const maliciousTrade = gates.evaluateTradingAccess({
+    status: 'deployed', contractAddress: `0x${'1'.repeat(40)}`, phase4Enabled: true,
+    trading: { enabled: true, dex: 'PancakeSwap', chainId: 56, pairAddress: `0x${'2'.repeat(40)}`, swapUrl: 'https://evil.example/swap' },
+  });
+  ok('buy/swap access rejects non-PancakeSwap URLs', !maliciousTrade.ready && maliciousTrade.failed.includes('approved_swap_url'));
+  const readyTrade = gates.evaluateTradingAccess({
+    status: 'deployed', contractAddress: `0x${'1'.repeat(40)}`, phase4Enabled: true,
+    trading: { enabled: true, dex: 'PancakeSwap', chainId: 56, pairAddress: `0x${'2'.repeat(40)}`, swapUrl: 'https://pancakeswap.finance/swap?outputCurrency=0x1111111111111111111111111111111111111111' },
+  });
+  ok('buy/swap access requires every Phase 4 integration field', readyTrade.ready);
+  const postActivityAccounting = chain.verifyReleaseAccounting({
+    configuredReserve: 1_000n, reserve: 700n, outstanding: 200n, reserved: 100n, converterBalance: 700n,
+    allocations: [{ expected: 1_000n, totalAllocated: 1_000n, released: 250n, balance: 750n }],
+  });
+  ok('live release accounting remains valid after legitimate claims and vault releases', postActivityAccounting);
+  ok('live release accounting rejects over-distribution', !chain.verifyReleaseAccounting({
+    configuredReserve: 1_000n, reserve: 700n, outstanding: 200n, reserved: 100n, converterBalance: 700n,
+    allocations: [{ expected: 1_000n, totalAllocated: 1_000n, released: 251n, balance: 750n }],
+  }));
   const manifest = {
     network: 'iostL2', chainId: 182, governanceOwner: readyConfig.governanceOwner,
+    deployerAddress: readyConfig.deployerAddress, releaseApprovalHash: readyConfig.releaseApprovalHash,
     pointsConversionReserve: '0',
     contracts: {
       token: readyConfig.contractAddress, feeRouter: readyConfig.feeRouterAddress, pointsConverter: readyConfig.converterAddress,

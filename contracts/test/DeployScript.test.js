@@ -4,6 +4,7 @@ const { cpSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync,
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 const { spawnSync } = require("node:child_process");
+const { computeReleaseFingerprints } = require("../scripts/release-approval-lib");
 
 // Regressions for production deployment orchestration. Every run uses an
 // isolated Hardhat chain and throwaway filesystem; no real key or network.
@@ -45,12 +46,21 @@ describe("Phase 1 deployment script", function () {
       symlinkSync(join(root, "node_modules"), join(scratch, "node_modules"), "dir");
       mkdirSync(join(scratch, "data"), { recursive: true });
       writeFileSync(join(scratch, "deploy.config.json"), JSON.stringify(cfg, null, 2));
+      const releaseApprovalPath = join(scratch, "release-approval.json");
+      const fingerprints = computeReleaseFingerprints(cfg, 31337, root);
+      writeFileSync(releaseApprovalPath, JSON.stringify({
+        auditApproved: true, counselApproved: true, ownerApproved: true, governanceSafeReviewed: true,
+        auditReportHash: `0x${'1'.repeat(64)}`, counselApprovalHash: `0x${'2'.repeat(64)}`,
+        ownerApprovalHash: `0x${'3'.repeat(64)}`,
+        governanceConfigHash: envOverrides.AITT_TEST_STALE_CONFIG_HASH || fingerprints.governanceConfigHash,
+        contractBundleHash: envOverrides.AITT_TEST_STALE_BUNDLE_HASH || fingerprints.contractBundleHash,
+      }));
 
       const hardhat = join(root, "node_modules", ".bin", "hardhat");
       const run = spawnSync(hardhat, ["run", "scripts/deploy.js", "--network", "hardhat"], {
         cwd: scratch,
         encoding: "utf8",
-        env: { ...process.env, PRIVATE_KEY: "", ...envOverrides },
+        env: { ...process.env, PRIVATE_KEY: "", AITT_RELEASE_APPROVAL_FILE: releaseApprovalPath, ...envOverrides },
         timeout: 150_000,
       });
       const journalPath = join(scratch, "deployment-journal.json");
@@ -74,6 +84,9 @@ describe("Phase 1 deployment script", function () {
     expect(run.stdout).to.include("direct wallet allocations: 0 AITT");
     expect(run.stdout).to.include("=== DONE ===");
     expect(run.journal?.status).to.equal("completed");
+    expect(run.journal?.releaseApprovalHash).to.match(/^0x[0-9a-fA-F]{64}$/);
+    expect(run.journal?.steps?.find((step) => step.step === "allocationFunding")?.txHashes).to.have.length(7);
+    expect(run.journal?.steps?.find((step) => step.step === "governanceHandoff")?.txHashes).to.have.length(5);
   });
 
   it("journals a partial deployment before a simulated post-token failure", async function () {
@@ -104,5 +117,26 @@ describe("Phase 1 deployment script", function () {
     expect(run.status).to.not.equal(0);
     expect(`${run.stdout}\n${run.stderr}`).to.include("allocations.ecosystemPool is required");
     expect(run.stdout).to.not.include("AITT             @");
+  });
+
+  it("rejects deployment before any transaction when release approvals are missing", async function () {
+    const run = await runDeploy({}, { AITT_RELEASE_APPROVAL_FILE: "" });
+    expect(run.status).to.not.equal(0);
+    expect(`${run.stdout}\n${run.stderr}`).to.include("AITT_RELEASE_APPROVAL_FILE is required before deployment");
+    expect(run.journal).to.equal(null);
+  });
+
+  it("rejects approval evidence bound to a different deployment config", async function () {
+    const run = await runDeploy({}, { AITT_TEST_STALE_CONFIG_HASH: `0x${'9'.repeat(64)}` });
+    expect(run.status).to.not.equal(0);
+    expect(`${run.stdout}\n${run.stderr}`).to.include("governanceConfigHash does not match deploy.config.json");
+    expect(run.journal).to.equal(null);
+  });
+
+  it("rejects approval evidence bound to different compiled bytecode", async function () {
+    const run = await runDeploy({}, { AITT_TEST_STALE_BUNDLE_HASH: `0x${'8'.repeat(64)}` });
+    expect(run.status).to.not.equal(0);
+    expect(`${run.stdout}\n${run.stderr}`).to.include("contractBundleHash does not match compiled contract bytecode");
+    expect(run.journal).to.equal(null);
   });
 });

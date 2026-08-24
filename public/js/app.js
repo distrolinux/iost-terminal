@@ -652,8 +652,13 @@ async function renderAITT() {
   el.innerHTML = skeleton();
   let d;
   try { d = await api('/api/aitt/info'); } catch (e) { el.innerHTML = `<div class="card empty">AITT info unavailable: ${esc(e.message)}</div>`; return; }
+  let admin = null;
+  if (window.Auth?.state?.loggedIn && !window.Auth?.state?.agent) {
+    try { admin = await api('/api/admin/aitt/status'); } catch { /* non-owner sessions intentionally see nothing */ }
+  }
   const t = d.token || {};
   const conv = d.conversion || {};
+  const trade = d.trading || {};
   const ALLOC = [
     ['Ecosystem & agent rewards', 30, '300M', '48-mo linear emission vault'],
     ['Treasury (DAO)', 20, '200M', 'milestone-gated'],
@@ -669,7 +674,7 @@ async function renderAITT() {
       <div class="card kpi"><span class="k-label">Total supply</span><span class="k-value">${esc(t.totalSupply || '1,000,000,000')}</span><span class="k-sub">fixed · no minting</span></div>
       <div class="card kpi"><span class="k-label">Standard</span><span class="k-value">ERC-20</span><span class="k-sub">OpenZeppelin-based · custom AMM tax</span></div>
       <div class="card kpi"><span class="k-label">Decimals</span><span class="k-value">${t.decimals ?? 8}</span><span class="k-sub">home chain ${esc(t.chain || 'IOST L2')}</span></div>
-      <div class="card kpi"><span class="k-label">Contract</span><span class="k-value">${d.contractAddress ? '<a href="' + esc(d.explorerUrl || '') + '/address/' + esc(d.contractAddress) + '" target="_blank" rel="noopener">' + esc(d.contractAddress.slice(0, 8)) + '…' + esc(d.contractAddress.slice(-6)) + '</a>' : 'pending deploy'}</span><span class="k-sub">58/58 tests · tooling-reviewed · external audit pending</span></div>
+      <div class="card kpi"><span class="k-label">Contract</span><span class="k-value">${d.contractAddress ? '<a href="' + esc(d.explorerUrl || '') + '/address/' + esc(d.contractAddress) + '" target="_blank" rel="noopener">' + esc(d.contractAddress.slice(0, 8)) + '…' + esc(d.contractAddress.slice(-6)) + '</a>' : 'pending deploy'}</span><span class="k-sub">full contract suite passing · tooling-reviewed · external audit pending</span></div>
     </div>
     <div class="card" style="margin-bottom:16px">
       <div class="section-title" style="margin-bottom:8px">Allocation <span class="sub">1B fixed-supply design · every pool contract-locked · converter reserve only claimable after gates</span></div>
@@ -693,6 +698,22 @@ async function renderAITT() {
       </div>
       <p class="muted" style="font-size:11px;margin-top:8px">${esc(d.honesty || '')}</p>
     </div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="section-title" style="margin-bottom:8px">Wallet, explorer &amp; swap <span class="sub">prepared now · fail-closed until verified launch configuration</span></div>
+      <div class="aitt-conv">
+        <div class="conv-cell"><span class="k-label">Home network</span><span class="k-value">IOST L2 · 182</span></div>
+        <div class="conv-cell"><span class="k-label">DEX route</span><span class="chip ${trade.ready ? 'ok' : 'neut'}">${esc(trade.statusText || 'disabled — Phase 4 liquidity is not live')}</span></div>
+        <a class="btn sm" href="/aitt#access" target="_blank" rel="noopener">Open wallet dashboard</a>
+        ${trade.ready && trade.swapUrl ? `<a class="btn sm" href="${esc(trade.swapUrl)}" target="_blank" rel="noopener">Open PancakeSwap</a>` : '<button class="btn sm" disabled>Swap unavailable</button>'}
+      </div>
+    </div>
+    ${admin ? `<div class="card" style="margin-bottom:16px;border-color:var(--amber)">
+      <div class="section-title" style="margin-bottom:8px">Owner operations <span class="sub">read-only · no deploy or gate-flip controls</span></div>
+      <div class="stat-cards">
+        <div class="card kpi"><span class="k-label">Release gate</span><span class="k-value">${admin.releaseGate?.ready ? 'READY' : 'HOLD'}</span><span class="k-sub">${esc((admin.releaseGate?.failed || []).join(' · ') || 'all checks passed')}</span></div>
+        <div class="card kpi"><span class="k-label">Conversion claims</span><span class="k-value">${admin.claims?.length || 0}</span><span class="k-sub">${esc((admin.claims || []).map(c => c.status).join(' · ') || 'no queued claims')}</span></div>
+      </div>
+    </div>` : ''}
     <div class="card empty" style="text-align:center">Full public page: <a href="/aitt" target="_blank" rel="noopener" style="color:var(--cyan)">iostcallister.com/aitt</a> · Whitepaper: <a href="/whitepaper" target="_blank" rel="noopener" style="color:var(--cyan)">iostcallister.com/whitepaper</a></div>`;
 }
 

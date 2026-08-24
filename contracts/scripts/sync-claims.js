@@ -3,14 +3,16 @@
 // Required env: AITT_CLAIMS_FILE. Converter address from CONVERTER_ADDRESS or deploy config.
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const { ethers, network } = require("hardhat");
-const { buildApprovalBatch, serializeApprovalClaims } = require("./claim-snapshot-lib");
+const { buildApprovalBatch, serializeApprovalClaims, chunkApprovalBatch } = require("./claim-snapshot-lib");
 
 async function main() {
   if (network.config.chainId !== 182 && network.name !== "hardhat" && network.name !== "localhost") throw new Error(`wrong chain ${network.config.chainId}`);
   const inputPath = process.env.AITT_CLAIMS_FILE;
   if (!inputPath || !fs.existsSync(inputPath)) throw new Error("AITT_CLAIMS_FILE is required");
-  const input = JSON.parse(fs.readFileSync(inputPath, "utf8"));
+  const inputBytes = fs.readFileSync(inputPath);
+  const input = JSON.parse(inputBytes.toString("utf8"));
   const cfg = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "deploy.config.json"), "utf8"));
   const converterAddress = process.env.CONVERTER_ADDRESS || cfg.contracts?.pointsConverter;
   if (!converterAddress || !ethers.isAddress(converterAddress)) throw new Error("valid converter address required");
@@ -26,15 +28,30 @@ async function main() {
   if (process.env.CONFIRM_AITT_APPROVAL !== `APPROVE ${batch.claims.length} CLAIMS`) {
     throw new Error(`set CONFIRM_AITT_APPROVAL='APPROVE ${batch.claims.length} CLAIMS' after reviewing the snapshot`);
   }
-  const tx = await converter.approveClaims(batch.users, batch.amounts);
-  const receipt = await tx.wait();
-  const manifest = {
-    generatedAt: new Date().toISOString(), network: network.name, chainId: network.config.chainId,
-    converterAddress, approvalTxHash: receipt.hash, approvalBlock: receipt.blockNumber,
-    totalBaseUnits: batch.total.toString(), claims: serializeApprovalClaims(batch.claims),
-  };
+  const chunks = chunkApprovalBatch(batch, process.env.AITT_APPROVAL_CHUNK_SIZE || 100);
   const output = process.env.AITT_APPROVAL_MANIFEST || `${inputPath}.approved.json`;
-  fs.writeFileSync(output, JSON.stringify(manifest, null, 2), { mode: 0o600 });
+  const manifest = {
+    status: "in_progress", generatedAt: new Date().toISOString(), network: network.name, chainId: network.config.chainId,
+    converterAddress, snapshotHash: `0x${crypto.createHash("sha256").update(inputBytes).digest("hex")}`,
+    approvals: [], totalBaseUnits: batch.total.toString(), claims: serializeApprovalClaims(batch.claims),
+  };
+  const writeManifest = () => {
+    const tmp = `${output}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(manifest, null, 2), { mode: 0o600 });
+    fs.renameSync(tmp, output);
+  };
+  writeManifest();
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    const tx = await converter.approveClaims(chunk.users, chunk.amounts);
+    const receipt = await tx.wait();
+    manifest.approvals.push({ index: i, claims: chunk.claims.length, txHash: receipt.hash, blockNumber: receipt.blockNumber });
+    writeManifest();
+    console.log(`approved chunk ${i + 1}/${chunks.length}: ${chunk.claims.length} claims; tx ${receipt.hash}`);
+  }
+  manifest.status = "completed";
+  manifest.completedAt = new Date().toISOString();
+  writeManifest();
   console.log(`approval manifest: ${output}`);
 }
 

@@ -13,6 +13,7 @@
 <meta property="og:image" content="https://iostcallister.com/img/aitt-hex.png">
 <meta name="twitter:card" content="summary_large_image">
 <title>AITT — Agent Intelligence Trading Token | IOST Terminal</title>
+<script src="/js/token.js?v=1.0" defer></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Sora:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -122,6 +123,12 @@ h2 { font-family: var(--disp); font-size: 24px; letter-spacing: .02em; margin-bo
 .conv h3 { color: var(--amber); }
 .conv .rate { font-family: var(--mono); font-size: 20px; color: var(--text); margin: 10px 0 4px; }
 .conv .note { font-size: 12.5px; color: var(--muted); }
+.access-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:14px; }
+.access-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:9px 0; border-bottom:1px solid var(--line); }
+.access-row:last-child { border-bottom:0; }
+.access-row span:last-child { text-align:right; overflow-wrap:anywhere; }
+.btn:disabled, .btn.disabled, .btn[aria-disabled="true"] { opacity:1; cursor:not-allowed; pointer-events:none; transform:none; box-shadow:none; background:#273140!important; color:#93a7ba!important; border:1px solid var(--line)!important; }
+.safe-note { margin-top:12px; color:var(--dim); font-size:12px; }
 
 /* honesty + footer */
 .honesty { font-size: 13px; color: var(--amber); border: 1px dashed color-mix(in oklch, var(--amber) 40%, transparent); border-radius: 12px; padding: 14px 16px; margin-top: 26px; }
@@ -148,7 +155,7 @@ footer a:hover { color: var(--mint); }
     <h1>AITT — Agent Intelligence <span class="tick">Trading Token</span></h1>
     <p class="lede">The utility layer for machine-executed finance on IOST Terminal: trust staking that makes AI agents accountable, fee utility, and stake-weighted governance. Earned, staked and governed — never sold.</p>
     <div class="cta">
-      <a class="btn primary" href="/whitepaper">Read the tokenomics draft v1.9</a>
+      <a class="btn primary" href="/whitepaper">Read the tokenomics draft v2.0</a>
       <a class="btn ghost" href="/app">Open IOST Terminal</a>
     </div>
 
@@ -191,6 +198,49 @@ footer a:hover { color: var(--mint); }
     </div>
   </section>
 
+  <!-- wallet + token access -->
+  <section id="access">
+    <h2>Wallet &amp; token dashboard</h2>
+    <p class="sub">Prepared now, fail-closed until verified deployment. Connecting only requests your public wallet address; no payment or approval transaction is requested.</p>
+    <div class="access-grid">
+      <div class="card">
+        <span class="tag">Wallet connection</span>
+        <h3>IOST L2 wallet</h3>
+        <div class="access-row"><span class="name">Wallet</span><span class="mono" id="walletAddress">not connected</span></div>
+        <div class="access-row"><span class="name">Network</span><span class="mono" id="walletNetwork">chain 182 required</span></div>
+        <div class="cta">
+          <button class="btn primary" id="connectWalletBtn" type="button">Connect EVM wallet</button>
+          <button class="btn ghost" id="switchNetworkBtn" type="button">Switch to IOST L2</button>
+        </div>
+      </div>
+      <div class="card">
+        <span class="tag">Token status</span>
+        <h3 id="tokenDeployStatus">checking verified status…</h3>
+        <div class="access-row"><span class="name">Contract</span><span class="mono" id="tokenContractValue">checking…</span></div>
+        <div class="access-row"><span class="name">Explorer</span><span>IOST L2 Scan</span></div>
+        <div class="cta">
+          <a class="btn ghost" id="tokenExplorerBtn" href="https://l2-scan.iost.io" target="_blank" rel="noopener">Open IOST L2 explorer</a>
+          <button class="btn primary" id="addTokenBtn" type="button" disabled>Add AITT to wallet</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- buy / swap -->
+  <section id="trade">
+    <h2>Buy / swap interface</h2>
+    <p class="sub">DEX-only by design. This route cannot activate until Phase 4, the bridged pair and an approved PancakeSwap URL are all configured.</p>
+    <div class="card conv">
+      <h3 id="tradeStatus">disabled — Phase 4 liquidity is not live</h3>
+      <div class="access-row"><span class="name">Planned venue</span><span class="mono" id="tradeNetwork">PancakeSwap · BNB Smart Chain (chain 56)</span></div>
+      <div class="cta">
+        <a class="btn primary disabled" id="swapAittBtn" href="#trade" aria-disabled="true">🔒 Swap unavailable before launch</a>
+        <a class="btn ghost" href="/whitepaper" target="_blank" rel="noopener">Review tokenomics first</a>
+      </div>
+      <p class="safe-note">IOST Terminal never asks for a seed phrase or private key. Verify the token contract on the explorer before any future swap.</p>
+    </div>
+  </section>
+
   <!-- roadmap -->
   <section id="roadmap">
     <h2>Roadmap</h2>
@@ -198,7 +248,7 @@ footer a:hover { color: var(--mint); }
     <div class="card">
       <div class="road">
         <div class="step live"><span class="num">0</span><div><h4>Points — live now</h4><p>Off-chain points ledger: signals +10 · followers +5 · referrals +50/+10 · weekly top paper trader +500. 1:1 AITT conversion planned at TGE.</p></div></div>
-        <div class="step"><span class="num">1</span><div><h4>ERC-20 deployment — pre-launch hold</h4><p>Remediation contracts compile and 58/58 tests pass. External audit, refreshed counsel, deployment and owner release gates remain closed; Phase 4 is disabled.</p></div></div>
+        <div class="step"><span class="num">1</span><div><h4>ERC-20 deployment — pre-launch hold</h4><p>Remediation contracts compile and the full contract suite passes. External audit, refreshed counsel, deployment and owner release gates remain closed; Phase 4 is disabled.</p></div></div>
         <div class="step"><span class="num">2</span><div><h4>Agent wallet</h4><p>Trust staking, spend limits, approval flows, slashing; consent/intent/payment token mandates.</p></div></div>
         <div class="step"><span class="num">3</span><div><h4>x402 agent payments on IOST</h4><p>Pay-per-request API payments; IOST Terminal's producer node as the ecosystem x402 facilitator.</p></div></div>
         <div class="step"><span class="num">4</span><div><h4>External liquidity</h4><p>DEX listing + EVM bridges (BSC first — PancakeSwap, CMC price data) only after full legal review.</p></div></div>

@@ -15,8 +15,8 @@ interface IAITTFeeRouterBinding {
 /// @dev Fixed supply, minted exactly once at deployment. Swap tax per
 ///      TOKENOMICS.md v1.4 (locked 2026-08-19): 3% on AMM-pair buy/sell only —
 ///      1.8% burn / 0.8% stakers / 0.4% treasury; 0% on wallet-to-wallet,
-///      staking, airdrops, and platform transfers. The burn share is capped at
-///      200M cumulative (800M supply floor); post-cap it redirects to stakers
+///      staking, airdrops, and platform transfers. Protocol burn shares are
+///      capped at 200M cumulative (800M supply floor); post-cap they redirect
 ///      70/30. The AMM pair is set once (one-time setter) because the pair is
 ///      created only after this token is deployed; afterwards no privileged
 ///      functions remain.
@@ -24,13 +24,13 @@ contract AITT is ERC20, Ownable {
     /// 1,000,000,000 tokens with 8 decimals.
     uint256 public constant TOTAL_SUPPLY = 1_000_000_000 * 10 ** 8;
 
-    /// 800,000,000 supply floor — cumulative contract burn can never exceed 200M.
+    /// 800,000,000 supply floor — cumulative protocol burns can never exceed 200M.
     uint256 public constant SUPPLY_FLOOR = 800_000_000 * 10 ** 8;
 
     /// Basis-point denominator (3% = 300 bps; split below sums to 300).
     uint256 private constant BPS = 10_000;
 
-    /// Burn share: 180 bps (1.8%) — clamped by the cumulative 200M cap.
+    /// Burn share: 180 bps (1.8%) — clamped by the cumulative protocol-burn cap.
     uint256 private constant BURN_BPS = 180;
     /// Stakers share: 80 bps (0.8%).
     uint256 private constant STAKERS_BPS = 80;
@@ -112,7 +112,8 @@ contract AITT is ERC20, Ownable {
     }
 
     /// @notice Burns AITT held by the locked fee router under the shared 800M floor.
-    /// @dev Platform-fee and DAO burns must route here; dead-address burns are forbidden.
+    /// @dev Platform-fee and DAO burns must route here. Arbitrary transfers to
+    ///      nonzero sink addresses are ordinary transfers, not protocol burns.
     function protocolBurn(uint256 amount)
         external
         returns (uint256 burned, uint256 redirectedToStakers, uint256 redirectedToTreasury)
@@ -134,7 +135,7 @@ contract AITT is ERC20, Ownable {
         redirectedToStakers = (excess * REDIRECT_STAKERS_NUM) / REDIRECT_DENOM;
         redirectedToTreasury = excess - redirectedToStakers;
 
-        if (burned > 0) super._update(from, address(0), burned);
+        if (burned > 0) _burn(from, burned);
         if (redirectedToStakers > 0) super._update(from, stakersPool, redirectedToStakers);
         if (redirectedToTreasury > 0) super._update(from, treasury, redirectedToTreasury);
     }
@@ -147,6 +148,14 @@ contract AITT is ERC20, Ownable {
     ///      (800M floor); post-cap the excess redirects to stakers 70/30.
     ///      Rounding dust stays with the recipient — no value is ever lost.
     function _update(address from, address to, uint256 value) internal override {
+        // OZ `_burn` re-enters this hook with a zero receiver. Bypass swap-tax
+        // routing so every protocol burn uses `_burn` exactly once. Public
+        // transfers to zero already revert in OZ v5 ERC20._transfer.
+        if (to == address(0)) {
+            super._update(from, to, value);
+            return;
+        }
+
         address pair = ammPair;
         if (pair == address(0) || (from != pair && to != pair)) {
             super._update(from, to, value);

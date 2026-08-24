@@ -18,7 +18,9 @@ The fixed-supply ERC-20, swap-tax arithmetic, corrected team/advisor vesting, Fe
 - Mythril: AITT clean; expected vesting timestamp/external-call notices; generic `fundReserve` external-call/state-order warning, constrained by the immutable vanilla AITT dependency but worth defense-in-depth hardening.
 - IOST L2 RPC answers chain ID 182.
 
-## Launch blockers
+## Original findings and current disposition
+
+The engineering findings in the table below are the preserved discovery record. Unified burn accounting, allocation custody, conversion plumbing, machine release gates, AMM validation and exact verification were remediated in v1.9. The counsel, external-audit, governance-Safe, final snapshot and Phase 4 bridge/liquidity items remain launch holds.
 
 | Severity | Finding | Evidence | Required resolution |
 |---|---|---|---|

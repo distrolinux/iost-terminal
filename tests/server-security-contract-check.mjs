@@ -27,5 +27,10 @@ ok('spend reserve binds pact metadata to reservation', /pactId,\s*recipient,\s*p
 const commitRoute = route("app.post('/api/spend/commit'", "app.post('/api/spend/release'");
 ok('spend commit uses the reserved pact identity', /r\.pactId/.test(commitRoute) && !/req\.body[^\n]*pactId/.test(commitRoute));
 
+const aittAdminRoute = route("app.get('/api/admin/aitt/status'", "app.post('/api/admin/aitt/claims/:id/approved'");
+ok('AITT owner dashboard endpoint requires owner session', /isOwnerSession\(req\)/.test(aittAdminRoute));
+ok('AITT owner dashboard exposes release gates and claims without mutation controls', /releaseGate/.test(aittAdminRoute) && /listClaims\(\)/.test(aittAdminRoute) && !/conversionOpen\s*=|phase4Enabled\s*=|writeFile|child_process/.test(aittAdminRoute));
+ok('whitepaper route serves the public distribution copy', /app\.get\('\/whitepaper'[\s\S]*AITT-Whitepaper-v1\.0\.md/.test(src));
+
 console.log(failures === 0 ? '\nALL PASS ✅' : `\n${failures} FAILURES ❌`);
 process.exit(failures === 0 ? 0 : 1);

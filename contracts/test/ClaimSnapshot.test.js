@@ -1,6 +1,6 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const { buildApprovalBatch, serializeApprovalClaims } = require("../scripts/claim-snapshot-lib");
+const { buildApprovalBatch, serializeApprovalClaims, chunkApprovalBatch } = require("../scripts/claim-snapshot-lib");
 const { mkdtempSync, writeFileSync, readFileSync, rmSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
@@ -37,5 +37,16 @@ describe("AITT claim snapshot builder", function () {
     expect(() => buildApprovalBatch([row("a", alice.address, 1), row("b", alice.address, 1)], 10n * TOKEN)).to.throw("duplicate address");
     expect(() => buildApprovalBatch([row("a", alice.address, 1.5)], 10n * TOKEN)).to.throw("positive whole points");
     expect(() => buildApprovalBatch([row("a", alice.address, 11)], 10n * TOKEN)).to.throw("exceeds converter reserve");
+  });
+
+  it("chunks large approval snapshots into bounded transactions", async function () {
+    const [, alice, bob, carol] = await ethers.getSigners();
+    const batch = buildApprovalBatch([
+      row("a", alice.address, 1), row("b", bob.address, 1), row("c", carol.address, 1),
+    ], 3n * TOKEN);
+    const chunks = chunkApprovalBatch(batch, 2);
+    expect(chunks.map((chunk) => chunk.claims.length)).to.deep.equal([2, 1]);
+    expect(chunks.flatMap((chunk) => chunk.users)).to.deep.equal(batch.users);
+    expect(() => chunkApprovalBatch(batch, 251)).to.throw("chunk size");
   });
 });

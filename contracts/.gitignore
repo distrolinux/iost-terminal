@@ -8,6 +8,7 @@ typechain-types/
 .env
 deploy.config.json
 deployment-journal.json
+release-approval.json
 
 # Reports
 slither-report.json

@@ -45,4 +45,18 @@ function serializeApprovalClaims(claims) {
   }));
 }
 
-module.exports = { buildApprovalBatch, serializeApprovalClaims };
+function chunkApprovalBatch(batch, chunkSize = 100) {
+  const size = Number(chunkSize);
+  if (!Number.isSafeInteger(size) || size < 1 || size > 250) throw new Error("chunk size must be an integer from 1 to 250");
+  const chunks = [];
+  for (let i = 0; i < batch.claims.length; i += size) {
+    chunks.push({
+      claims: batch.claims.slice(i, i + size),
+      users: batch.users.slice(i, i + size),
+      amounts: batch.amounts.slice(i, i + size),
+    });
+  }
+  return chunks;
+}
+
+module.exports = { buildApprovalBatch, serializeApprovalClaims, chunkApprovalBatch };

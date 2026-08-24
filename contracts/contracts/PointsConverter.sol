@@ -30,6 +30,7 @@ contract PointsConverter is Ownable, Pausable, ReentrancyGuard {
     ///         `points * 10**8` for this 8-decimal token.
     IERC20 public immutable token;
     address public operator;
+    bool public approvalsClosed;
 
     /// @notice AITT available for conversions (decreases as users claim).
     uint256 public reserve;
@@ -45,6 +46,7 @@ contract PointsConverter is Ownable, Pausable, ReentrancyGuard {
     event Converted(address indexed user, uint256 amount);
     event ReserveFunded(uint256 amount);
     event ReserveWithdrawn(address indexed to, uint256 amount);
+    event ApprovalsClosed();
 
     error ZeroAddress();
     error ZeroAmount();
@@ -53,6 +55,7 @@ contract PointsConverter is Ownable, Pausable, ReentrancyGuard {
     error InsufficientReserve();
     error AlreadyClaimed();
     error CannotReduceApproval();
+    error ApprovalWindowClosed();
 
     modifier onlyOperator() {
         if (msg.sender != operator) revert NotOperator();
@@ -90,6 +93,7 @@ contract PointsConverter is Ownable, Pausable, ReentrancyGuard {
         onlyOperator
         whenNotPaused
     {
+        if (approvalsClosed) revert ApprovalWindowClosed();
         uint256 n = users.length;
         if (n == 0) revert ZeroAmount();
         if (n != amounts.length) revert ZeroAmount();
@@ -134,6 +138,7 @@ contract PointsConverter is Ownable, Pausable, ReentrancyGuard {
     ///         (DAO decision; any AITT not claimed returns to the ecosystem pool).
     /// @dev Never withdraw below what is still owed to users (totalOutstanding).
     function withdrawReserve(address to, uint256 amount) external onlyOwner {
+        if (!approvalsClosed) revert ApprovalWindowClosed();
         if (to == address(0)) revert ZeroAddress();
         if (amount == 0 || amount > reserve - totalOutstanding) revert ZeroAmount();
         reserve -= amount;
@@ -145,6 +150,15 @@ contract PointsConverter is Ownable, Pausable, ReentrancyGuard {
     ///      owner-gated here (emergency stop for the conversion window).
     function pause() external onlyOwner {
         _pause();
+    }
+
+    /// @notice Permanently closes new snapshot approvals. Existing approved
+    ///         users may still convert; unused reserve can then be recovered
+    ///         without creating new liabilities.
+    function closeApprovals() external onlyOwner {
+        if (approvalsClosed) revert ApprovalWindowClosed();
+        approvalsClosed = true;
+        emit ApprovalsClosed();
     }
 
     function unpause() external onlyOwner {

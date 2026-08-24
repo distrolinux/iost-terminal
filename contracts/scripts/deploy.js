@@ -5,6 +5,7 @@ const path = require("path");
 const crypto = require("crypto");
 const { ethers } = require("hardhat");
 const { verifyDeployment } = require("./verify-lib");
+const { computeReleaseFingerprints } = require("./release-approval-lib");
 
 const DAY = 24n * 60n * 60n;
 const YEAR = 365n * DAY;
@@ -13,6 +14,8 @@ const B = (n) => BigInt(n) * TOKEN;
 const ZERO_ADDRESS = ethers.ZeroAddress;
 const ECOSYSTEM_ALLOCATION = B(300_000_000);
 const JOURNAL_PATH = path.join(__dirname, "..", "deployment-journal.json");
+const EVIDENCE_HASH_RE = /^0x[0-9a-fA-F]{64}$/;
+const isEvidenceHash = (value) => EVIDENCE_HASH_RE.test(String(value || "")) && !/^0x0{64}$/i.test(String(value));
 
 function writeJournal(journal) {
   const tmp = `${JOURNAL_PATH}.tmp`;
@@ -57,6 +60,31 @@ function loadConfig() {
   return cfg;
 }
 
+function loadReleaseApproval(cfg) {
+  const approvalPath = process.env.AITT_RELEASE_APPROVAL_FILE;
+  if (!approvalPath || !fs.existsSync(approvalPath)) {
+    throw new Error("AITT_RELEASE_APPROVAL_FILE is required before deployment");
+  }
+  const approval = JSON.parse(fs.readFileSync(approvalPath, "utf8"));
+  for (const key of ["auditApproved", "counselApproved", "ownerApproved", "governanceSafeReviewed"]) {
+    if (approval[key] !== true) throw new Error(`release approval missing: ${key}`);
+  }
+  for (const key of ["auditReportHash", "counselApprovalHash", "ownerApprovalHash", "governanceConfigHash", "contractBundleHash"]) {
+    if (!isEvidenceHash(approval[key])) throw new Error(`release approval evidence hash missing: ${key}`);
+  }
+  const expected = computeReleaseFingerprints(cfg, network.config.chainId, path.join(__dirname, ".."));
+  if (approval.governanceConfigHash.toLowerCase() !== expected.governanceConfigHash.toLowerCase()) {
+    throw new Error("release approval governanceConfigHash does not match deploy.config.json");
+  }
+  if (approval.contractBundleHash.toLowerCase() !== expected.contractBundleHash.toLowerCase()) {
+    throw new Error("release approval contractBundleHash does not match compiled contract bytecode");
+  }
+  return {
+    approval,
+    hash: `0x${crypto.createHash("sha256").update(JSON.stringify(approval)).digest("hex")}`,
+  };
+}
+
 async function deployMilestoneVault(factory, token, amount, owner, label) {
   const vault = await factory.deploy(token, amount, owner);
   await vault.waitForDeployment();
@@ -67,11 +95,16 @@ async function deployMilestoneVault(factory, token, amount, owner, label) {
 async function main() {
   const [deployer] = await ethers.getSigners();
   const cfg = loadConfig(); // all validation occurs before the first transaction
+  const releaseApproval = loadReleaseApproval(cfg);
   const A = cfg.allocations;
   const totalReserve = cfg._totalReserve;
   delete cfg._totalReserve;
   if (fs.existsSync(JOURNAL_PATH)) throw new Error("deployment-journal.json already exists; inspect it before any rerun");
-  const journal = { status: "in_progress", network: network.name, chainId: network.config.chainId, startedAt: new Date().toISOString(), contracts: {}, steps: [] };
+  const journal = {
+    status: "in_progress", network: network.name, chainId: network.config.chainId,
+    startedAt: new Date().toISOString(), deployerAddress: deployer.address,
+    releaseApprovalHash: releaseApproval.hash, contracts: {}, steps: [],
+  };
   const record = (step, contracts = {}, txHashes = []) => {
     journal.steps.push({ step, at: new Date().toISOString(), txHashes });
     Object.assign(journal.contracts, contracts);
@@ -96,8 +129,8 @@ async function main() {
   const FeeRouter = await ethers.getContractFactory("AITTFeeRouter");
   const feeRouter = await FeeRouter.deploy(tokenAddress, cfg.governanceOwner);
   await feeRouter.waitForDeployment();
-  await (await aitt.setFeeRouter(await feeRouter.getAddress())).wait();
-  record("feeRouter", { feeRouter: await feeRouter.getAddress() }, [feeRouter.deploymentTransaction().hash]);
+  const setFeeRouterReceipt = await (await aitt.setFeeRouter(await feeRouter.getAddress())).wait();
+  record("feeRouter", { feeRouter: await feeRouter.getAddress() }, [feeRouter.deploymentTransaction().hash, setFeeRouterReceipt.hash]);
   console.log(`AITTFeeRouter       @ ${await feeRouter.getAddress()}`);
 
   console.log("  -> AMM pair NOT set (Phase 4 remains blocked)");
@@ -131,8 +164,9 @@ async function main() {
   record("pointsConverter", { pointsConverter: await converter.getAddress() }, [converter.deploymentTransaction().hash]);
   console.log(`PointsConverter     @ ${await converter.getAddress()}  (operator: ${cfg.operator})`);
   if (totalReserve > 0n) {
-    await (await aitt.approve(await converter.getAddress(), totalReserve)).wait();
-    await (await converter.fundReserve(totalReserve)).wait();
+    const approveReceipt = await (await aitt.approve(await converter.getAddress(), totalReserve)).wait();
+    const fundReceipt = await (await converter.fundReserve(totalReserve)).wait();
+    record("converterReserveFunded", {}, [approveReceipt.hash, fundReceipt.hash]);
     console.log(`  -> converter reserve: ${totalReserve / TOKEN} AITT`);
   } else {
     console.log("  -> converter reserve NOT funded; conversion remains closed");
@@ -148,17 +182,21 @@ async function main() {
     ["reserve vault", await reserveVault.getAddress(), B(100_000_000)],
     ["advisor vesting", await advisorVest.getAddress(), B(50_000_000)],
   ];
+  const allocationTxHashes = [];
   for (const [label, to, amount] of moves) {
-    await (await aitt.transfer(to, amount)).wait();
+    const receipt = await (await aitt.transfer(to, amount)).wait();
+    allocationTxHashes.push(receipt.hash);
     console.log(`  -> ${label.padEnd(20)} ${amount / TOKEN} AITT -> ${to}`);
   }
+  record("allocationFunding", {}, allocationTxHashes);
 
   // 7. Governance handoff. Remaining owner-only setters are one-time locks.
-  await (await aitt.transferOwnership(cfg.governanceOwner)).wait();
-  await (await teamVest.transferOwnership(cfg.governanceOwner)).wait();
-  await (await advisorVest.transferOwnership(cfg.governanceOwner)).wait();
-  await (await ecosystemEmission.transferOwnership(cfg.governanceOwner)).wait();
-  await (await converter.transferOwnership(cfg.governanceOwner)).wait();
+  const ownershipTxHashes = [];
+  for (const contract of [aitt, teamVest, advisorVest, ecosystemEmission, converter]) {
+    const receipt = await (await contract.transferOwnership(cfg.governanceOwner)).wait();
+    ownershipTxHashes.push(receipt.hash);
+  }
+  record("governanceHandoff", {}, ownershipTxHashes);
 
   cfg.allocations.teamVesting = await teamVest.getAddress();
   cfg.allocations.advisorVesting = await advisorVest.getAddress();
@@ -174,11 +212,13 @@ async function main() {
     advisorVesting: await advisorVest.getAddress(),
     pointsConverter: await converter.getAddress(),
   };
+  cfg.deployerAddress = deployer.address;
+  cfg.releaseApprovalHash = releaseApproval.hash;
   fs.writeFileSync(path.join(__dirname, "..", "deploy.config.json"), JSON.stringify(cfg, null, 2));
 
-  const verification = await verifyDeployment(cfg, deployer.address, { allowLocalChain: network.name === "hardhat" || network.name === "localhost" });
+  const verification = await verifyDeployment(cfg, { allowLocalChain: network.name === "hardhat" || network.name === "localhost" });
   console.log(`post-deploy verification: PASS (${verification.checks} exact invariants)`);
-  const manifest = { network: network.name, chainId: network.config.chainId, contracts: cfg.contracts, governanceOwner: cfg.governanceOwner, pointsConversionReserve: cfg.pointsConversionReserve };
+  const manifest = { network: network.name, chainId: network.config.chainId, contracts: cfg.contracts, governanceOwner: cfg.governanceOwner, deployerAddress: deployer.address, releaseApprovalHash: releaseApproval.hash, pointsConversionReserve: cfg.pointsConversionReserve };
   journal.status = "completed";
   journal.completedAt = new Date().toISOString();
   journal.contracts = { ...cfg.contracts };
