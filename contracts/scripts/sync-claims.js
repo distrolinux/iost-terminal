@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { ethers, network } = require("hardhat");
-const { buildApprovalBatch, serializeApprovalClaims, chunkApprovalBatch, planApprovalResume, verifyApprovalReceiptEvidence } = require("./claim-snapshot-lib");
+const { buildApprovalBatch, serializeApprovalClaims, chunkApprovalBatch, planApprovalResume, verifyApprovalReceiptEvidence, confirmedClaimIdsFromManifest } = require("./claim-snapshot-lib");
 
 const UNIT = 10n ** 8n;
 
@@ -49,9 +49,7 @@ async function main() {
   // Build the canonical full snapshot independently of current approvals.
   const canonicalRows = enriched.map((claim) => ({ ...claim, approvedBaseUnits: claim.claimedBaseUnits }));
   const fullBatch = buildApprovalBatch(canonicalRows, reserve);
-  const confirmedIds = new Set((manifest?.approvals || [])
-    .filter((approval) => approval.status === "confirmed")
-    .flatMap((approval) => (approval.claimEvidence || []).map((claim) => claim.claimId)));
+  const confirmedIds = confirmedClaimIdsFromManifest(fullBatch, manifest?.approvals || []);
   const { existingOutstanding, pendingRows } = planApprovalResume(enriched, fullBatch, confirmedIds, reserve);
   const pendingBatch = pendingRows.length ? buildApprovalBatch(pendingRows, reserve - existingOutstanding) : { claims: [], users: [], amounts: [], total: 0n };
 

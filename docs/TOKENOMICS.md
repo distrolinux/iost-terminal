@@ -1,4 +1,4 @@
-# AITT Tokenomics — Professional Design Draft (v2.2)
+# AITT Tokenomics — Professional Design Draft (v2.3)
 
 > **Status: DESIGN DRAFT — pre-launch. No public sale; utility-only; not an investment (§10).**
 > Supersedes `docs/tokenomics-vision.md` (v0.1) in design intent; that file remains as historical record.
@@ -16,6 +16,7 @@
 > v2.0 (2026-08-24): **burn guarantee corrected (owner-approved)** — all protocol burns (swap + FeeRouter/DAO) share the 800M `totalSupply()` floor, deriving a 200M cumulative protocol-burn cap. User transfers to arbitrary nonzero sink addresses are excluded because spendability cannot be proven on-chain; prior global/dead-address wording is superseded.
 > v2.1 (2026-08-24): **governance claims aligned to enforceable scope (owner-approved)** — DAO voting/fee adjustability relabeled future policy; Phase 1 enforcement = Safe-controlled 48h milestone-vault releases + immutable fee ratios.
 > v2.2 (2026-08-24): **staker-revenue/fee-share language reframed as future Phase 2+ proposal, inactive at Phase 1; “holders earn nothing” utility posture preserved (owner-approved 2026-08-24).**
+> v2.3 (2026-08-24): **rewards programs (signal/copy-trading/referral) reframed as proposed future programs — not active at Phase 1 (owner-approved); version refs normalized (NatSpec + whitepaper mirror).**
 
 ---
 
@@ -97,11 +98,11 @@ Agents and agent-operators stake AITT as **collateral** to obtain a **Trust Scor
 - **Proposed post-floor behavior — not active at Phase 1:** only the requested burn share would redirect 70/30. Platform fees would become 64% stakers / 36% treasury overall at the floor; swap-tax base shares would remain 0.8%/0.4% plus redirected burn share.
 - **Fair ordering (no MEV):** as facilitator/sequencer-adjacent operator, the platform never exploits private order flow; any MEV-like surplus from transaction ordering accrues to burn. Fair ordering is part of the trust contract — slashing-enforced (IOST 3.0's MEV-redistribution principle, adapted).
 
-### 4.3 Rewards
-- Signal providers earn AITT per quality-verified signal (existing hash-pinned-on-IOST mechanic)
-- Copy-trading creators earn share of their copiers' fee volume
-- Referrals, AI-feedback rewards (rate-limited), agent-compute providers
-- All rewards are **earned**, never sold
+### 4.3 Rewards (proposed future programs — NOT active at Phase 1)
+- **Proposed:** signal providers would earn AITT per quality-verified signal (existing hash-pinned-on-IOST mechanic)
+- **Proposed:** copy-trading creators would earn a share of their copiers' fee volume
+- **Proposed:** referrals, AI-feedback rewards (rate-limited), agent-compute providers
+- All rewards are **earned**, never sold — and none are active, guaranteed, or implemented in Phase 1 contracts; each requires launch gates, an audited distribution path, and explicit owner approval before any token is distributed.
 
 ### 4.4 Future Governance Target (Phase 2+, not active in Phase 1)
 Proposed stake-weighted voting policy for future separately audited governance contracts:

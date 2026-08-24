@@ -1,6 +1,6 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const { buildApprovalBatch, serializeApprovalClaims, chunkApprovalBatch, planApprovalResume, verifyApprovalReceiptEvidence } = require("../scripts/claim-snapshot-lib");
+const { buildApprovalBatch, serializeApprovalClaims, chunkApprovalBatch, planApprovalResume, verifyApprovalReceiptEvidence, confirmedClaimIdsFromManifest } = require("../scripts/claim-snapshot-lib");
 const { mkdtempSync, writeFileSync, readFileSync, rmSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
@@ -33,8 +33,9 @@ describe("AITT claim snapshot builder", function () {
   });
 
   it("rejects duplicate addresses, invalid points and reserve overcommit", async function () {
-    const [, alice] = await ethers.getSigners();
+    const [, alice, bob] = await ethers.getSigners();
     expect(() => buildApprovalBatch([row("a", alice.address, 1), row("b", alice.address, 1)], 10n * TOKEN)).to.throw("duplicate address");
+    expect(() => buildApprovalBatch([row("a", alice.address, 1), row("a", bob.address, 1)], 10n * TOKEN)).to.throw("duplicate claimId");
     expect(() => buildApprovalBatch([row("a", alice.address, 1.5)], 10n * TOKEN)).to.throw("positive whole points");
     expect(() => buildApprovalBatch([row("a", alice.address, 11)], 10n * TOKEN)).to.throw("exceeds converter reserve");
   });
@@ -83,5 +84,17 @@ describe("AITT claim snapshot builder", function () {
     expect(verifyApprovalReceiptEvidence(receipt, converter.address, evidence)).to.equal(true);
     expect(() => verifyApprovalReceiptEvidence(receipt, converter.address, [{ ...evidence[0], approvalBaseUnits: (TOKEN + 1n).toString() }]))
       .to.throw("approval event evidence mismatch");
+    expect(() => verifyApprovalReceiptEvidence({ ...receipt, logs: [...receipt.logs, ...receipt.logs] }, converter.address, evidence))
+      .to.throw("approval event count mismatch");
+  });
+
+  it("binds manifest claim IDs to canonical snapshot address and amount", async function () {
+    const [, alice, bob] = await ethers.getSigners();
+    const fullBatch = buildApprovalBatch([row("a", alice.address, 1), row("b", bob.address, 2)], 3n * TOKEN);
+    const approvals = [{
+      status: "confirmed",
+      claimEvidence: [{ claimId: "b", address: alice.address, approvalBaseUnits: TOKEN.toString() }],
+    }];
+    expect(() => confirmedClaimIdsFromManifest(fullBatch, approvals)).to.throw("manifest claim evidence mismatch");
   });
 });

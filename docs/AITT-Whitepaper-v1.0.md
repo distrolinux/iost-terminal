@@ -1,4 +1,4 @@
-# AITT Tokenomics — Professional Design Draft (v2.2)
+# AITT Tokenomics — Professional Design Draft (v2.3)
 
 > **Status: DESIGN DRAFT — pre-launch. No public sale; utility-only; not an investment (§10).**
 > Supersedes `docs/tokenomics-vision.md` (v0.1) in design intent; that file remains as historical record.
@@ -14,7 +14,7 @@
 > v1.9 (2026-08-23): owner-approved remediation implemented, still pre-launch — authoritative FeeRouter burn path, contract-locked allocations, signed EVM wallet binding, atomic claim states/receipt verification, machine-enforced release gates, and Phase 4 hard-disable. Audit/counsel/owner gates remain closed.
 > v2.0 (2026-08-24): owner-approved burn guarantee correction mirrored from TOKENOMICS.md — swap and FeeRouter/DAO protocol burns share the 800M `totalSupply()` floor, deriving a 200M cumulative protocol-burn cap. Arbitrary user sink-address transfers are excluded because spendability cannot be proven on-chain.
 > v2.1 (2026-08-24): governance claims aligned to enforceable scope (owner-approved), mirrored from TOKENOMICS.md — DAO voting/fee adjustability relabeled future policy; Phase 1 enforcement = Safe-controlled 48h milestone-vault releases + immutable fee ratios.
-> v2.2 (2026-08-24): staker-revenue/fee-share language reframed as future Phase 2+ proposal, inactive at Phase 1; “holders earn nothing” utility posture preserved (owner-approved 2026-08-24).
+> v2.2 (2026-08-24): staker-revenue/fee-share language reframed as future Phase 2+ proposal, inactive at Phase 1; “holders earn nothing” utility posture preserved (owner-approved 2026-08-24). v2.3 (2026-08-24): rewards programs (signal/copy-trading/referral) reframed as proposed future programs — not active at Phase 1 (owner-approved).
 
 ---
 
@@ -93,11 +93,11 @@ Agents and agent-operators stake AITT as **collateral** to obtain a **Trust Scor
 - **Fee rounding:** the dormant router keeps at most 9 base units pending until an exact 50/20/30 split is possible; fragmentation cannot alter the proposed future parameters, and no distribution is active at Phase 1.
 - **Proposed post-floor behavior — not active at Phase 1:** only the burn share would redirect 70/30, preserving the locked base shares.
 
-### 4.3 Rewards
-- Signal providers earn AITT per quality-verified signal (existing hash-pinned-on-IOST mechanic)
-- Copy-trading creators earn share of their copiers' fee volume
-- Referrals, AI-feedback rewards (rate-limited), agent-compute providers
-- All rewards are **earned**, never sold
+### 4.3 Rewards (proposed future programs — NOT active at Phase 1)
+- **Proposed:** signal providers would earn AITT per quality-verified signal (existing hash-pinned-on-IOST mechanic)
+- **Proposed:** copy-trading creators would earn a share of their copiers' fee volume
+- **Proposed:** referrals, AI-feedback rewards (rate-limited), agent-compute providers
+- All rewards are **earned**, never sold — and none are active, guaranteed, or implemented in Phase 1 contracts; each requires launch gates, an audited distribution path, and explicit owner approval before any token is distributed.
 
 ### 4.4 Future Governance Target (Phase 2+, not active in Phase 1)
 Proposed stake-weighted voting policy for future separately audited governance contracts:

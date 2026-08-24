@@ -21,7 +21,10 @@ function buildApprovalBatch(rows, converterReserve) {
     };
   }).sort((a, b) => a.claimId.localeCompare(b.claimId));
   const addresses = new Set();
+  const claimIds = new Set();
   for (const claim of claims) {
+    if (claimIds.has(claim.claimId)) throw new Error(`duplicate claimId: ${claim.claimId}`);
+    claimIds.add(claim.claimId);
     const key = claim.address.toLowerCase();
     if (addresses.has(key)) throw new Error(`duplicate address: ${claim.address}`);
     addresses.add(key);
@@ -87,22 +90,41 @@ function verifyApprovalReceiptEvidence(receipt, converterAddress, claimEvidence)
   if (!receipt || Number(receipt.status) !== 1) throw new Error("approval transaction not successful");
   if (getAddress(receipt.to) !== getAddress(converterAddress)) throw new Error("approval transaction target mismatch");
   if (!Array.isArray(claimEvidence) || claimEvidence.length === 0) throw new Error("approval claim evidence missing");
-  const actual = new Map();
+  const actual = [];
   for (const log of receipt.logs || []) {
     if (getAddress(log.address) !== getAddress(converterAddress)) continue;
     try {
       const parsed = APPROVAL_EVENTS.parseLog(log);
-      if (parsed?.name === "Approved") actual.set(getAddress(parsed.args.user), BigInt(parsed.args.amount));
+      if (parsed?.name === "Approved") actual.push({ user: getAddress(parsed.args.user), amount: BigInt(parsed.args.amount) });
     } catch { /* unrelated converter event */ }
   }
-  if (actual.size !== claimEvidence.length) throw new Error("approval event count mismatch");
+  if (actual.length !== claimEvidence.length) throw new Error("approval event count mismatch");
   for (const claim of claimEvidence) {
     const user = getAddress(claim.address);
-    if (!actual.has(user) || actual.get(user) !== BigInt(claim.approvalBaseUnits)) {
+    const matches = actual.filter((event) => event.user === user && event.amount === BigInt(claim.approvalBaseUnits));
+    if (matches.length !== 1) {
       throw new Error(`approval event evidence mismatch for ${claim.claimId}`);
     }
   }
   return true;
 }
 
-module.exports = { buildApprovalBatch, serializeApprovalClaims, chunkApprovalBatch, planApprovalResume, verifyApprovalReceiptEvidence };
+function confirmedClaimIdsFromManifest(fullBatch, approvals) {
+  const expectedById = new Map(fullBatch.claims.map((claim) => [claim.claimId, claim]));
+  const confirmed = new Set();
+  for (const approval of approvals || []) {
+    if (approval.status !== "confirmed") continue;
+    for (const evidence of approval.claimEvidence || []) {
+      const expected = expectedById.get(String(evidence.claimId));
+      if (!expected) throw new Error(`manifest claim missing from snapshot: ${evidence.claimId}`);
+      if (confirmed.has(expected.claimId)) throw new Error(`duplicate confirmed manifest claim: ${expected.claimId}`);
+      if (getAddress(evidence.address) !== expected.address || BigInt(evidence.approvalBaseUnits) !== expected.approvalBaseUnits) {
+        throw new Error(`manifest claim evidence mismatch for ${expected.claimId}`);
+      }
+      confirmed.add(expected.claimId);
+    }
+  }
+  return confirmed;
+}
+
+module.exports = { buildApprovalBatch, serializeApprovalClaims, chunkApprovalBatch, planApprovalResume, verifyApprovalReceiptEvidence, confirmedClaimIdsFromManifest };

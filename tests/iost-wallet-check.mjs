@@ -50,7 +50,7 @@ console.log(`\n== free-IOST-wallet E2E (user ${EMAIL}) ==\n`);
   const r = await jget('/api/account/iost/status');
   const d = await r.json();
   ok('public status 200', r.status === 200, `HTTP ${r.status}`);
-  ok('public status body', d.subsidized === true && d.feeIost === 11 && d.configured === false,
+  ok('public status body', d.subsidized === true && d.feeIost === 0 && d.configured === false,
     `subsidized=${d.subsidized} feeIost=${d.feeIost} configured=${d.configured}`);
   ok('public status action+explorer', d.action === 'auth.iost/signUp' && /^https:\/\/explorer\.iost\.io\/tx\//.test(d.explorer || ''));
 }

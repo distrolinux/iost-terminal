@@ -18,7 +18,7 @@
 | Whitepaper | Complete | `/whitepaper` serves `docs/AITT-Whitepaper-v1.0.md` | External review and final deployed-address appendix |
 | Deployment scripts | Complete, not run on a public chain | Address/Phase-4 preflight, release approval bound to exact config plus creation/deployed bytecode, complete transaction journal, custody deployment, governance handoff, provider-only exact verification | Explicit owner approval; private key supplied by owner only |
 | AMM lock script | Complete, Phase 4 only | `scripts/setAmmPair.js` validates chain, bytecode, factory pair, assets, owner and typed confirmation | Phase 4 approval; irreversible after execution |
-| Contract testing | Complete | 72 Hardhat tests; full Solidity compile | Must remain green after audit fixes |
+| Contract testing | Complete | 73 Hardhat tests; full Solidity compile | Must remain green after audit fixes |
 | Platform testing | Complete | Offline safety suite includes AITT release gates, wallet binding, idempotent claims and receipt verification | Must remain green before production restart |
 | Admin/owner functions | Complete for pre-launch | On-chain `onlyOwner` controls; owner-only receipt reconciliation APIs; read-only owner dashboard for gates/claims | Governance Safe/config; no web deploy or gate-flip control by design |
 | Blockchain configuration | Complete | IOST L2 chain 182, BNB gas, canonical RPC | Reconfirm RPC/chain immediately before deployment |
