@@ -28,7 +28,7 @@
 - Use failing regression tests before fixing execution, authorization, wallet, or authentication defects.
 - Keep live tests read-only; never place or cancel real orders during automated verification.
 - Use `IOST_DATA_DIR` scratch stores for tests where supported.
-- Keep `docs/TOKENOMICS.md`, the public whitepaper, `docs/PHASE1_SPEC.md`, and `docs/AITT_LAUNCH_READINESS.md` synchronized after any owner-approved token change.
+- Keep `docs/TOKENOMICS.md`, the public whitepaper, `docs/PHASE1_SPEC.md`, `docs/AITT_LAUNCH_READINESS.md`, and `docs/PHASE4_BRIDGE_DEX_SPEC.md` synchronized after any owner-approved token or Phase 4 design change.
 
 ## Verification
 

@@ -108,7 +108,7 @@ Oyente is unmaintained (Python 2) — its successor Mythril is run instead.
 - [ ] Governance Safe/config and final beneficiary review
 - [ ] Supply/allocation modeling on ≥3 months real fee data
 - [ ] Contract addresses recorded in TOKENOMICS.md §2 + whitepaper once deployed
-- [ ] Audited BSC bridge/wrapped-token design and verified PancakeSwap pair before Phase 4
+- [ ] Audited BSC bridge/wrapped-token design and verified PancakeSwap pair before Phase 4 — architecture baseline: `docs/PHASE4_BRIDGE_DEX_SPEC.md`
 
 ## Release gates
 The runtime requires deployed status, every contract/vault address, a hash-bound

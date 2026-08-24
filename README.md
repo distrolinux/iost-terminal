@@ -18,6 +18,7 @@ money moves without exchange keys + explicit enablement.
 | [`docs/TOKENOMICS.md`](docs/TOKENOMICS.md) | AITT tokenomics v2.3 source (pre-launch hold) |
 | [`docs/AITT-Whitepaper-v1.0.md`](docs/AITT-Whitepaper-v1.0.md) | Public AITT whitepaper draft synchronized to v2.3 mechanics |
 | [`docs/PHASE1_SPEC.md`](docs/PHASE1_SPEC.md) | Phase 1 contracts spec |
+| [`docs/PHASE4_BRIDGE_DEX_SPEC.md`](docs/PHASE4_BRIDGE_DEX_SPEC.md) | Phase 4B local-only bridge, finality, DEX-verification, and LP-custody specification; deployment and liquidity remain disabled |
 | [`docs/COMPETITIVE-NOTE-etoro.md`](docs/COMPETITIVE-NOTE-etoro.md) | Competitive note: eToro copy-trading vs our agent marketplace |
 
 ## Quickstart
