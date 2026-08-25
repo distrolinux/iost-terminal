@@ -45,7 +45,7 @@ import { runBacktest, describeRule } from './lib/backtest.js';
 import { auditToken, smartMoney, AUDIT_CHAINS, SIGNAL_CHAINS } from './lib/binance-data.js';
 import session from 'express-session';
 import { FileSessionStore } from './lib/session-store.js';
-import { authRouter, authLimiter } from './lib/auth-routes.js';
+import { authRouter, authLimiter, sameOriginMutation } from './lib/auth-routes.js';
 import rateLimit from 'express-rate-limit';
 import * as auth from './lib/auth.js';
 
@@ -141,6 +141,11 @@ app.use((req, res, next) => {
 
 const SITE_URL = 'https://iostcallister.com'; // canonical public origin
 
+// Apply browser-origin validation to the complete mutation surface, not only
+// /api/auth. Headerless CLI/native-agent requests remain compatible; browser
+// requests with cross-site Fetch Metadata or a foreign Origin fail closed.
+app.use(sameOriginMutation(SITE_URL));
+
 // ---- sessions: cookie 'iost.sid', httpOnly, lax, Secure when behind TLS ----
 // secure:'auto' → Secure flag only when the request arrived over HTTPS
 // (Traefik / cloudflared set X-Forwarded-Proto; trust proxy enables that).
@@ -180,8 +185,10 @@ app.use((req, res, next) => {
     const authz = req.get('authorization') || '';
     if (/^Bearer\s+/i.test(authz)) {
       const entry = oauthTokens.get(authz.replace(/^Bearer\s+/i, '').trim());
-      if (entry && entry.expiresAt > Date.now()) {
+      if (entry && entry.expiresAt > Date.now() && agentKeys.isActiveKey(entry.keyId, entry.userId)) {
         req.userAgent = { userId: entry.userId, keyId: entry.keyId, name: 'oauth', scopes: entry.scopes.slice() };
+      } else if (entry) {
+        oauthTokens.delete(authz.replace(/^Bearer\s+/i, '').trim());
       }
     }
   }
@@ -615,7 +622,7 @@ ${s?.autopilot?.enabled ? `enabled (${s.autopilot.ticks} ticks)${s.autopilot.con
 ### Agent access
 - **Read state (no auth):** [/api/ui-state](/api/ui-state) · [/api/scores](/api/scores) · [/api/scanner](/api/scanner) · [/api/news](/api/news) · [/api/onchain](/api/onchain) · [/api/probability](/api/probability)
 - **Authenticate:** mint an agent key in the app (Portfolio → AI Agents) → send as \`X-API-Key: itk_…\`, or OAuth 2.0 client_credentials → Bearer token ([/auth.md](/auth.md))
-- **Trade (paper):** POST /api/paper/open|close with a \`trade-paper\`-scoped key
+- **Trade (paper):** POST /api/paper/open|close with a \`trade-paper\`-scoped key; opens require positive entry/size + owned walletId + active wallet-bound pactId
 - **Live:** proposals only — owner approves before anything executes (option C, human-in-the-loop)
 `;
 }
@@ -810,7 +817,8 @@ app.get('/.well-known/oauth-protected-resource', (req, res) => {
 
 // ---- real OAuth 2.0 client_credentials grant (no fake metadata) ----
 // client_id = agent-key id (public), client_secret = the full itk_ secret.
-// Tokens are opaque, in-memory, 24h TTL; revoke via /oauth/revoke.
+// Tokens are opaque, in-memory, 24h TTL; revoke directly via /oauth/revoke or
+// revoke the source agent key to invalidate every bearer derived from it.
 const oauthLimiter = rateLimit({ windowMs: 60_000, limit: 20, standardHeaders: 'draft-7', legacyHeaders: false, message: { error: 'too many token requests — slow down' } });
 const oauthForm = express.urlencoded({ extended: false });
 app.post('/oauth/token', oauthLimiter, oauthForm, (req, res) => {
@@ -868,7 +876,12 @@ Discovery: \`/.well-known/oauth-authorization-server\` (RFC 8414) · \`/.well-kn
 - \`client_id\` = the key's id (shown in the app), \`client_secret\` = the full \`itk_…\` secret.
 - \`POST /oauth/token\` with \`grant_type=client_credentials\` (form body or HTTP Basic) → \`access_token\` (Bearer, 24h, opaque, in-memory).
 - Use \`Authorization: Bearer <token>\` — resolves to the same identity + scopes as the key.
-- Revoke: \`POST /oauth/revoke\` with \`{token}\`.
+- Revoke: \`POST /oauth/revoke\` with \`{token}\`, or revoke the source agent key to invalidate every bearer derived from it immediately.
+
+## Agent paper execution rail
+Agent-key paper opens require the \`trade-paper\` scope, a positive \`entry\` and
+\`size\`, an owned agent \`walletId\`, and an active wallet-bound \`pactId\`.
+Human-session paper execution remains unchanged.
 
 ## Live trading — human-in-the-loop
 Agents never execute live trades directly. With a \`trade-live\` key an agent submits a
@@ -1219,22 +1232,32 @@ app.get('/api/paper', requireUser, async (req, res) => {
 
 app.post('/api/paper/open', requireUser, async (req, res) => {
   if (req.userAgent && !userAgentHas(req, 'trade-paper')) return res.status(403).json({ error: 'scope: this key cannot trade (missing trade-paper)' });
-  // Phase 2 opt-in rails: enforce agent wallet spend limits when configured
+  // Agent credentials always pass the wallet, limit, and Pact authorization rail.
   const entry = Number(req.body?.entry || 0);
   const size = Number(req.body?.size || 0);
   const notionalMinor = entry > 0 && size > 0 ? Math.trunc(entry * size * 100) : 0;
-  const gate = agentSpendGate(req, notionalMinor);
-  if (!gate.ok) return res.status(402).json({ error: gate.message, reason: gate.reason });
+  const gate = agentSpendGate(req, notionalMinor, {
+    walletId: req.body?.walletId,
+    pactId: req.body?.pactId,
+    recipient: req.body?.recipient,
+    protocol: req.body?.protocol,
+  });
+  if (!gate.ok) return res.status(402).json({ error: gate.message || gate.reason || 'agent spend denied', reason: gate.reason });
   req.agentReserveId = gate.reserveId;
   try {
     const r = await getBroker('paper').placeOrder({ ...(req.body || {}), accountId: accountFor(req).accountId });
     if (req.agentReserveId) {
-      if (r.ok) limits.commitReserve({ walletId: gate.walletId, reserveId: req.agentReserveId });
-      else limits.releaseReserve({ walletId: gate.walletId, reserveId: req.agentReserveId });
+      const settled = settleAgentSpend(gate, !!r.ok);
+      if (!settled.ok && r.ok) {
+        // Paper execution is reversible: close immediately at entry so a
+        // failed authorization settlement cannot leave an open position.
+        await closeTrade(r.position?.id, r.position?.entry, accountFor(req).accountId, 'agent authorization settlement failed');
+        return res.status(500).json({ error: 'agent authorization settlement failed' });
+      }
     }
     res.json(r);
   } catch (e) {
-    if (req.agentReserveId) limits.releaseReserve({ walletId: gate.walletId, reserveId: req.agentReserveId });
+    if (req.agentReserveId) settleAgentSpend(gate, false);
     res.status(502).json({ error: e.message });
   }
 });
@@ -1543,7 +1566,7 @@ app.post('/api/admin/aitt/claims/:id/release', requireUser, (req, res) => {
 
 // ================= Phase 2 — agent wallet engine (off-chain first) =================
 // Design: docs/PHASE2_SPEC.md. Works before the token deploys; on-chain escrow in
-// Phase 3. Permissive default: no wallet ⇒ no enforcement (existing flows unchanged).
+// Phase 3. Agent execution fails closed without an owned wallet and active Pact.
 // All money in INTEGER MINOR UNITS (cents) unless stated.
 
 const h = (fn) => (req, res) => { try { fn(req, res); } catch (e) { res.status(400).json({ ok: false, error: e.message }); } };
@@ -1785,19 +1808,42 @@ function walletOwnedBy(req, walletId) {
   return null;
 }
 
-// Opt-in execution-rail hook (AGENT_SPEND_ENFORCE=1): for agent-key callers WITH an
-// agent wallet, check+reserve notional spend before the order lands. No wallet or
-// env off ⇒ permissive (existing behavior unchanged). Notional only when entry
-// price is known — otherwise the caller uses /api/spend/* explicitly.
-const AGENT_SPEND_ENFORCE = process.env.AGENT_SPEND_ENFORCE === '1';
-function agentSpendGate(req, notionalMinor) {
-  if (!AGENT_SPEND_ENFORCE || !notionalMinor || notionalMinor <= 0) return { ok: true };
-  if (!req.agentKey) return { ok: true }; // human session = the approver
+// Agent execution rail: platform and per-user agent credentials must present a
+// wallet-bound active Pact. This is a security invariant, not a feature flag.
+function agentSpendGate(req, notionalMinor, { walletId = null, pactId = null, recipient = null, protocol = null } = {}) {
+  if (!(req.agentKey || req.userAgent)) return { ok: true }; // human session = the approver
+  if (!notionalMinor || notionalMinor <= 0) {
+    return { ok: false, reason: 'trusted-entry-required', message: 'Agent orders require a positive entry and size for server-side spend authorization.' };
+  }
   const ident = signalIdentity(req);
-  const w = ident && wallets.findWallet(ident.agentId, 'agent');
-  if (!w) return { ok: true }; // no wallet ⇒ permissive default
-  const r = limits.reserveSpend({ walletId: w.walletId, amountMinor: notionalMinor, purpose: req.path });
-  return r.ok ? { ok: true, reserveId: r.reserveId, walletId: w.walletId } : r;
+  const w = ident && (walletId ? wallets.getWallet(walletId) : wallets.findWallet(ident.agentId, 'agent'));
+  if (!w || w.kind !== 'agent' || w.ownerId !== ident.agentId) {
+    return { ok: false, reason: 'agent-wallet-required', message: 'An owned agent wallet is required for agent execution.' };
+  }
+  if (!pactId) return { ok: false, reason: 'pact-required', message: 'An active wallet-bound Pact is required for agent execution.' };
+  const pactGate = pacts.checkPactSpend({ pactId, walletId: w.walletId, ownerId: w.ownerId, amountMinor: notionalMinor, recipient, protocol });
+  if (!pactGate.ok) return pactGate;
+  const reservation = limits.reserveSpend({ walletId: w.walletId, amountMinor: notionalMinor, purpose: req.path, pactId, recipient, protocol });
+  if (!reservation.ok) return reservation;
+  const pactReservation = pacts.reservePactSpend({ pactId, reservationId: reservation.reserveId, walletId: w.walletId, ownerId: w.ownerId, amountMinor: notionalMinor, recipient, protocol });
+  if (!pactReservation.ok) {
+    limits.releaseReserve({ walletId: w.walletId, reserveId: reservation.reserveId });
+    return pactReservation;
+  }
+  return { ok: true, reserveId: reservation.reserveId, walletId: w.walletId, pactId };
+}
+
+function settleAgentSpend(gate, commit) {
+  if (!gate?.reserveId) return { ok: true };
+  if (!commit) {
+    const limitRelease = limits.releaseReserve({ walletId: gate.walletId, reserveId: gate.reserveId });
+    const pactRelease = pacts.releasePactReservation(gate.pactId, gate.reserveId);
+    return { ok: limitRelease.ok && pactRelease.ok };
+  }
+  const limitCommit = limits.commitReserve({ walletId: gate.walletId, reserveId: gate.reserveId });
+  if (!limitCommit.ok) return { ok: false };
+  const pactCommit = pacts.commitPactReservation(gate.pactId, gate.reserveId);
+  return { ok: pactCommit.ok };
 }
 
 // queue flush: boot + every 10 min — drains data/pending_pins.json when the key appears
@@ -1858,6 +1904,7 @@ app.post('/api/account/live/enable', requireUser, async (req, res) => {
 });
 
 app.post('/api/account/live/disable', requireUser, async (req, res) => {
+  if (!req.session?.userId || !isOwnerSession(req)) return res.status(403).json({ error: 'owner account only' });
   const u = req.session?.userId ? auth.findById(req.session.userId) : null;
   const r = await disableLive(accountFor(req), u ? brokerForUser(u) : null);
   res.json({ ok: true, cancelled: r.cancelled, wasEnabled: r.wasEnabled });
@@ -2045,6 +2092,11 @@ app.delete('/api/agent-keys/:id', requireUser, (req, res) => {
   if (!req.session?.userId) return res.status(401).json({ error: 'auth required' });
   const r = agentKeys.revokeKey({ userId: req.session.userId, id: req.params.id });
   if (!r.ok) return res.status(404).json({ error: r.error });
+  // Kill every in-memory bearer derived from this key immediately. Request
+  // middleware also revalidates the source key as defense in depth.
+  for (const [token, entry] of oauthTokens) {
+    if (entry.keyId === req.params.id && entry.userId === req.session.userId) oauthTokens.delete(token);
+  }
   logLiveEvent(req.session.userId, 'agent.key.revoked', { keyId: req.params.id });
   res.json({ ok: true });
 });
@@ -2337,7 +2389,7 @@ const API_INDEX = {
   managementEndpoints: [
     { path: '/api/management', method: 'GET', purpose: 'last position-management sweep: trailing exits + DCA adds + errors' },
     { path: '/api/paper/:id/management', method: 'POST', body: '{trailStopPct?,trailTpPct?,resetPeak?,dca?:{enabled,triggerPct,maxTrades,sizeFactor,cooldownMin}}', purpose: 'set/update trailing or DCA config on an open position' },
-    { path: '/api/paper/open', method: 'POST', body: '{...,trailStopPct?,trailTpPct?,dca?:{enabled,triggerPct,maxTrades,sizeFactor,cooldownMin}}', purpose: 'open a paper trade with trailing/DCA from the start' },
+    { path: '/api/paper/open', method: 'POST', body: '{...,walletId?,pactId?,trailStopPct?,trailTpPct?,dca?:{enabled,triggerPct,maxTrades,sizeFactor,cooldownMin}}', purpose: 'open a paper trade with trailing/DCA from the start; agent credentials require an owned wallet and active Pact' },
   ],
   triggers: 'v1.14 — user-defined alerts: when a condition fires (price > level, AI score crosses threshold, 24h % move) → notify (event log, pollable for Telegram) or propose (live-trade proposal, owner-only). Edge-triggered (no spam), events capped, checked every 60s. Store data/triggers.json.',
   triggerEndpoints: [
@@ -2355,7 +2407,7 @@ const API_INDEX = {
   ],
   points: `Off-chain points ledger: no token issued. signal +10 · follower +5 · referral +50/+10 · feedback +5 (author) · weekly top paper trader +500. Points→AITT 1:1 plumbing is built but planned/not guaranteed. Phase 1 utility counsel framing was cleared on 2026-08-24; independent-audit, hash-bound approval evidence, deployment and owner gates keep conversion closed under v${AITT_DOC_VERSION}.`,
   aitt: 'AITT — Agent Intelligence Trading Token (pre-launch remediation, NOT issued): 1B fixed supply, unified 800M-floor burn routing, contract-locked allocations, EIP-191 conversion binding and receipt reconciliation are built. Counsel cleared the Phase 1 utility framing on 2026-08-24; independent audit, hash-bound approval evidence, deployment and owner gates remain closed. Staking revenue/APY, external transferability and Phase 4 liquidity remain inactive future proposals requiring separate counsel/owner/audit approval; Phase 4 is disabled.',
-  agentWallet: 'Phase 2 agent wallet engine (off-chain first): parent-child wallets with spend limits (per-tx/daily/weekly, integer minor units), trust staking + slashing + appeals, derived Trust Score + credit line, task-scoped Pacts with auto-expiry, emergency freeze. Design: docs/PHASE2_SPEC.md (engine) + docs/PHASE2_WALLET.md (on-chain wallet + Coinbase CDP research §9.20-9.26). Permissive default — no wallet ⇒ no enforcement. Capabilities: finance.* / wallet.* / trade.* / mandate.sign.',
+  agentWallet: 'Phase 2 agent wallet engine (off-chain first): parent-child wallets with spend limits (per-tx/daily/weekly, integer minor units), trust staking + slashing + appeals, derived Trust Score + credit line, task-scoped Pacts with auto-expiry, emergency freeze. Design: docs/PHASE2_SPEC.md (engine) + docs/PHASE2_WALLET.md (on-chain wallet + Coinbase CDP research §9.20-9.26). Agent-key paper opens fail closed without positive entry/size, an owned agent wallet, and an active wallet-bound Pact. Capabilities: finance.* / wallet.* / trade.* / mandate.sign.',
   freeIostWallet: 'Every registered user gets a real IOST mainnet account — opening an IOST account is FREE (no creation fee; official signup at iostaccount.io). Keys are generated IN THE BROWSER — the server never sees private keys, only the base64 public key + account name; it broadcasts auth.iost/signUp (VERIFIED ABI: createAccount does not exist on mainnet) with the platform account. No IOST_PIN_KEY → requests queue (status "pending") and flush when the key appears. Store data/iost_accounts.json.',
   discover: [{ path: '/.well-known/agent.json', method: 'GET', purpose: 'agent discovery manifest' }],
   market: [
@@ -2384,7 +2436,7 @@ const API_INDEX = {
   execution: [
     { path: '/api/account', method: 'GET', purpose: 'light per-account snapshot for UI topbar: cash, equity, openPositions, lastTrades' },
     { path: '/api/paper', method: 'GET', purpose: 'account + open positions + journal (mark-to-market)' },
-    { path: '/api/paper/open', method: 'POST', body: '{symbol,side,size|stop+risk,stop,target,reason,confidence}', purpose: 'open paper trade' },
+    { path: '/api/paper/open', method: 'POST', body: '{symbol,side,size,entry,stop?,target?,reason?,confidence?,walletId,pactId,recipient?,protocol?}', purpose: 'agent-key opens require trade-paper scope + owned wallet + active wallet-bound Pact; human-session paper opens are unchanged' },
     { path: '/api/paper/close', method: 'POST', body: '{positionId,exitPrice?}', purpose: 'close paper trade' },
     { path: '/api/paper/stats', method: 'GET', purpose: 'journal statistics (win rate, P&L)' },
     { path: '/api/paper/reset', method: 'POST', purpose: 'reset paper account' },

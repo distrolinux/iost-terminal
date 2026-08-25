@@ -1,4 +1,6 @@
-// Regression: customer-owned Kraken keys must not depend on platform keys.
+// Regression: customer-owned Kraken keys do not bypass the single-owner live
+// policy. A configured owner may use a self-custody broker without platform
+// keys, while every other identity still fails closed.
 import { rmSync, mkdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,17 +11,28 @@ mkdirSync(SCRATCH, { recursive: true });
 process.env.IOST_DATA_DIR = SCRATCH;
 process.env.KRAKEN_API_KEY = '';
 process.env.KRAKEN_API_SECRET = '';
+process.env.LIVE_EMAIL_ALLOWLIST = 'owner@test.local';
 
 const { enableLive, getLiveState } = await import('../lib/live.js');
-const state = { accountId: 'self-custody-test', positions: [], journal: [], account: {} };
+const state = { accountId: 'self-custody-owner-test', positions: [], journal: [], account: {} };
 const ownBroker = { configured: true };
-const result = await enableLive(state, 'customer@test.local', ownBroker);
-
-if (!result.ok || result.live?.venue !== 'kraken:self') {
-  console.error('FAIL  customer broker should enable self-custody live mode', result);
+const denied = await enableLive(
+  { accountId: 'self-custody-non-owner-test', positions: [], journal: [], account: {} },
+  'customer@test.local',
+  ownBroker,
+);
+if (denied.ok || !/allowlist/.test(denied.error || '')) {
+  console.error('FAIL  customer broker bypassed the single-owner live policy', denied);
   process.exit(1);
 }
-if (getLiveState(state, 'customer@test.local', ownBroker).krakenConfigured !== true) {
+
+const result = await enableLive(state, 'owner@test.local', ownBroker);
+
+if (!result.ok || result.live?.venue !== 'kraken:self') {
+  console.error('FAIL  configured owner should enable self-custody live mode', result);
+  process.exit(1);
+}
+if (getLiveState(state, 'owner@test.local', ownBroker).krakenConfigured !== true) {
   console.error('FAIL  self-custody live state should report its own broker configured');
   process.exit(1);
 }
@@ -28,4 +41,4 @@ if (!existsSync(join(SCRATCH, 'live-audit.jsonl'))) {
   process.exit(1);
 }
 rmSync(SCRATCH, { recursive: true, force: true });
-console.log('PASS  customer broker enables self-custody live mode without platform keys');
+console.log('PASS  self-custody broker remains bound to the single-owner live policy');

@@ -20,7 +20,7 @@ A human mints an **agent API key** in the app (Portfolio → AI Agents):
 ## Scopes
 
 - `read` — always included; platform state for the bound account.
-- `trade-paper` — open/close paper trades (`/api/paper/open|close`).
+- `trade-paper` — open/close paper trades (`/api/paper/open|close`). Agent-key opens also require a positive entry/size, an owned agent wallet, and an active wallet-bound Pact.
 - `trade-live` — owner-only creation; **requests only** (see rails below).
 
 ## Option A — X-API-Key header
@@ -43,7 +43,7 @@ curl -H 'Authorization: Bearer <token>' https://iostcallister.com/api/paper
 ```
 
 Tokens are opaque, in-memory, 24h TTL, same identity + scopes as the key.
-Revoke: `POST /oauth/revoke` with `{ token }`.
+Revoke: `POST /oauth/revoke` with `{ token }`, or revoke the source agent key to invalidate all bearers derived from it immediately.
 
 ## Live-trade rail (human-in-the-loop)
 

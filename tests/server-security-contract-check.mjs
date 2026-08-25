@@ -21,6 +21,10 @@ const route = (needle, nextNeedle) => {
 const closeRoute = route("app.post('/api/paper/close'", "app.post('/api/paper/reset'");
 ok('paper close requires trade-paper scope', /userAgentHas\(req,\s*'trade-paper'\)/.test(closeRoute));
 
+const liveDisableRoute = route("app.post('/api/account/live/disable'", "// ---- live execution");
+ok('live disable requires an allowlisted owner browser session',
+  /req\.session\?\.userId/.test(liveDisableRoute) && /isOwnerSession\(req\)/.test(liveDisableRoute));
+
 const reserveRoute = route("app.post('/api/spend/reserve'", "app.post('/api/spend/commit'");
 ok('spend reserve requires a pact id', /pactId required/.test(reserveRoute));
 ok('spend reserve checks pact policies', /checkPactSpend/.test(reserveRoute));
@@ -35,6 +39,27 @@ ok('AITT owner dashboard exposes release gates and claims without mutation contr
 ok('whitepaper route serves the public distribution copy', /app\.get\('\/whitepaper'[\s\S]*AITT-Whitepaper-v1\.0\.md/.test(src));
 ok('public Add Token requires a successful live deployment probe', /releaseGate\?\.live\?\.verified === true/.test(tokenUi));
 ok('conversion wallet flow enforces IOST L2 before signing or sending', /ensureIostL2Wallet/.test(appUi) && /wallet_switchEthereumChain/.test(appUi) && /await ensureIostL2Wallet\(\)/.test(appUi));
+
+const globalOriginGuard = src.indexOf('app.use(sameOriginMutation(SITE_URL))');
+const firstAccountMutation = src.indexOf("app.post('/api/paper/open'");
+ok('same-origin mutation guard covers the full browser API surface',
+  globalOriginGuard > 0 && firstAccountMutation > globalOriginGuard);
+
+ok('OAuth bearer authentication revalidates the source agent key',
+  /agentKeys\.isActiveKey\(entry\.keyId, entry\.userId\)/.test(src));
+
+const agentSpendGate = route('function agentSpendGate(', '// queue flush:');
+ok('agent spend gate covers platform and per-user agent credentials',
+  /req\.agentKey\s*\|\|\s*req\.userAgent/.test(agentSpendGate));
+ok('agent spend gate fails closed without wallet, price, or Pact',
+  /agent-wallet-required/.test(agentSpendGate)
+  && /trusted-entry-required/.test(agentSpendGate)
+  && /pact-required/.test(agentSpendGate)
+  && !/AGENT_SPEND_ENFORCE/.test(agentSpendGate));
+ok('agent paper execution reserves both limits and Pact capacity',
+  /checkPactSpend/.test(agentSpendGate)
+  && /reserveSpend/.test(agentSpendGate)
+  && /reservePactSpend/.test(agentSpendGate));
 
 console.log(failures === 0 ? '\nALL PASS ✅' : `\n${failures} FAILURES ❌`);
 process.exit(failures === 0 ? 0 : 1);
