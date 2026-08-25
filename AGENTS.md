@@ -22,6 +22,7 @@
 - Secrets, reset tokens, private keys, and raw API credentials must never appear in source, responses, logs, or tests.
 - IOST account opening is FREE (no creation fee since 2026-08-24; official signup iostaccount.io/en/create). `lib/iost-accounts.js` FEE_IOST = 0; the platform creates wallets via auth.iost/signUp on users' behalf, keys generated in-browser only. AITT itself is ERC-20 on L2 (chain 182) — EVM wallets only, not the L1 wallet.
 - Server and boot-cached page changes require a production container restart; static asset changes require cache-version bumps.
+- Phase 5 evidence, release-target, and reproducible-build tooling is preparation-only: local fixtures remain under explicit HOLD and must never authorize deployment, public RPC use, issuance, conversion, transferability, or Phase 4 activation.
 
 ## Work Guidance
 

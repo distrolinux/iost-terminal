@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "status": "local-fixture",
+  "hold": true,
+  "targetId": "fixture-only:release-target:alpha",
+  "chainIntent": {
+    "targetId": "fixture-only:release-target:alpha",
+    "reference": "fixture-only:chain-intent:alpha",
+    "contentHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "source": {
+    "targetId": "fixture-only:release-target:alpha",
+    "commitReference": "fixture-only:source:commit-alpha",
+    "cleanTreeProofReference": "fixture-only:source:clean-tree-proof-alpha",
+    "cleanTreeProofHash": "0x1010101010101010101010101010101010101010101010101010101010101010"
+  },
+  "dependencies": {
+    "targetId": "fixture-only:release-target:alpha",
+    "lockfiles": [
+      {
+        "kind": "root-npm",
+        "pathReference": "fixture-only:path:root-package-lock",
+        "contentHash": "0x1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      {
+        "kind": "contracts-npm",
+        "pathReference": "fixture-only:path:contracts-package-lock",
+        "contentHash": "0x2222222222222222222222222222222222222222222222222222222222222222"
+      }
+    ]
+  },
+  "toolchain": {
+    "targetId": "fixture-only:release-target:alpha",
+    "nodeVersionReference": "fixture-only:toolchain:node-version",
+    "npmVersionReference": "fixture-only:toolchain:npm-version",
+    "hardhatVersionReference": "fixture-only:toolchain:hardhat-version",
+    "compiler": {
+      "name": "solc",
+      "versionReference": "fixture-only:toolchain:solc-version",
+      "settingsHash": "0x3333333333333333333333333333333333333333333333333333333333333333"
+    }
+  },
+  "config": {
+    "targetId": "fixture-only:release-target:alpha",
+    "payloadHash": "0x4444444444444444444444444444444444444444444444444444444444444444"
+  },
+  "bytecode": {
+    "targetId": "fixture-only:release-target:alpha",
+    "creationBundleHash": "0x5555555555555555555555555555555555555555555555555555555555555555",
+    "deployedBundleHash": "0x6666666666666666666666666666666666666666666666666666666666666666"
+  },
+  "runbooks": [
+    {
+      "targetId": "fixture-only:release-target:alpha",
+      "kind": "deployment-candidate",
+      "pathReference": "fixture-only:path:deployment-runbook",
+      "contentHash": "0x7777777777777777777777777777777777777777777777777777777777777777"
+    },
+    {
+      "targetId": "fixture-only:release-target:alpha",
+      "kind": "verification-candidate",
+      "pathReference": "fixture-only:path:verification-runbook",
+      "contentHash": "0x8888888888888888888888888888888888888888888888888888888888888888"
+    },
+    {
+      "targetId": "fixture-only:release-target:alpha",
+      "kind": "incident-candidate",
+      "pathReference": "fixture-only:path:incident-runbook",
+      "contentHash": "0x9999999999999999999999999999999999999999999999999999999999999999"
+    }
+  ]
+}

@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "status": "local-fixture",
+  "hold": true,
+  "holdReason": "fixture-only:hold:local-preparation-no-launch-authorization",
+  "target": {
+    "reference": "fixture-only:release-target:alpha",
+    "sourceCommit": "fixture-only:source-commit:alpha",
+    "configHash": "0x1111111111111111111111111111111111111111111111111111111111111111",
+    "creationBytecodeBundleHash": "0x2222222222222222222222222222222222222222222222222222222222222222",
+    "deployedBytecodeBundleHash": "0x3333333333333333333333333333333333333333333333333333333333333333"
+  },
+  "artifacts": [
+    {
+      "category": "release-target",
+      "targetReference": "fixture-only:release-target:alpha",
+      "contentHash": "0x4111111111111111111111111111111111111111111111111111111111111111",
+      "attribution": {
+        "identityReference": "fixture-only:identity:release-preparer",
+        "provenanceReference": "fixture-only:provenance:release-target-record"
+      }
+    },
+    {
+      "category": "external-audit",
+      "targetReference": "fixture-only:release-target:alpha",
+      "contentHash": "0x4222222222222222222222222222222222222222222222222222222222222222",
+      "attribution": {
+        "identityReference": "fixture-only:identity:external-auditor",
+        "provenanceReference": "fixture-only:provenance:external-audit-report"
+      }
+    },
+    {
+      "category": "counsel",
+      "targetReference": "fixture-only:release-target:alpha",
+      "contentHash": "0x4333333333333333333333333333333333333333333333333333333333333333",
+      "attribution": {
+        "identityReference": "fixture-only:identity:counsel-reviewer",
+        "provenanceReference": "fixture-only:provenance:counsel-evidence"
+      }
+    },
+    {
+      "category": "governance-config-review",
+      "targetReference": "fixture-only:release-target:alpha",
+      "contentHash": "0x4444444444444444444444444444444444444444444444444444444444444444",
+      "attribution": {
+        "identityReference": "fixture-only:identity:config-reviewer",
+        "provenanceReference": "fixture-only:provenance:governance-config-review"
+      }
+    },
+    {
+      "category": "points-package",
+      "targetReference": "fixture-only:release-target:alpha",
+      "contentHash": "0x4555555555555555555555555555555555555555555555555555555555555555",
+      "attribution": {
+        "identityReference": "fixture-only:identity:points-reviewer",
+        "provenanceReference": "fixture-only:provenance:points-package"
+      }
+    },
+    {
+      "category": "offline-rehearsal",
+      "targetReference": "fixture-only:release-target:alpha",
+      "contentHash": "0x4666666666666666666666666666666666666666666666666666666666666666",
+      "attribution": {
+        "identityReference": "fixture-only:identity:rehearsal-operator",
+        "provenanceReference": "fixture-only:provenance:offline-rehearsal"
+      }
+    },
+    {
+      "category": "reproducible-build",
+      "targetReference": "fixture-only:release-target:alpha",
+      "contentHash": "0x4777777777777777777777777777777777777777777777777777777777777777",
+      "attribution": {
+        "identityReference": "fixture-only:identity:build-reviewer",
+        "provenanceReference": "fixture-only:provenance:reproducible-build"
+      }
+    },
+    {
+      "category": "verification-plan",
+      "targetReference": "fixture-only:release-target:alpha",
+      "contentHash": "0x4888888888888888888888888888888888888888888888888888888888888888",
+      "attribution": {
+        "identityReference": "fixture-only:identity:verification-reviewer",
+        "provenanceReference": "fixture-only:provenance:verification-plan"
+      }
+    },
+    {
+      "category": "incident-rollback-runbook",
+      "targetReference": "fixture-only:release-target:alpha",
+      "contentHash": "0x4999999999999999999999999999999999999999999999999999999999999999",
+      "attribution": {
+        "identityReference": "fixture-only:identity:incident-reviewer",
+        "provenanceReference": "fixture-only:provenance:incident-runbook"
+      }
+    },
+    {
+      "category": "cally-authorization",
+      "targetReference": "fixture-only:release-target:alpha",
+      "contentHash": "0x4aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "attribution": {
+        "identityReference": "fixture-only:identity:owner-authorization",
+        "provenanceReference": "fixture-only:provenance:owner-authorization"
+      }
+    }
+  ]
+}

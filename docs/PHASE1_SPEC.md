@@ -1,5 +1,5 @@
 # Phase 1 build spec — AITT on IOST L2
-> Status: **BUILT + TOOLING-REVIEWED, PRE-LAUNCH HOLD, not deployed.** Do not deploy until the blockers in `AITT_REVIEW_2026-08-23.md` are resolved and the owner explicitly approves.
+> Status: **BUILT + TOOLING-REVIEWED, PRE-LAUNCH HOLD, not deployed.** Do not deploy until `AITT_LAUNCH_READINESS.md` and `PHASE5_LAUNCH_EXECUTION_SPEC.md` are satisfied and CALLY separately authorizes public-chain execution.
 > Source of truth for numbers: `docs/TOKENOMICS.md` v2.4 remediation design.
 
 ## What this delivers
