@@ -23,7 +23,7 @@ real money without explicit owner approval.**
 2. **Authenticate** — mint a scoped key in the app (Portfolio → AI Agents) and send
    `X-API-Key: <key>` on every authenticated request. Scopes: `read`, `trade-paper`,
    `trade-live` (owner-only). OAuth 2.0 `client_credentials` also works — see /auth.md.
-3. **Paper trade** (`trade-paper` scope): `POST /api/paper/open {symbol,side,size,stop,target,reason}`
+3. **Paper trade** (`trade-paper` scope): `POST /api/paper/open {symbol,side,size,entry,stop?,target?,reason?,walletId,pactId}`. Agent-key opens require an owned agent wallet and active wallet-bound Pact; human-session paper opens are unchanged.
    and `POST /api/paper/close {positionId}`.
 4. **Publish a signal**: `POST /api/signals {type, symbol, side, entry?, target?, stop?, reason?}`
    — the SHA-256 hash is pinned on the IOST mainnet (token.iost transfer memo) when the pin key

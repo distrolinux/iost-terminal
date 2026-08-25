@@ -34,6 +34,7 @@ npm test           # offline safety/regression suite; never places live orders
 - Live orders fail closed when a trustworthy market/limit price is unavailable; the configured notional cap is always applied.
 - Agent live proposals acquire a persisted `executing` lease before Kraken is called, preventing duplicate approval requests from placing duplicate orders.
 - Per-user agent keys need `trade-paper` for both opening and closing paper positions.
+- Agent-key paper opens fail closed unless they include a positive `entry` + `size` and an owned `walletId` with an active wallet-bound `pactId`; limits and Pact budget are reserved before execution and committed only after success. Human-session paper trading is unchanged.
 - `/api/spend/check|reserve` require an active wallet-bound `pactId`; recipient/protocol policies are checked before reservation, outstanding reservations count against the Pact budget, and the pact identity is bound into the server-side reservation used at commit.
 - Production password-reset tokens are never logged. Development console delivery is opt-in with `AUTH_DEV_RESET_LOG=1` and is disabled when `NODE_ENV=production`.
 
@@ -72,7 +73,8 @@ curl -X POST localhost:8787/api/risk -H 'content-type: application/json' \
 
 # paper trade (agents can trade through the platform)
 curl -X POST localhost:8787/api/paper/open -H 'content-type: application/json' \
-  -d '{"symbol":"IOST","side":"long","size":100000,"stop":0.00057,"reason":"breakout + volume","confidence":74}'
+  -H 'x-api-key: itk_…' \
+  -d '{"symbol":"IOST","side":"long","size":100000,"entry":0.0006,"stop":0.00057,"reason":"breakout + volume","confidence":74,"walletId":"aw_…","pactId":"pact_…"}'
 
 # close
 curl -X POST localhost:8787/api/paper/close -H 'content-type: application/json' -d '{"positionId":"<id>"}'

@@ -88,7 +88,7 @@
 ### Execution (paper; auth required)
 - `GET /api/account` — cash, equity, open positions, last trades
 - `GET /api/paper` — account + open positions + journal (mark-to-market)
-- `POST /api/paper/open {symbol,side,size|stop+risk,stop,target,reason,confidence}` — open paper trade (`trade-paper` scope)
+- `POST /api/paper/open {symbol,side,size,entry,stop?,target?,reason?,confidence?,walletId,pactId,recipient?,protocol?}` — agent-key paper opens require `trade-paper`, an owned agent wallet, and an active wallet-bound Pact; human-session paper opens are unchanged
 - `POST /api/paper/close {positionId,exitPrice?}` — close paper trade
 - `GET /api/paper/stats` — journal statistics
 - `POST /api/paper/reset` — reset paper account
@@ -137,7 +137,7 @@
 - `/api/slashes*` — unauthorized −10% + trust reset, failed settlement −5%, 14d appeals
 - `/api/pacts*` — task-scoped intents (intent/plan/policies/completion time|budget|goal, auto-expiry)
 - `/api/freeze` — owner-only emergency controls
-- Permissive default: no wallet ⇒ no enforcement. `AGENT_SPEND_ENFORCE=1` hooks paper execution.
+- Fail-closed default for agent-key paper opens: positive entry/size + owned agent wallet + active wallet-bound Pact. Limits and Pact capacity reserve before execution and commit after success.
 - **Phase 2 on-chain wallet design (research complete, 2026-08-20):** non-custodial Safe
   2-of-3 + agent session keys (TEE/MPC custody), trust-stake ceilings, recovery module,
   funding layer (deposits/bridge/gas/on-ramp) — full spec + Coinbase CDP research in
