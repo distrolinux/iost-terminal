@@ -29,6 +29,25 @@ npm start          # or: node server.js  → http://localhost:8787
 npm test           # offline safety/regression suite; never places live orders
 ```
 
+## Production deployment
+
+`deploy-host.sh` pulls the supported Node 24 LTS base, builds an immutable image,
+boots a candidate with an isolated
+scratch data mount and live credentials disabled, and waits for `/api/health`
+before pausing and renaming the existing production writer. The promoted
+container must pass both internal and public health checks or the previous
+container is unpaused and restored automatically. Deployments are serialized
+with `flock` and reject dirty working trees, unmanaged port `8787` listeners,
+and duplicate app containers.
+
+Run `PREFLIGHT_ONLY=1 ./deploy-host.sh` to build and health-check the isolated
+candidate without pausing, replacing, or otherwise modifying production.
+
+The first deployment migrates the legacy bind-mounted container to immutable
+images. One paused last-known-good process is retained until the next healthy
+candidate, preserving the exact prior runtime without allowing it to write.
+The script never places live orders or performs public-chain writes.
+
 ## Safety boundaries
 
 - Live orders fail closed when a trustworthy market/limit price is unavailable; the configured notional cap is always applied.
