@@ -1093,7 +1093,13 @@ getNews().catch(() => {});
 getChainSnapshot().catch(() => {});
 
 // ---------- REST API ----------
-app.get('/api/health', (req, res) => res.json({ ok: true, name: 'IOST Terminal', ts: Date.now(), watchlist: WATCHLIST }));
+app.get('/api/health', (req, res) => res.json({
+  ok: true,
+  name: 'IOST Terminal',
+  revision: process.env.APP_REVISION || null,
+  ts: Date.now(),
+  watchlist: WATCHLIST,
+}));
 
 app.get('/api/watchlist', (req, res) => res.json(WATCHLIST));
 
