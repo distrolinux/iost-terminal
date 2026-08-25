@@ -3,27 +3,14 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-  "directories": {
-    "lib": "lib"
-  },
+  "directories": { "lib": "lib" },
   "scripts": {
-    "test": "node tests/rails-check.mjs && node tests/live-proposals-check.mjs && node tests/live-owner-config-check.mjs && node tests/agent-wallet-check.mjs && node tests/live-self-custody-check.mjs && node tests/auth-security-check.mjs && node tests/auth-session-regeneration-check.mjs && node tests/server-security-contract-check.mjs && node tests/security-fixes-check.mjs && node tests/news-sentiment-check.mjs && node tests/aitt-conversion-check.mjs && node tests/aitt-dashboard-check.mjs && node tests/points-auth-hydration-check.mjs && node tests/points-signup-check.mjs && node tests/aitt-snapshot-check.mjs && node tests/phase5-evidence-check.mjs && node tests/phase5-release-target-check.mjs && node tests/phase5-reproducible-build-check.mjs"
+    "test": "node tests/rails-check.mjs && node tests/live-proposals-check.mjs && node tests/live-owner-config-check.mjs && node tests/agent-wallet-check.mjs && node tests/live-self-custody-check.mjs && node tests/auth-security-check.mjs && node tests/auth-session-regeneration-check.mjs && node tests/auth-origin-check.mjs && node tests/server-security-contract-check.mjs && node tests/security-fixes-check.mjs && node tests/news-sentiment-check.mjs && node tests/aitt-conversion-check.mjs && node tests/aitt-dashboard-check.mjs && node tests/points-auth-hydration-check.mjs && node tests/points-signup-check.mjs && node tests/aitt-snapshot-check.mjs && node tests/phase5-evidence-check.mjs && node tests/phase5-release-target-check.mjs && node tests/phase5-reproducible-build-check.mjs"
   },
-  "keywords": [],
-  "author": "",
-  "license": "UNLICENSED",
-  "private": true,
-  "type": "module",
+  "keywords": [], "author": "", "license": "UNLICENSED", "private": true, "type": "module",
   "dependencies": {
-    "bcryptjs": "^3.0.3",
-    "bs58": "^6.0.0",
-    "ethers": "6.17.0",
-    "express": "^5.2.1",
-    "express-rate-limit": "^8.6.2",
-    "express-session": "^1.19.0",
-    "nodemailer": "^9.0.5",
-    "otplib": "^13.4.1",
-    "qrcode": "^1.5.4",
-    "tweetnacl": "^1.0.3"
+    "bcryptjs": "^3.0.3", "bs58": "^6.0.0", "ethers": "6.17.0", "express": "^5.2.1",
+    "express-rate-limit": "^8.6.2", "express-session": "^1.19.0", "nodemailer": "^9.0.5",
+    "otplib": "^13.4.1", "qrcode": "^1.5.4", "tweetnacl": "^1.0.3"
   }
 }
