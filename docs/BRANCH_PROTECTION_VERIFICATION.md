@@ -7,6 +7,7 @@ Verification is complete when:
 
 - direct changes to `main` remain restricted;
 - the pull request safety workflow starts automatically;
+- workflow permissions remain read-only;
 - application, local-contract, and secret-scan jobs pass;
 - no deployment, production restart, trading action, token action, or
   public-chain action occurs.
