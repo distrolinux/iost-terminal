@@ -1,5 +1,37 @@
 # Website launch-readiness audit — 2026-08-26
 
+## Continuation audit — production revision 493473f
+
+- Source and reported production baseline:
+  `493473f3d796374341693016053432ee2b84d8d1`.
+- The in-app browser could not reach either the public site or the isolated local
+  copy because its admin security policy could not be verified. No browser
+  security control was bypassed, so the desktop/mobile visual pass and live
+  browser-console capture remain pending.
+- Static navigation, account, onboarding, form, link, accessibility, SEO,
+  legal-page, security-header, API-contract, and paper-only safety checks were
+  repeated against the exact baseline. The production dependency audit reported
+  zero vulnerabilities and the local-only contract suite passed 124 tests.
+- The complete application suite reaches only the Linux deployment integration
+  checks on macOS; those checks require `flock` and remain delegated to the
+  protected Ubuntu CI job.
+
+### Findings addressed
+
+| Finding | Risk | Improvement |
+|---|---|---|
+| Sign-up exposed its password field as `current-password` | Password managers could offer or overwrite the wrong credential | Sign-in now explicitly uses `current-password`; sign-up explicitly uses `new-password` |
+| The reset-password overlay was outside the dialog focus trap and opener restoration path | Keyboard focus could escape behind the modal or fail to return | Included the reset overlay in focus containment, focused the new-password field, and restored the prior focus on close |
+
+### Launch blockers retained
+
+- Terms, Privacy, and Risk Disclosure remain clearly marked drafts with unresolved
+  company, jurisdiction, effective-date, contact, retention, and liability
+  placeholders. They remain `noindex` and excluded from the sitemap pending
+  owner/counsel approval.
+- Real-money trading, token deployment, conversion, staking, liquidity, and
+  public-chain release actions remain disabled and separately gated.
+
 ## Scope and safety boundary
 
 - Source baseline: GitHub `main` at `d43d17cb5d1bf2d3c7ee3a5d5f402a6d20c7828a`.
