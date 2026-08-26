@@ -1,4 +1,4 @@
-// server.js — IOST Terminal: AI real-trading platform (paper execution)
+// server.js — IOST Terminal: AI trading platform (paper-first execution)
 import express from 'express';
 import { createServer } from 'node:http';
 import { dirname, join } from 'node:path';
@@ -394,17 +394,8 @@ function jsonLdBlock() {
       category: isStock ? 'Equity' : 'Cryptocurrency',
       provider: { '@id': '/#org' },
       dateModified: iso(s.ts),
-      ...(price != null && {
-        offers: {
-          '@type': 'Offer',
-          price,
-          priceCurrency: 'USD',
-          availability: 'https://schema.org/InStock',
-          seller: { '@id': '/#org' },
-          priceValidUntil: iso(s.ts + 24 * 3600 * 1000),
-        },
-      }),
       additionalProperty: [
+        ...(price != null ? [{ '@type': 'PropertyValue', name: 'observed market price', value: price, unitText: 'USD' }] : []),
         { '@type': 'PropertyValue', name: 'AI trade score', value: a.composite },
         { '@type': 'PropertyValue', name: 'grade', value: a.grade },
         { '@type': 'PropertyValue', name: 'change24hPct', value: scanHit?.change24hPct ?? 0 },
@@ -459,7 +450,7 @@ function renderPage(name) {
   // per-page social meta (OG + Twitter card) + canonical — landing is the primary card
   const OG = {
     'index.html': {
-      title: 'IOST Terminal — AI Real-Trading Platform',
+      title: 'IOST Terminal — AI Trading Platform — Paper-First',
       desc: 'AI real-time trading platform for crypto and equities. Live prices, on-chain intelligence, eight AI engines, paper-first execution. Agent-ready.',
       url: '/',
     },
@@ -593,7 +584,7 @@ function mdTable(rows) {
 }
 function markdownFor(name) {
   const s = ssrState;
-  const base = `# IOST Terminal — AI Real-Trading Platform\n\n> AI real-time trading platform for crypto + equities: live market data, AI\n> trade scores (0-100 with subscore breakdown), risk engine, news sentiment,\n> IOST on-chain dashboard, paper trading and an autonomous autopilot.\n> Paper-first: nothing here moves real money without explicit enablement.\n\nMachine interfaces: [API index](/api) · [OpenAPI](/openapi.json) · [full state](/api/ui-state) · [LLM index](/llms.txt) · [agent auth](/auth.md) · [ARD manifest](/.well-known/ai-catalog.json)\n`;
+  const base = `# IOST Terminal — AI Trading Platform — Paper-First\n\n> AI real-time trading platform for crypto + equities: live market data, AI\n> trade scores (0-100 with subscore breakdown), risk engine, news sentiment,\n> IOST on-chain dashboard, paper trading and an autonomous autopilot.\n> Paper-first: nothing here moves real money without explicit enablement.\n\nMachine interfaces: [API index](/api) · [OpenAPI](/openapi.json) · [full state](/api/ui-state) · [LLM index](/llms.txt) · [agent auth](/auth.md) · [ARD manifest](/.well-known/ai-catalog.json)\n`;
   if (name === 'app' || name === 'hub') {
     const isApp = name === 'app';
     return `${base}\n## ${isApp ? 'AI Command Center' : 'Automation Hub'}\n\nThis is the ${isApp ? 'interactive trading console' : '3D automation hub'} — a client-side application shell.\nLive machine-readable state (server-rendered, no JS required): **/api/ui-state**\n\n- Top AI scores: ${(s?.scores || []).slice(0, 5).map((x) => `${x.symbol} ${x.composite} ${x.grade}`).join(' · ') || 'n/a'}\n- Autopilot: ${s?.autopilot?.enabled ? `enabled (${s.autopilot.ticks} ticks)${s.autopilot.config?.requireApproval ? ' · human-approval mode' : ''}` : 'disabled'}\n- Paper account: ${s?.paper?.account?.cash != null ? `$${Number(s.paper.account.cash).toLocaleString('en-US', { maximumFractionDigits: 2 })} cash · ${s.paper.positions?.length || 0} open` : 'n/a'}\n\nActions for agents: authenticated via **X-API-Key** header or **OAuth 2.0 client_credentials** (see [/auth.md](/auth.md)); live trades require owner approval through the proposal queue ([/api/autopilot/proposals](/api/autopilot/proposals)).\n`;
@@ -667,7 +658,8 @@ app.get('/hub', (req, res) => sendPage(req, res, 'hub'));
 app.get('/app', (req, res) => sendPage(req, res, 'app'));
 app.get('/arena', (req, res) => sendPage(req, res, 'arena'));
 // AITT token page — public, SSR (CMC-ready: crawlers get full content, no JS required)
-app.get(['/aitt', '/token'], (req, res) => sendPage(req, res, 'token'));
+app.get('/aitt', (req, res) => sendPage(req, res, 'token'));
+app.get('/token', (req, res) => res.redirect(308, '/aitt'));
 // Whitepaper (public markdown distribution copy; TOKENOMICS.md remains the internal source of truth)
 app.get('/whitepaper', (req, res) => {
   try {
@@ -689,7 +681,7 @@ app.get('/privacy', (req, res) => { res.set('Cache-Control', 'no-store'); res.se
 app.get('/risk-disclosure', (req, res) => { res.set('Cache-Control', 'no-store'); res.send(LEGAL_PAGES['risk-disclosure.html']); });
 
 // ---- sitemap.xml ----
-const SITEMAP_URLS = ['/', '/app', '/hub', '/aitt', '/token', '/whitepaper', '/terms', '/privacy', '/risk-disclosure'];
+const SITEMAP_URLS = ['/', '/app', '/hub', '/aitt', '/arena', '/whitepaper', '/terms', '/privacy', '/risk-disclosure'];
 app.get('/sitemap.xml', (req, res) => {
   const lastmod = new Date().toISOString().slice(0, 10);
   const urls = SITEMAP_URLS

@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="AITT — Agent Intelligence Trading Token. ERC-20 on IOST L2, 1B fixed supply. Proposed utility token of IOST Terminal: trust staking, fee utility, and planned Phase 2+ governance. Design draft — no token has been created, minted, or sold.">
+<link rel="canonical" href="https://iostcallister.com/aitt">
 <meta name="agent:api" content="/api">
 <link rel="agent-manifest" href="/.well-known/agent.json">
 <meta property="og:title" content="AITT — Agent Intelligence Trading Token">
@@ -22,12 +23,12 @@
   "@context": "https://schema.org",
   "@graph": [
     {
-      "@type": "Product",
+      "@type": "WebPage",
       "name": "Agent Intelligence Trading Token (AITT)",
       "description": "Proposed utility token of the IOST Terminal AI trading platform: trust-staking collateral for AI agents, fee utility, and planned Phase 2+ stake-weighted governance. ERC-20 on IOST L2 (chain 182), 1,000,000,000 fixed supply, 8 decimals.",
-      "brand": { "@type": "Organization", "name": "IOST Terminal", "url": "https://iostcallister.com" },
       "url": "https://iostcallister.com/aitt",
-      "identifier": "AITT"
+      "isPartOf": { "@type": "WebSite", "name": "IOST Terminal", "url": "https://iostcallister.com" },
+      "about": { "@type": "Thing", "name": "Agent Intelligence Trading Token", "identifier": "AITT" }
     },
     {
       "@type": "WebSite",
@@ -55,6 +56,8 @@ html { color-scheme: dark; scroll-behavior: smooth; }
 body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 15px; line-height: 1.65; }
 ::selection { background: rgba(0,229,255,.25); }
 a { color: inherit; text-decoration: none; }
+.skip-link { position: fixed; top: 8px; left: 8px; z-index: 200; padding: 10px 14px; background: var(--cyan); color: #03161c; border-radius: 4px; transform: translateY(-160%); }
+.skip-link:focus { transform: translateY(0); }
 .wrap { max-width: 1080px; margin: 0 auto; padding: 0 22px; }
 
 /* token hero logo */
@@ -140,6 +143,7 @@ footer a:hover { color: var(--mint); }
 </style>
 </head>
 <body>
+<a class="skip-link" href="#main-content">Skip to main content</a>
 <header class="wrap nav">
   <a class="brand" href="/">IOST <em>TERMINAL</em></a>
   <a class="pill active" href="/aitt">AITT</a>
@@ -147,7 +151,7 @@ footer a:hover { color: var(--mint); }
   <a class="pill" href="/app">Launch Terminal</a>
 </header>
 
-<main class="wrap">
+<main class="wrap" id="main-content">
   <!-- hero -->
   <div class="hero">
     <img class="aitt-logo" src="/img/aitt-hex.png" alt="AITT — Agent Intelligence Trading Token hexagon logo" width="128" height="128">
