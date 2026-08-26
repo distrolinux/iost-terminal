@@ -20,6 +20,8 @@ ok('application job installs the lockfile and runs the complete safety suite',
   && /node --check server\.js/.test(workflow));
 ok('production dependencies fail on high-severity audit findings',
   /npm audit --omit=dev --audit-level=high/.test(workflow));
+ok('local-only contract toolchain fails on critical audit findings',
+  /Audit local-only contract toolchain[\s\S]*npm audit --audit-level=critical/.test(workflow));
 ok('contract verification is explicitly local-only',
   /HARDHAT_NETWORK: hardhat/.test(workflow)
   && /npx --no-install hardhat compile --force/.test(workflow)
