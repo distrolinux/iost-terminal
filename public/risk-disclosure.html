@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Risk Disclosure — IOST Terminal</title>
 <meta name="description" content="Risk Disclosure for IOST Terminal — trading involves substantial risk of loss; paper vs live clearly distinguished; not investment advice; crypto volatility; consult a professional.">
-<meta name="robots" content="index,follow">
+<meta name="robots" content="noindex,follow">
 <link rel="canonical" href="https://iostcallister.com/risk-disclosure">
 <style>
 :root {
@@ -25,6 +25,8 @@ body {
 }
 a { color: var(--cyan); text-decoration: none; }
 a:hover { text-decoration: underline; }
+.skip-link { position: fixed; left: 12px; top: -60px; z-index: 100; padding: 10px 14px; background: var(--cyan); color: var(--bg); font-family: var(--mono); font-weight: 700; }
+.skip-link:focus { top: 12px; }
 header {
   padding: 28px 32px; border-bottom: 1px solid var(--line);
   display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
@@ -66,12 +68,13 @@ footer a:hover { color: var(--cyan); text-decoration: none; }
 </style>
 </head>
 <body>
+<a class="skip-link" href="#main-content">Skip to main content</a>
 <header>
   <a class="brand" href="/">◈ IOST<span class="dot">TERMINAL</span></a>
   <span class="crumb">/ risk-disclosure</span>
 </header>
 
-<main>
+<main id="main-content">
   <h1>Risk Disclosure</h1>
   <div class="effective">EFFECTIVE DATE: <span class="placeholder">[Effective Date]</span> — DRAFT v0.1 (pending review)</div>
   <p class="lede">Trading involves substantial risk of loss and is not suitable for every investor. Please read this disclosure carefully before using IOST Terminal ("the Service"). It does not disclose all risks; it is a summary of the most important ones.</p>
@@ -109,7 +112,7 @@ footer a:hover { color: var(--cyan); text-decoration: none; }
 </main>
 
 <footer>
-  <span>◈ IOST TERMINAL — AI real-trading platform · paper-first</span>
+  <span>◈ IOST TERMINAL — AI trading platform · paper-first</span>
   <span><a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · <a href="/risk-disclosure">Risk Disclosure</a> · <a href="/">← Home</a></span>
 </footer>
 </body>
