@@ -335,6 +335,16 @@ const safeJson = (o) => JSON.stringify(o ?? null).replace(/</g, '\\u003c'); // <
 const iso = (t) => new Date(t).toISOString();
 const fmtPrice = (p) => p == null ? '—' : (Math.abs(p) >= 1 ? p.toLocaleString('en-US', { maximumFractionDigits: 2 }) : Math.abs(p) >= 0.001 ? p.toFixed(5) : p.toPrecision(3));
 const fmtPct = (p) => (p == null ? '—' : `${p >= 0 ? '+' : ''}${Number(p).toFixed(2)}%`);
+function sentimentCounts(market) {
+  if (!market) return null;
+  const count = (value) => Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : 0;
+  return {
+    bullish: count(market.bullish),
+    neutral: count(market.neutral),
+    bearish: count(market.bearish),
+    total: count(market.total),
+  };
+}
 
 // ARD: transparent reasoning — one-line human-readable rationale per asset
 function rationale(x) {
@@ -357,6 +367,7 @@ function statePayload() {
   const s = ssrState;
   if (!s) return null;
   const p = s.paper;
+  const m = sentimentCounts(s?.market);
   return {
     ts: s.ts, version: '1.9.0', mode: 'paper',
     watchlist: WATCHLIST,
@@ -367,7 +378,7 @@ function statePayload() {
     top: s.scores[0] ? { symbol: s.scores[0].symbol, composite: s.scores[0].composite, grade: s.scores[0].grade, rationale: rationale(s.scores[0]), ...(probFor(s.scores[0].symbol) ? { probUp: probFor(s.scores[0].symbol).probUp, drivers: probFor(s.scores[0].symbol).drivers } : {}) } : null,
     account: p ? { initialCash: p.account.initialCash, cash: p.account.cash, openPositions: p.positions.length } : null,
     autopilot: s.autopilot ? { enabled: s.autopilot.enabled, ticks: s.autopilot.ticks, requireApproval: !!s.autopilot.config?.requireApproval } : null,
-    market: s.market ? { bullish: s.market.bullish, neutral: s.market.neutral, bearish: s.market.bearish } : null,
+    market: m ? { bullish: m.bullish, neutral: m.neutral, bearish: m.bearish } : null,
     onchain: s.onchain?.chain ? { headBlock: s.onchain.chain.headBlock, tps: s.onchain.chain.tps, peers: s.onchain.chain.peerCount, activeAddresses: s.onchain.chain.activeAddresses } : null,
   };
 }
@@ -416,7 +427,7 @@ function machineLayer() {
   }).join('');
   const p = s?.paper;
   const c = s?.onchain?.chain;
-  const m = s?.market;
+  const m = sentimentCounts(s?.market);
   const t = s?.ts ? iso(s.ts) : '';
   return `<section data-agent-layer="true" aria-label="Machine-readable market state" data-layer-ts="${esc(t)}">
 <style>section[data-agent-layer]{position:absolute!important;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}</style>
@@ -504,7 +515,7 @@ function renderPage(name) {
       html = html.replace('<div class="rail-value" id="rv-block" aria-live="polite">--</div>', `<div class="rail-value" id="rv-block" aria-live="polite">${Number(c.headBlock).toLocaleString('en-US')}</div>`);
       html = html.replace('<div class="rail-sub">peer count <span id="rv-peers">—</span></div>', `<div class="rail-sub">peer count <span id="rv-peers">${esc(c.peerCount)}</span></div>`);
     }
-    const m = s?.market;
+    const m = sentimentCounts(s?.market);
     if (m) {
       const mood = m.bullish > m.bearish ? '🟢 Bullish' : m.bearish > m.bullish ? '🔴 Bearish' : '⚪ Mixed';
       html = html.replace('<div class="rail-value" id="rv-sent" aria-live="polite">--</div>', `<div class="rail-value" id="rv-sent" aria-live="polite">${esc(mood)}</div>`);
@@ -681,7 +692,9 @@ app.get('/privacy', (req, res) => { res.set('Cache-Control', 'no-store'); res.se
 app.get('/risk-disclosure', (req, res) => { res.set('Cache-Control', 'no-store'); res.send(LEGAL_PAGES['risk-disclosure.html']); });
 
 // ---- sitemap.xml ----
-const SITEMAP_URLS = ['/', '/app', '/hub', '/aitt', '/arena', '/whitepaper', '/terms', '/privacy', '/risk-disclosure'];
+// Draft legal documents are linked in-product but excluded until owner/counsel
+// replace every placeholder and approve publication.
+const SITEMAP_URLS = ['/', '/app', '/hub', '/aitt', '/arena', '/whitepaper'];
 app.get('/sitemap.xml', (req, res) => {
   const lastmod = new Date().toISOString().slice(0, 10);
   const urls = SITEMAP_URLS
