@@ -48,6 +48,11 @@ images. One paused last-known-good process is retained until the next healthy
 candidate, preserving the exact prior runtime without allowing it to write.
 The script never places live orders or performs public-chain writes.
 
+Production monitoring, encrypted backups, off-host copies, isolated restore
+verification, and the incident-only restore procedure are documented in
+[`docs/PRODUCTION_OPERATIONS.md`](docs/PRODUCTION_OPERATIONS.md). These operations
+remain separate from deployment and do not enable any money or token boundary.
+
 ## Safety boundaries
 
 - Live orders fail closed when a trustworthy market/limit price is unavailable; the configured notional cap is always applied.
