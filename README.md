@@ -20,6 +20,7 @@ money moves without exchange keys + explicit enablement.
 | [`docs/PHASE1_SPEC.md`](docs/PHASE1_SPEC.md) | Phase 1 contracts spec |
 | [`docs/PHASE4_BRIDGE_DEX_SPEC.md`](docs/PHASE4_BRIDGE_DEX_SPEC.md) | Phase 4B local-only bridge, finality, DEX-verification, and LP-custody specification; deployment and liquidity remain disabled |
 | [`docs/COMPETITIVE-NOTE-etoro.md`](docs/COMPETITIVE-NOTE-etoro.md) | Competitive note: eToro copy-trading vs our agent marketplace |
+| [`docs/AGENT_TRUST_ARENA.md`](docs/AGENT_TRUST_ARENA.md) | Paper-only Agent Trust Arena evidence model, scoring formulas, audit chain, API and limitations |
 
 ## Quickstart
 

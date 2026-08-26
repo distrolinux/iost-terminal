@@ -35,6 +35,7 @@ import * as freeze from './lib/freeze.js';
 import * as stakes from './lib/stakes.js';
 import * as slashes from './lib/slashes.js';
 import * as trust from './lib/trust.js';
+import * as arena from './lib/arena.js';
 import * as pacts from './lib/pacts.js';
 import * as iostAccounts from './lib/iost-accounts.js';
 import * as agentKeys from './lib/agent-keys.js';
@@ -94,7 +95,7 @@ function loadSessionSecret() {
 // defense-in-depth: data stores hold hashes / TOTP blobs / encrypted key
 // material — keep them owner-only at boot (tmp+rename writes reset perms).
 try {
-  for (const f of ['accounts.json', 'users.json', 'agent-keys.json', 'sessions.json', 'session-secret', 'stakes.json', 'slashes.json', 'points.json', 'wallets.json', 'agent-audit.jsonl', 'live-audit.jsonl']) {
+  for (const f of ['accounts.json', 'users.json', 'agent-keys.json', 'sessions.json', 'session-secret', 'stakes.json', 'slashes.json', 'points.json', 'wallets.json', 'agent-audit.jsonl', 'live-audit.jsonl', 'arena-audit.jsonl']) {
     const p = join(ROOT, 'data', f);
     if (existsSync(p)) {
       chmodSync(p, 0o600);
@@ -284,7 +285,7 @@ app.use((req, res, next) => {
 //   prices, scores, on-chain state and execution CTAs are in the first response.
 
 const PAGES = {};
-for (const f of ['index.html', 'hub.html', 'app.html', 'token.html']) {
+for (const f of ['index.html', 'hub.html', 'app.html', 'arena.html', 'token.html']) {
   PAGES[f] = readFileSync(join(ROOT, 'public', f), 'utf8');
 }
 
@@ -471,6 +472,11 @@ function renderPage(name) {
       title: 'IOST Terminal — AI Command Center',
       desc: 'AI market scanner, trade scores, risk engine, portfolio AI, on-chain dashboard and paper trading console.',
       url: '/app',
+    },
+    'arena.html': {
+      title: 'Agent Trust Arena — IOST Terminal',
+      desc: 'Paper-only agent rankings with server-priced performance, drawdown and risk scores, transparent reasoning, and hash-chained audit evidence.',
+      url: '/arena',
     },
   }[name];
   const meta = OG ? [
@@ -659,6 +665,7 @@ function sendPage(req, res, name) {
 app.get('/', (req, res) => sendPage(req, res, 'index'));
 app.get('/hub', (req, res) => sendPage(req, res, 'hub'));
 app.get('/app', (req, res) => sendPage(req, res, 'app'));
+app.get('/arena', (req, res) => sendPage(req, res, 'arena'));
 // AITT token page — public, SSR (CMC-ready: crawlers get full content, no JS required)
 app.get(['/aitt', '/token'], (req, res) => sendPage(req, res, 'token'));
 // Whitepaper (public markdown distribution copy; TOKENOMICS.md remains the internal source of truth)
@@ -1388,6 +1395,104 @@ app.delete('/api/signals/:id/follow', requireUser, (req, res) => {
   const agentId = req.body?.agentId || sig?.agentId;
   if (!agentId) return res.status(400).json({ error: 'agentId required' });
   res.json(signals.unfollowAgent(acc.accountId, agentId));
+});
+
+// ================= Agent Trust Arena (paper-only) =================
+// Arena performance can only be created through these routes. Both fills use
+// fresh server market data, the venue is hard-coded to the paper broker, and
+// every accepted open/close becomes a local SHA-256 hash-chain record. No
+// token, stake, live venue or public-chain state participates in Arena scores.
+app.get('/api/arena', publicLimiter, (req, res) => {
+  const board = arena.leaderboard();
+  res.status(board.ok ? 200 : 503).json(board);
+});
+
+app.get('/api/arena/agents/:agentId', publicLimiter, (req, res) => {
+  const detail = arena.agentDetail(String(req.params.agentId || ''), req.query.limit);
+  if (!detail) return res.status(404).json({ ok: false, error: 'Arena agent not found' });
+  res.status(detail.ok ? 200 : 503).json(detail);
+});
+
+app.post('/api/arena/trades/open', requireUser, async (req, res) => {
+  if (req.userAgent && !userAgentHas(req, 'trade-paper')) return res.status(403).json({ error: 'scope: this key cannot trade (missing trade-paper)' });
+  const ident = signalIdentity(req);
+  const account = accountFor(req);
+  if (!ident || !account) return res.status(401).json({ error: 'auth required' });
+  const symbol = String(req.body?.symbol || '').toUpperCase();
+  const side = req.body?.side === 'short' ? 'short' : req.body?.side === 'long' ? 'long' : null;
+  const size = Number(req.body?.size);
+  if (![...WATCHLIST.crypto, ...WATCHLIST.stocks].includes(symbol)) return res.status(400).json({ error: 'unsupported Arena symbol' });
+  if (!side) return res.status(400).json({ error: 'side must be long or short' });
+  if (!Number.isFinite(size) || size <= 0) return res.status(400).json({ error: 'size must be a positive number' });
+
+  let ticker;
+  try { ticker = await getTicker(symbol); }
+  catch (e) { return res.status(502).json({ error: `trusted market price unavailable: ${e.message}` }); }
+  const entry = Number(ticker?.last);
+  if (!Number.isFinite(entry) || entry <= 0) return res.status(502).json({ error: 'trusted market price unavailable' });
+  const notionalMinor = Math.trunc(entry * size * 100);
+  if (!Number.isSafeInteger(notionalMinor) || notionalMinor <= 0) return res.status(400).json({ error: 'Arena notional is invalid' });
+  const gate = agentSpendGate(req, notionalMinor, {
+    walletId: req.body?.walletId, pactId: req.body?.pactId,
+    recipient: req.body?.recipient, protocol: req.body?.protocol,
+  });
+  if (!gate.ok) return res.status(402).json({ error: gate.message || gate.reason || 'agent spend denied', reason: gate.reason });
+
+  let placed = null;
+  let openEvidence = null;
+  try {
+    placed = await getBroker('paper').placeOrder({
+      symbol, side, size, entry,
+      stop: req.body?.stop, target: req.body?.target,
+      reason: String(req.body?.reason || '').slice(0, 500),
+      confidence: req.body?.confidence,
+      accountId: account.accountId,
+    });
+    if (!placed.ok) {
+      settleAgentSpend(gate, false);
+      return res.status(400).json(placed);
+    }
+    openEvidence = arena.recordOpen({
+      ...ident, accountId: account.accountId, trade: placed.position,
+      priceProvider: ticker.source, reason: req.body?.reason, trail: req.body?.trail,
+    });
+    const settled = settleAgentSpend(gate, true);
+    if (!settled.ok) {
+      await closeTrade(placed.position.id, entry, account.accountId, 'Arena authorization settlement failed');
+      try { arena.recordVoid({ openEvidence, reason: 'authorization settlement failed' }); } catch { /* remains unscored */ }
+      return res.status(500).json({ error: 'agent authorization settlement failed' });
+    }
+    res.json({ ok: true, mode: 'paper', position: placed.position, evidence: { auditHash: openEvidence.hash, fillAuthority: 'server-market', priceProvider: ticker.source } });
+  } catch (e) {
+    if (placed?.ok) await closeTrade(placed.position.id, entry, account.accountId, 'Arena audit creation failed').catch(() => {});
+    settleAgentSpend(gate, false);
+    res.status(500).json({ ok: false, error: `Arena open failed closed: ${e.message}` });
+  }
+});
+
+app.post('/api/arena/trades/:id/close', requireUser, async (req, res) => {
+  if (req.userAgent && !userAgentHas(req, 'trade-paper')) return res.status(403).json({ error: 'scope: this key cannot trade (missing trade-paper)' });
+  const ident = signalIdentity(req);
+  const account = accountFor(req);
+  if (!ident || !account) return res.status(401).json({ error: 'auth required' });
+  const tradeId = String(req.params.id || '');
+  const position = getState(account.accountId).positions.find((p) => p.id === tradeId);
+  if (!position) return res.status(404).json({ error: 'open Arena paper position not found' });
+  const openEvidence = arena.getOpenEvidence({ agentId: ident.agentId, accountId: account.accountId, tradeId });
+  if (!openEvidence) return res.status(403).json({ error: 'matching verified Arena open evidence required' });
+
+  try {
+    const ticker = await getTicker(position.symbol);
+    const exitPrice = Number(ticker?.last);
+    if (!Number.isFinite(exitPrice) || exitPrice <= 0) return res.status(502).json({ error: 'trusted market price unavailable' });
+    const closed = await closeTrade(tradeId, exitPrice, account.accountId, 'Arena server-market close');
+    if (!closed.ok) return res.status(400).json(closed);
+    const journal = getState(account.accountId).journal.find((j) => j.id === tradeId);
+    const evidence = arena.recordClose({ openEvidence, journal, exitPrice, priceProvider: ticker.source });
+    res.json({ ...closed, mode: 'paper', evidence: { auditHash: evidence.hash, auditSeq: evidence.seq, fillAuthority: 'server-market', priceProvider: ticker.source } });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: `Arena close failed closed: ${e.message}` });
+  }
 });
 
 // ================= off-chain points (tokenomics vision §6) =================
@@ -2459,6 +2564,12 @@ const API_INDEX = {
     { path: '/api/signals/following', method: 'GET', purpose: 'agents I follow + my copied positions' },
     { path: '/api/chain/status', method: 'GET', purpose: 'IOST mainnet trust-layer status (RPC reachability, pin key configured?)' },
   ],
+  arena: [
+    { path: '/api/arena', method: 'GET', purpose: 'public paper-only Agent Trust Arena: verified performance, drawdown, risk/evidence/trust scores, formulas and audit head' },
+    { path: '/api/arena/agents/:agentId', method: 'GET', purpose: 'public agent score inputs, server-priced paper trade evidence, transparent agent-submitted reasoning and hash-chained audit trail' },
+    { path: '/api/arena/trades/open', method: 'POST', body: '{symbol,side,size,stop?,target?,reason?,trail?,walletId,pactId,recipient?,protocol?}', purpose: 'open an Arena-eligible server-priced PAPER trade; agent credentials retain wallet + Pact authorization' },
+    { path: '/api/arena/trades/:id/close', method: 'POST', purpose: 'close an Arena paper trade at a fresh server market price; client exit prices are ignored' },
+  ],
   points: [
     { path: '/api/points', method: 'GET', purpose: 'balance + recent ledger + referral code/link for the current principal (session user or X-API-Key agent)' },
     { path: '/api/points/referral-code', method: 'POST', purpose: 'get/create my 8-char referral code (share it: referrer +50, referee +10)' },
@@ -2527,7 +2638,7 @@ app.get('/.well-known/agent.json', (req, res) => {
     oauth: { authorizationServer: '/.well-known/oauth-authorization-server', tokenEndpoint: '/oauth/token', protectedResource: '/.well-known/oauth-protected-resource', grantTypes: ['client_credentials'] },
     mcp: { card: '/.well-known/mcp/server-card.json', endpoint: '/mcp', tools: ['market_snapshot', 'asset_scores', 'analyze_symbol', 'news_sentiment', 'chain_status', 'proposals', 'platform_help', 'health'] },
     skills: '/.well-known/agent-skills/index.json', llms: '/llms.txt',
-    points: '/api/points', aitt: '/api/aitt/info', agentWallet: '/api/wallets', wallet: '/api/account/iost',
+    points: '/api/points', aitt: '/api/aitt/info', arena: '/api/arena', agentWallet: '/api/wallets', wallet: '/api/account/iost',
     contracts: API_INDEX,
   });
 });
