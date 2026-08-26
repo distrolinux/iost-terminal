@@ -31,6 +31,16 @@
 | Landing and AITT pages lacked a keyboard bypass link | Accessibility | Added visible-on-focus skip links and explicit main landmarks |
 | These properties had no dedicated regression coverage | Regression risk | Added `tests/website-launch-readiness-check.mjs` to `npm test` |
 
+## Follow-up browser safeguards
+
+- Extended visible-on-focus skip links and explicit main landmarks to the
+  Terminal, Agent Trust Arena, and 3D Automation Hub.
+- Paused the landing-page WebGL shader and Hub animation loop when their tabs
+  are hidden, then resumed them safely when visible.
+- Suppressed the Hub's clock and market-data refresh polling while hidden.
+- Added these behaviors to the launch-readiness regression contract and bumped
+  the Terminal stylesheet cache version.
+
 ## Remaining pre-launch checks
 
 - Complete an owner-reviewed browser pass on current desktop and mobile targets,

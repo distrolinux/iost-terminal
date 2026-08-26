@@ -34,6 +34,13 @@
   outline-offset: 2px;
   border-radius: 4px;
 }
+.skip-link {
+  position: fixed; top: 8px; left: 8px; z-index: 300;
+  padding: 10px 14px; border-radius: 4px;
+  background: var(--accent); color: #03161c; font-weight: 700;
+  transform: translateY(-160%);
+}
+.skip-link:focus { transform: translateY(0); }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html { color-scheme: dark; }

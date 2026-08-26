@@ -4,6 +4,10 @@ import { strict as assert } from 'node:assert';
 const server = readFileSync(new URL('../server.js', import.meta.url), 'utf8');
 const home = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
 const token = readFileSync(new URL('../public/token.html', import.meta.url), 'utf8');
+const app = readFileSync(new URL('../public/app.html', import.meta.url), 'utf8');
+const arena = readFileSync(new URL('../public/arena.html', import.meta.url), 'utf8');
+const hub = readFileSync(new URL('../public/hub.html', import.meta.url), 'utf8');
+const css = readFileSync(new URL('../public/css/style.css', import.meta.url), 'utf8');
 
 function check(name, condition) {
   assert.ok(condition, name);
@@ -36,10 +40,24 @@ check('market observations are not represented as products offered for sale',
   !/availability:\s*'https:\/\/schema\.org\/InStock'/.test(server)
   && !/seller:\s*\{ '@id': '\/#org' \}/.test(server));
 
-for (const [name, html] of [['landing', home], ['AITT', token]]) {
+for (const [name, html] of [['landing', home], ['AITT', token], ['Terminal', app], ['Arena', arena], ['3D Hub', hub]]) {
   check(`${name} page has a keyboard skip link and main landmark`,
     /class="skip-link" href="#main-content"/.test(html)
     && /<main[^>]+id="main-content"/.test(html));
 }
+
+check('Terminal skip-link styles are cache-versioned',
+  /\.skip-link\s*\{/.test(css)
+  && /\/css\/style\.css\?v=2\.12/.test(app));
+
+for (const [name, html] of [['landing WebGL', home], ['3D Hub', hub]]) {
+  check(`${name} animation pauses while the page is hidden`,
+    /visibilitychange/.test(html)
+    && /document\.hidden/.test(html)
+    && /cancelAnimationFrame/.test(html));
+}
+
+check('3D Hub background refreshes are suppressed while hidden',
+  /setInterval\(\(\)\s*=>\s*\{\s*if\s*\(!document\.hidden\)\s*loadData\(\)/.test(hub));
 
 console.log('\nWebsite launch-readiness checks passed');

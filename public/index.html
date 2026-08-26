@@ -739,7 +739,7 @@ function initGL() {
   function resize() { gl.canvas.width = innerWidth * dpr; gl.canvas.height = innerHeight * dpr; gl.viewport(0, 0, gl.canvas.width, gl.canvas.height); }
   resize(); addEventListener('resize', resize);
 
-  let raf;
+  let raf = null;
   function frame(t) {
     gl.uniform2f(uRes, gl.canvas.width, gl.canvas.height);
     gl.uniform1f(uTime, t / 1000);
@@ -747,7 +747,20 @@ function initGL() {
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     raf = requestAnimationFrame(frame);
   }
-  raf = requestAnimationFrame(frame);
+  function startGl() {
+    if (raf == null) raf = requestAnimationFrame(frame);
+  }
+  function stopGl() {
+    if (raf == null) return;
+    cancelAnimationFrame(raf);
+    raf = null;
+  }
+  startGl();
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) stopGl();
+    else startGl();
+  });
+  addEventListener('pagehide', stopGl);
   window.__glActive = true; // testable marker: WebGL hero running
 }
 

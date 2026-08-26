@@ -39,7 +39,7 @@ ok('paper guide state is local and waits for authenticated first-run users',
   && /authchange/.test(onboardingJs) && /detail\?\.loggedIn/.test(onboardingJs)
   && !/authchange[^\n]+once:\s*true/.test(onboardingJs));
 ok('paper guide cache versions and responsive styles are present',
-  /style\.css\?v=2\.11/.test(onboardingHtml) && /onboarding\.js\?v=1\.0\.0/.test(onboardingHtml)
+  /style\.css\?v=2\.12/.test(onboardingHtml) && /onboarding\.js\?v=1\.0\.0/.test(onboardingHtml)
   && /\.onboarding-card/.test(onboardingCss) && /@media \(max-width: 760px\)/.test(onboardingCss));
 
 console.log(failures === 0 ? '\\nALL PASS ✅' : `\\n${failures} FAILURES ❌`);
