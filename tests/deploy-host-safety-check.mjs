@@ -43,7 +43,10 @@ ok('production is checked internally and through the public route',
   /wait_for_health "\$PROD_CONTAINER"/.test(src)
   && /PUBLIC_HEALTH_URL/.test(src)
   && /APP_REVISION/.test(src)
-  && /EXPECTED_REVISION/.test(src));
+  && /"\$PUBLIC_HEALTH_URL" "\$REVISION"/.test(src));
+ok('public verification uses the production container runtime, not host Node',
+  /docker_cmd exec "\$PROD_CONTAINER" node -e/.test(src)
+  && !/EXPECTED_REVISION="\$REVISION" node -e/.test(src));
 ok('script never performs public-chain or live-order actions',
   !/hardhat\s+run|deploy\.js|api\/live\/proposals|placeOrder|sendTransaction/.test(src));
 
