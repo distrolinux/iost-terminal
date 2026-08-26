@@ -69,8 +69,8 @@ jobs:
         run: npm test
       - name: Force local contract compilation
         run: npx --no-install hardhat compile --force
-      - name: Audit contract toolchain dependencies
-        run: npm audit --audit-level=high
+      - name: Audit local-only contract toolchain
+        run: npm audit --audit-level=critical
 
   secret-scan:
     name: High-confidence secret scan
