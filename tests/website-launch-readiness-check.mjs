@@ -11,6 +11,7 @@ const terms = readFileSync(new URL('../public/terms.html', import.meta.url), 'ut
 const privacy = readFileSync(new URL('../public/privacy.html', import.meta.url), 'utf8');
 const risk = readFileSync(new URL('../public/risk-disclosure.html', import.meta.url), 'utf8');
 const authJs = readFileSync(new URL('../public/js/auth.js', import.meta.url), 'utf8');
+const appJs = readFileSync(new URL('../public/js/app.js', import.meta.url), 'utf8');
 const css = readFileSync(new URL('../public/css/style.css', import.meta.url), 'utf8');
 
 function check(name, condition) {
@@ -87,7 +88,18 @@ for (const [name, html] of [['landing', home], ['AITT', token], ['Terminal', app
 
 check('Terminal skip-link styles are cache-versioned',
   /\.skip-link\s*\{/.test(css)
-  && /\/css\/style\.css\?v=2\.12/.test(app));
+  && /\/css\/style\.css\?v=2\.13/.test(app));
+
+check('Terminal mobile navigation keeps every primary view reachable',
+  /@media \(max-width: 860px\)[\s\S]{0,900}\.sidebar \{ display: block;/.test(css)
+  && /\.side-nav \{ flex-direction: row;/.test(css));
+
+check('Terminal exposes a read-only agent decision trace',
+  /data-view="trace" aria-label="View agent decision trace"/.test(app)
+  && /id="view-trace" aria-label="Agent decision trace view"/.test(app)
+  && /async function renderDecisionTrace\(\)/.test(appJs)
+  && /PAPER-FIRST · READ-ONLY TRACE/.test(appJs)
+  && /Simulation broker only in this trace/.test(appJs));
 
 for (const [name, html] of [['landing WebGL', home], ['3D Hub', hub]]) {
   check(`${name} animation pauses while the page is hidden`,

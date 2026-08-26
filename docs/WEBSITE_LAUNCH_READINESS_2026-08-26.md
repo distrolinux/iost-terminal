@@ -23,6 +23,8 @@
 | Sign-up exposed its password field as `current-password` | Password managers could offer or overwrite the wrong credential | Sign-in now explicitly uses `current-password`; sign-up explicitly uses `new-password` |
 | The reset-password overlay was outside the dialog focus trap and opener restoration path | Keyboard focus could escape behind the modal or fail to return | Included the reset overlay in focus containment, focused the new-password field, and restored the prior focus on close |
 | Landing-page data loops kept polling in hidden tabs | Unnecessary client work and API load | Paused recurring landing, visor, and leaderboard requests while hidden; refresh resumes when visible without overlapping requests |
+| Terminal navigation disappeared below 860px | Most product views were unreachable on mobile | Reflowed the full primary navigation into a sticky, horizontally scrollable mobile command bar |
+| Autonomous actions lacked a dedicated inspection surface | Agent behavior and safety decisions were harder to review | Added a signed-in, read-only Decision Trace covering inputs, scoring, risk gates, approvals, paper execution, proposals, and recent reasoning |
 
 ### Launch blockers retained
 
