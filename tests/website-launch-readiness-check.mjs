@@ -99,4 +99,11 @@ for (const [name, html] of [['landing WebGL', home], ['3D Hub', hub]]) {
 check('3D Hub background refreshes are suppressed while hidden',
   /setInterval\(\(\)\s*=>\s*\{\s*if\s*\(!document\.hidden\)\s*loadData\(\)/.test(hub));
 
+check('landing background API refreshes are suppressed while hidden',
+  /function scheduleVisibleRefresh\(task, intervalMs\)/.test(home)
+  && /if \(document\.hidden \|\| running\) return/.test(home)
+  && /scheduleVisibleRefresh\(loadLanding, 30000\)/.test(home)
+  && /scheduleVisibleRefresh\(updateVisor, 10000\)/.test(home)
+  && /scheduleVisibleRefresh\(refresh, 60000\)/.test(home));
+
 console.log('\nWebsite launch-readiness checks passed');

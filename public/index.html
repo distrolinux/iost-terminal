@@ -823,6 +823,16 @@ document.querySelectorAll('[data-scramble], .nav-links a').forEach(el => {
 
 /* ================= live data ================= */
 const $ = s => document.querySelector(s);
+function scheduleVisibleRefresh(task, intervalMs) {
+  let running = false;
+  const run = async () => {
+    if (document.hidden || running) return;
+    running = true;
+    try { await task(); } finally { running = false; }
+  };
+  setInterval(run, intervalMs);
+  document.addEventListener('visibilitychange', run);
+}
 async function loadLanding() {
   try {
     const d = await fetch('/api/landing').then(r => r.json());
@@ -869,7 +879,7 @@ async function loadStrip() {
   } catch { /* keep default */ }
 }
 loadLanding(); loadStrip();
-setInterval(loadLanding, 30000); // refresh rail quietly
+scheduleVisibleRefresh(loadLanding, 30000); // refresh rail quietly while visible
 
 /* ================= typed code block ================= */
 const CODE = [
@@ -999,7 +1009,7 @@ async function updateVisor() {
   const st = document.getElementById('agent-state');
   if (st) st.textContent = JSON.stringify({ ts: s.ts, top: top, account: s.account, autopilot: s.autopilot ? { enabled: s.autopilot.enabled } : null, market: s.market ? { bullish: s.market.bullish, neutral: s.market.neutral, bearish: s.market.bearish } : null });
 }
-setInterval(updateVisor, 10000);
+scheduleVisibleRefresh(updateVisor, 10000);
 updateVisor();
 
 /* leaderboard: client-refreshed every 60s (SSR fills the first paint) */
@@ -1024,7 +1034,7 @@ updateVisor();
       if (ts) ts.textContent = `updated ${new Date(d.generatedAt).toLocaleTimeString()} UTC`;
     } catch { /* SSR copy stays */ }
   }
-  setInterval(refresh, 60000);
+  scheduleVisibleRefresh(refresh, 60000);
   refresh();
 })();
 </script>
