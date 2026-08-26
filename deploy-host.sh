@@ -46,8 +46,9 @@ wait_for_health() {
 wait_for_public_health() {
   local deadline=$((SECONDS + HEALTH_TIMEOUT))
   while (( SECONDS < deadline )); do
-    if curl --fail --silent --show-error --max-time 5 "$PUBLIC_HEALTH_URL" | \
-      EXPECTED_REVISION="$REVISION" node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{const b=JSON.parse(s);if(b.ok!==true||b.revision!==process.env.EXPECTED_REVISION)process.exit(1)}catch{process.exit(1)}})"; then
+    if docker_cmd exec "$PROD_CONTAINER" node -e \
+      "const [url,expected]=process.argv.slice(1);fetch(url,{signal:AbortSignal.timeout(5000)}).then(async r=>{const b=await r.json();if(!r.ok||b.ok!==true||b.revision!==expected)process.exit(1)}).catch(()=>process.exit(1))" \
+      "$PUBLIC_HEALTH_URL" "$REVISION" >/dev/null 2>&1; then
       return 0
     fi
     sleep "$HEALTH_INTERVAL"
@@ -99,7 +100,6 @@ trap cleanup EXIT
 trap 'exit 130' INT TERM
 
 command -v docker >/dev/null || { echo "ERROR: docker is required"; exit 1; }
-command -v curl >/dev/null || { echo "ERROR: curl is required"; exit 1; }
 command -v flock >/dev/null || { echo "ERROR: flock is required"; exit 1; }
 
 mkdir -p "$(dirname "$LOCK_FILE")"
