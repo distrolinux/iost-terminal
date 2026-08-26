@@ -10,6 +10,7 @@ const Auth = {
   modalStep: null,
   pendingEmail: null,
   pendingBackupCodes: null,
+  lastFocus: null,
 
   async init() {
     // password reset link (from email): /app#reset?token=...
@@ -23,7 +24,10 @@ const Auth = {
         this.open('login');
       }
     });
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') this.close(); });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') this.close();
+      else this.trapFocus(e);
+    });
   },
 
   async refresh() {
@@ -72,6 +76,7 @@ const Auth = {
   // ---------------- modal plumbing ----------------
   open(step) {
     const m = $('#authModal'); if (!m) return;
+    if (m.classList.contains('hidden')) this.lastFocus = document.activeElement;
     m.classList.remove('hidden', 'closing');
     this.show(step || 'login');
   },
@@ -80,10 +85,26 @@ const Auth = {
     if (m && !m.classList.contains('hidden')) {
       if (m.classList.contains('closing')) return;
       m.classList.add('closing');
-      setTimeout(() => { m.classList.remove('closing'); m.classList.add('hidden'); }, 150);
+      setTimeout(() => {
+        m.classList.remove('closing'); m.classList.add('hidden');
+        if (this.lastFocus?.isConnected) this.lastFocus?.focus({ preventScroll: true });
+        this.lastFocus = null;
+      }, 150);
     }
     const r = $('#authReset'); if (r) r.classList.add('hidden');
     this.pendingBackupCodes = null;
+  },
+  trapFocus(e) {
+    if (e.key !== 'Tab') return;
+    const modal = $('#authModal');
+    if (!modal || modal.classList.contains('hidden')) return;
+    const focusable = [...modal.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])')]
+      .filter((el) => !el.hidden && el.getClientRects().length > 0);
+    if (!focusable.length) { e.preventDefault(); return; }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   },
   show(step) {
     this.modalStep = step;

@@ -10,6 +10,7 @@ const hub = readFileSync(new URL('../public/hub.html', import.meta.url), 'utf8')
 const terms = readFileSync(new URL('../public/terms.html', import.meta.url), 'utf8');
 const privacy = readFileSync(new URL('../public/privacy.html', import.meta.url), 'utf8');
 const risk = readFileSync(new URL('../public/risk-disclosure.html', import.meta.url), 'utf8');
+const authJs = readFileSync(new URL('../public/js/auth.js', import.meta.url), 'utf8');
 const css = readFileSync(new URL('../public/css/style.css', import.meta.url), 'utf8');
 
 function check(name, condition) {
@@ -46,6 +47,19 @@ check('server-rendered sentiment defaults missing counts to zero',
   && /Number\.isFinite\(Number\(value\)\)[^\n]+:\s*0/.test(server)
   && /bullish:\s*count\(market\.bullish\)/.test(server)
   && /const m = sentimentCounts\(s\?\.market\)/.test(server));
+
+check('Terminal sign-in gate promises paper trading without live-trading ambiguity',
+  /Your \$100K paper trading account lives here\./.test(app)
+  && !/Your \$100K paper account and live trading live here\./.test(app));
+
+check('account dialogs trap keyboard focus and restore the opener',
+  /lastFocus:\s*null/.test(authJs)
+  && /trapFocus\(e\)/.test(authJs)
+  && /e\.key !== 'Tab'/.test(authJs)
+  && /this\.lastFocus\?\.focus/.test(authJs));
+
+check('account dialog accessibility changes are cache-versioned',
+  /\/js\/auth\.js\?v=2\.8\.0/.test(app));
 
 check('the AITT page declares its canonical URL',
   /<link rel="canonical" href="https:\/\/iostcallister\.com\/aitt">/.test(token));
