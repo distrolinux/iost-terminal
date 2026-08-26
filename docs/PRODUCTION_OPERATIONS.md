@@ -18,6 +18,9 @@ actions. Production deployment remains a separate, owner-approved step.
 - Restore refuses non-empty targets. Restoring to the production data path also
   requires `ALLOW_PRODUCTION_RESTORE=YES` and a stopped production container.
 - Monitoring observes and alerts only. It never attempts automated remediation.
+- Taildrop delivery verifies the local encrypted artifact, uses bounded retries,
+  and records the delivered SHA-256 in a mode `0600` state file. A successful
+  artifact is not transferred again on later scheduler runs.
 
 ## One-time host setup
 
@@ -47,6 +50,7 @@ Create `/etc/iost-terminal-ops.env`, owned by root and mode `0600`:
 BACKUP_PASSPHRASE_FILE=/docker/hermes-agent-ghfx/secrets/iost-backup-passphrase
 BACKUP_MIRROR_DIR=/path/to/off-host-mounted-storage/iost-terminal
 ALERT_WEBHOOK_CONFIG=/docker/hermes-agent-ghfx/secrets/iost-alert-webhook.curl
+TAILDROP_TARGET=darknight:
 ```
 
 Store the private webhook URL in the root-owned mode `0600` curl config instead
@@ -62,14 +66,33 @@ contents. Recommended schedule:
 ```cron
 */2 * * * * set -a; . /etc/iost-terminal-ops.env; set +a; /docker/hermes-agent-ghfx/data/iost-terminal/scripts/monitor-production.sh
 17 3 * * * set -a; . /etc/iost-terminal-ops.env; set +a; /docker/hermes-agent-ghfx/data/iost-terminal/scripts/backup-encrypted.sh
+27 3 * * * set -a; . /etc/iost-terminal-ops.env; set +a; /docker/hermes-agent-ghfx/data/iost-terminal/scripts/deliver-off-host.sh
 47 3 * * 0 set -a; . /etc/iost-terminal-ops.env; set +a; latest=$(find /docker/hermes-agent-ghfx/backups/iost-terminal -maxdepth 1 -name 'iost-terminal-backup-*.tar.gz.gpg' -type f | sort | tail -1); test -n "$latest" && /docker/hermes-agent-ghfx/data/iost-terminal/scripts/verify-backup-restore.sh "$latest"
 ```
+
+`deliver-off-host.sh` sends the newest encrypted `.gpg` artifact and its
+checksum sidecar in one Taildrop invocation. It retries up to three times with a
+bounded backoff. After success, its delivery state prevents duplicate sends of
+the same encrypted SHA-256. After retries are exhausted it exits non-zero and
+sends one failure alert through the same protected curl configuration; repeated
+failed scheduler runs do not duplicate that alert. The first later success sends
+one recovery alert. The state directory is root-only and the delivery state file
+is mode `0600`.
+
+Taildrop command success means Tailscale accepted the transfer; continue running
+the existing `tailscale file get` receiver on `darknight` and verify received
+checksums there. Do not delete the local encrypted backup merely because it was
+queued. Optional retry controls are `DELIVERY_MAX_ATTEMPTS` (maximum 10) and
+`DELIVERY_RETRY_DELAY_SECONDS` (maximum 300); defaults are three attempts and a
+five-second exponential delay.
 
 The webhook receives only a short health summary; it never receives response
 bodies, credentials, user data, or audit data. Alerting starts after three
 consecutive failures and sends one recovery notification when checks pass again.
 
-After configuration, run each command interactively once. Confirm a backup and
+After configuration, run each command interactively once, including
+`scripts/deliver-off-host.sh`. Run delivery a second time and confirm it reports
+`already delivered` without creating a duplicate transfer. Confirm a backup and
 checksum exist in both local and off-host destinations, then run:
 
 ```bash
@@ -128,6 +151,10 @@ record the incident, and identify the exact backup revision first.
   100 container log lines. Do not print environment variables.
 - **Backup age:** run the backup interactively, then the isolated restore verifier;
   confirm the off-host copy and checksum.
+- **Off-host delivery:** inspect the root-only delivery state without printing
+  configuration files, correct the network or receiving-node fault, and rerun
+  `deliver-off-host.sh`. Confirm one recovery alert and verify the checksum on
+  `darknight` before recording recovery.
 - **Disk:** identify growth with metadata-only commands first. Do not delete audit,
   session, user, or trading records ad hoc.
 - **Recovery:** confirm the monitor sends one recovery notice and its state file

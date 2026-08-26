@@ -9,6 +9,7 @@ function ok(name, condition) {
 const backup = readFileSync(new URL('../scripts/backup-encrypted.sh', import.meta.url), 'utf8');
 const restore = readFileSync(new URL('../scripts/restore-encrypted-backup.sh', import.meta.url), 'utf8');
 const monitor = readFileSync(new URL('../scripts/monitor-production.sh', import.meta.url), 'utf8');
+const deliver = readFileSync(new URL('../scripts/deliver-off-host.sh', import.meta.url), 'utf8');
 const verify = readFileSync(new URL('../scripts/verify-backup-restore.sh', import.meta.url), 'utf8');
 const runbook = readFileSync(new URL('../docs/PRODUCTION_OPERATIONS.md', import.meta.url), 'utf8');
 
@@ -42,11 +43,23 @@ ok('monitor checks container, public revision, disk and backup freshness',
 ok('monitor deduplicates incidents and emits a recovery notification',
   /ALERT_AFTER_FAILURES/.test(monitor) && /previous_status/.test(monitor)
   && /IOST Terminal RECOVERED/.test(monitor));
+ok('off-host delivery uses a lock, bounded retries, and checksum verification',
+  /set -Eeuo pipefail/.test(deliver) && /flock -n 9/.test(deliver)
+  && /DELIVERY_MAX_ATTEMPTS/.test(deliver) && /sha256sum -c/.test(deliver));
+ok('off-host delivery tracks successful artifacts and avoids duplicate Taildrop sends',
+  /delivered_sha256/.test(deliver) && /already delivered/.test(deliver)
+  && /tailscale_cmd file cp/.test(deliver));
+ok('off-host delivery protects webhook configuration and reports failure and recovery',
+  /ALERT_WEBHOOK_CONFIG/.test(deliver) && /stat -c '%a'/.test(deliver)
+  && /OFF-HOST DELIVERY FAILED/.test(deliver) && /OFF-HOST DELIVERY RECOVERED/.test(deliver));
 ok('restore verifier always uses an isolated temporary target',
   /mktemp -d/.test(verify) && /restore-encrypted-backup\.sh/.test(verify));
 ok('runbook keeps deployment separate and documents off-host copies plus restore rehearsal',
   /do(?:es)? not deploy/i.test(runbook) && /off-host/i.test(runbook)
   && /restore rehearsal/i.test(runbook) && /PREFLIGHT_ONLY=1/.test(runbook));
+ok('runbook documents retrying, delivery state, duplicate suppression, and protected alerts',
+  /deliver-off-host\.sh/.test(runbook) && /retry/i.test(runbook)
+  && /duplicate/i.test(runbook) && /delivery state/i.test(runbook));
 
 if (failed) process.exit(1);
 console.log('production operations contract checks passed');
