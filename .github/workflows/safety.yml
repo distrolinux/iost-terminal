@@ -1,0 +1,85 @@
+name: Safety checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: safety-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-safety:
+    name: Application safety suite
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CI: "true"
+      NODE_ENV: test
+      IOST_DATA_DIR: ${{ runner.temp }}/iost-terminal-data
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Set up Node.js 24
+        uses: actions/setup-node@e51e5fe84fc33b4c73ebe40526b2694712b5b858
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
+      - name: Run offline safety suite
+        run: npm test
+      - name: Check JavaScript syntax
+        run: |
+          node --check server.js
+          find lib scripts tests -type f \( -name '*.js' -o -name '*.mjs' \) -print0 | xargs -0 -r -n1 node --check
+      - name: Check shell syntax
+        run: find scripts tests -type f -name '*.sh' -print0 | xargs -0 -r bash -n
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+  contracts-local:
+    name: Local-only contract suite
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: contracts
+    env:
+      CI: "true"
+      HARDHAT_NETWORK: hardhat
+      HARDHAT_DISABLE_TELEMETRY_PROMPT: "true"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Set up Node.js 22
+        uses: actions/setup-node@e51e5fe84fc33b4c73ebe40526b2694712b5b858
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: contracts/package-lock.json
+      - name: Install locked contract dependencies
+        run: npm ci --ignore-scripts
+      - name: Run local Hardhat tests
+        run: npm test
+      - name: Force local contract compilation
+        run: npx --no-install hardhat compile --force
+      - name: Audit contract toolchain dependencies
+        run: npm audit --audit-level=high
+
+  secret-scan:
+    name: High-confidence secret scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Scan tracked source
+        run: bash scripts/check-secrets.sh
+      - name: Verify workflow safety contract
+        run: node tests/ci-workflow-check.mjs
