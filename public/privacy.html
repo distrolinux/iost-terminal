@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Privacy Policy — IOST Terminal</title>
 <meta name="description" content="Privacy Policy for IOST Terminal — what data is collected (email, hashed passwords, trading data), how it is secured (bcrypt, 2FA), and that it is never sold.">
-<meta name="robots" content="index,follow">
+<meta name="robots" content="noindex,follow">
 <link rel="canonical" href="https://iostcallister.com/privacy">
 <style>
 :root {
@@ -25,6 +25,8 @@ body {
 }
 a { color: var(--cyan); text-decoration: none; }
 a:hover { text-decoration: underline; }
+.skip-link { position: fixed; left: 12px; top: -60px; z-index: 100; padding: 10px 14px; background: var(--cyan); color: var(--bg); font-family: var(--mono); font-weight: 700; }
+.skip-link:focus { top: 12px; }
 header {
   padding: 28px 32px; border-bottom: 1px solid var(--line);
   display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
@@ -61,12 +63,13 @@ footer a:hover { color: var(--cyan); text-decoration: none; }
 </style>
 </head>
 <body>
+<a class="skip-link" href="#main-content">Skip to main content</a>
 <header>
   <a class="brand" href="/">◈ IOST<span class="dot">TERMINAL</span></a>
   <span class="crumb">/ privacy</span>
 </header>
 
-<main>
+<main id="main-content">
   <h1>Privacy Policy</h1>
   <div class="effective">EFFECTIVE DATE: <span class="placeholder">[Effective Date]</span> — DRAFT v0.1 (pending review)</div>
   <p class="lede">This Privacy Policy explains what data IOST Terminal ("we", "us"), operated by <span class="placeholder">[Company Name]</span>, collects, why we collect it, and the choices you have. In short: we collect the minimum needed to run the Service, we never sell your data, and we store secrets in hashed or encrypted form.</p>
@@ -117,7 +120,7 @@ footer a:hover { color: var(--cyan); text-decoration: none; }
 </main>
 
 <footer>
-  <span>◈ IOST TERMINAL — AI real-trading platform · paper-first</span>
+  <span>◈ IOST TERMINAL — AI trading platform · paper-first</span>
   <span><a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · <a href="/risk-disclosure">Risk Disclosure</a> · <a href="/">← Home</a></span>
 </footer>
 </body>
