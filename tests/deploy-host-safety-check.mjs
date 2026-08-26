@@ -16,6 +16,8 @@ const ok = (name, condition) => {
 const candidateStart = src.indexOf('start_candidate');
 const candidateHealth = src.indexOf('wait_for_health "$CANDIDATE"');
 const oldPause = src.indexOf('docker_cmd pause');
+const dataOwnership = src.indexOf('chown -R "$APP_UID:$APP_GID" "$DATA_DIR"');
+const productionStart = src.indexOf('echo "==> starting production from $IOST_IMAGE..."');
 
 ok('deployment is strict and serialized', /set -Eeuo pipefail/.test(src) && /flock\s+-n/.test(src));
 const dockerfile = readFileSync(join(ROOT, 'Dockerfile'), 'utf8');
@@ -27,6 +29,8 @@ ok('deployment builds an immutable image from a supported LTS runtime',
 ok('candidate uses isolated scratch data', /start_candidate[\s\S]*--tmpfs ["']?\/app\/data:/.test(src));
 ok('candidate becomes healthy before the production writer pauses',
   candidateStart >= 0 && candidateHealth > candidateStart && oldPause > candidateHealth);
+ok('legacy data ownership is migrated only after the old writer pauses',
+  dataOwnership > oldPause && productionStart > dataOwnership);
 ok('preflight-only mode exits before production promotion',
   /PREFLIGHT_ONLY/.test(src)
   && src.indexOf('PREFLIGHT_ONLY') > candidateHealth

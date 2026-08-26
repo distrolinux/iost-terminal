@@ -213,6 +213,13 @@ if [ "$OLD_PRESENT" -eq 1 ]; then
   docker_cmd rename "$PROD_CONTAINER" "$ROLLBACK_CONTAINER"
 fi
 
+# Legacy containers may have written stores as root.  Migrate ownership only
+# after the previous writer is paused so it cannot immediately recreate
+# root-owned files.  The retained rollback container runs as root and remains
+# able to read these files if promotion fails.
+echo "==> aligning production data ownership for the non-root runtime..."
+chown -R "$APP_UID:$APP_GID" "$DATA_DIR"
+
 echo "==> starting production from $IOST_IMAGE..."
 docker_cmd run -d --name "$PROD_CONTAINER" --restart unless-stopped \
   --network "$NET" --user "$APP_UID:$APP_GID" \
