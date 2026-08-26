@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Sora:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/css/style.css?v=2.10">
+<link rel="stylesheet" href="/css/style.css?v=2.11">
 </head>
 <body class="cmd">
 <header class="topbar">
@@ -54,6 +54,7 @@
       <button class="nav-btn" data-view="wallet" aria-label="View your free IOST wallet"><span class="ic">👛</span><span class="lbl">Wallet</span></button>
     </nav>
     <div class="side-foot">
+      <button class="side-link onboarding-replay" id="onboardingReplay" type="button" aria-label="Replay the paper trading guide"><span class="ic">?</span><span class="lbl">Guide</span></button>
       <!-- Logs tab hidden per owner decision 2026-08-10 (raw /api/audit endpoint still available) -->
       <a class="side-link" href="/" aria-label="Back to landing page"><span class="ic">⌂</span><span class="lbl">Home</span></a>
       <span class="side-link badge-io" role="img" aria-label="Signals proven on the IOST blockchain" title="Every signal is SHA-256 hash-pinned on IOST mainnet"><span class="ic">⛓</span><span class="lbl">PROVEN ON IOST</span></span>
@@ -125,6 +126,21 @@
 </footer>
 
 <!-- asset detail modal -->
+<!-- first-run paper guide: navigation only, never submits an order -->
+<div class="onboarding-layer hidden" id="onboardingLayer" role="dialog" aria-modal="true" aria-labelledby="onboardingTitle" aria-describedby="onboardingText">
+  <div class="onboarding-card" id="onboardingCard" role="document">
+    <div class="onboarding-kicker mono" id="onboardingProgress">PAPER GUIDE</div>
+    <h2 id="onboardingTitle">Welcome to IOST Terminal</h2>
+    <p id="onboardingText">Learn the paper-trading workflow without moving real money.</p>
+    <div class="onboarding-safety" id="onboardingSafety">SIMULATION ONLY · NO ORDER IS PLACED BY THIS GUIDE</div>
+    <div class="onboarding-actions">
+      <button class="btn sm ghost" id="onboardingBack" type="button">Back</button>
+      <button class="onboarding-skip" id="onboardingSkip" type="button">Skip guide</button>
+      <button class="btn sm green" id="onboardingNext" type="button">Next</button>
+    </div>
+  </div>
+</div>
+
 <!-- sign-in gate: the Terminal requires an account (free) -->
 <div class="modal-backdrop hidden" id="gateOverlay" role="dialog" aria-modal="true" aria-label="Sign in required">
   <div class="modal auth-modal" style="text-align:center">
@@ -159,6 +175,7 @@
 <script defer src="/js/vendor/tweetnacl.min.js"></script>
 <script type="module" src="/js/app.js?v=2.14.1"></script>
 <script type="module" src="/js/auth.js?v=2.7.2"></script>
+<script type="module" src="/js/onboarding.js?v=1.0.0"></script>
 <script type="application/json" id="agent-state">null</script>
 <script defer src="/js/webmcp.js"></script>
 </body>
