@@ -43,6 +43,9 @@ check('landing examples and competition rewards are not presented as live result
   && /in-app points have no token or cash value during pre-launch/.test(home)
   && !/1:1 AIT|at TGE/i.test(home));
 
+check('landing legal links wrap within narrow mobile viewports',
+  /@media \(max-width: 640px\)[\s\S]{0,500}footer \.links \{[^}]*max-width: 100%;[^}]*flex-wrap: wrap;/.test(home));
+
 check('the legacy token alias permanently redirects to the canonical AITT route',
   /app\.get\('\/token',[\s\S]{0,180}res\.redirect\(308, '\/aitt'\)/.test(server)
   && /app\.get\('\/aitt',[\s\S]{0,120}sendPage\(req, res, 'token'\)/.test(server));
