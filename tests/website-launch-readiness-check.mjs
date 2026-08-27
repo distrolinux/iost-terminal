@@ -25,6 +25,24 @@ check('landing copy identifies the product as paper-first without ambiguous real
   !/AI Real-Trading Platform/i.test(server + home)
   && /AI Trading Platform[^\n<]*Paper-First/i.test(server + home));
 
+check('landing conversion paths remain paper-only and expose Agent Trust Arena',
+  /href="\/arena"[^>]*>Arena</.test(home)
+  && /href="\/arena"[^>]+aria-label="Explore the paper-only Agent Trust Arena"/.test(home)
+  && !/LIVE ON KRAKEN|Connect your Kraken API key|execute on your real Kraken account/i.test(home)
+  && !/href="\/app\?auth=login&amp;goto=keys"/.test(home));
+
+check('landing agent claims match disabled public-chain and real-money gates',
+  /monitor and paper-simulate without human latency/i.test(home)
+  && /public-chain writes disabled/i.test(home)
+  && /hash-ready[^<]+paper-only/i.test(home)
+  && !/Every signal proven on IOST|hash-pinned on the IOST mainnet as a token-transfer memo/i.test(home));
+
+check('landing examples and competition rewards are not presented as live results or token promises',
+  /Example trace · paper route/.test(home)
+  && /84<small>\/100 example<\/small>/.test(home)
+  && /in-app points have no token or cash value during pre-launch/.test(home)
+  && !/1:1 AIT|at TGE/i.test(home));
+
 check('the legacy token alias permanently redirects to the canonical AITT route',
   /app\.get\('\/token',[\s\S]{0,180}res\.redirect\(308, '\/aitt'\)/.test(server)
   && /app\.get\('\/aitt',[\s\S]{0,120}sendPage\(req, res, 'token'\)/.test(server));
