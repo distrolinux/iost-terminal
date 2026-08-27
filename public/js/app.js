@@ -2541,7 +2541,8 @@ function applyGate() {
   if (!gate) return;
   const ok = !!window.Auth?.state?.loggedIn;
   const dismissed = gate.dataset.dismissed === '1' || localStorage.getItem('iost.gate.dismissed') === '1';
-  gate.classList.toggle('hidden', ok || dismissed);
+  const coveredByAuth = gate.dataset.authCovered === '1';
+  gate.classList.toggle('hidden', ok || dismissed || coveredByAuth);
   // Auto-open the auth modal ONLY when the landing page asked for it (?auth=login|signup).
   // Otherwise the gate stands alone with its X — no modal stacking on top of it.
   const wantAuth = new URLSearchParams(location.search).get('auth');

@@ -147,7 +147,9 @@ app.use((req, res, next) => {
   next();
 });
 
-const SITE_URL = 'https://iostcallister.com'; // canonical public origin
+// Production defaults to the canonical origin. Explicit overrides allow a
+// scratch local server to exercise browser security and auth end to end.
+const SITE_URL = process.env.SITE_URL || 'https://iostcallister.com';
 
 // Apply browser-origin validation to the complete mutation surface, not only
 // /api/auth. Headerless CLI/native-agent requests remain compatible; browser
