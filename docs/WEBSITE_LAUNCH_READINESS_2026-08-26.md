@@ -90,8 +90,21 @@
 - Complete an owner-reviewed browser pass on current desktop and mobile targets,
   including sign-up, sign-in, first-run paper guide, legal links, and locked AITT
   controls.
-- Record performance measurements under a repeatable test profile and set budgets
-  for the WebGL landing page and 3D Hub.
 - Obtain final owner/legal approval for public terms, privacy, risk, and token copy.
 - Keep all real-money and AITT launch gates closed until their separate approval
   requirements are satisfied.
+
+## Repeatable web performance profile — 2026-08-27
+
+- `performance-budgets.json` records deterministic raw-source and gzip-level-9
+  byte ceilings for the landing page, its lazy operator image, the 3D Hub,
+  Three.js, OrbitControls, the Hub texture, and shared WebMCP client.
+- `tests/web-performance-budget-check.mjs` fails CI if an individual asset or the
+  Hub's complete initial payload exceeds its reviewed ceiling.
+- Express response compression now covers ordinary HTML, CSS, JavaScript, JSON,
+  and text responses while explicitly bypassing `/api/events` so SSE delivery is
+  never buffered. Static assets receive a one-hour browser cache lifetime;
+  server-rendered product pages remain `no-store`.
+- The existing readiness contract continues to disable the landing WebGL loop on
+  mobile and pause both landing and Hub animation/background refresh work while
+  hidden.

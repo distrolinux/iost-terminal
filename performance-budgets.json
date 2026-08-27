@@ -1,0 +1,23 @@
+{
+  "profile": "Source bytes plus deterministic gzip level 9; page HTML includes SSR state only in the runtime smoke profile",
+  "landing": {
+    "htmlRawBytes": 71680,
+    "htmlGzipBytes": 22528,
+    "lazyOperatorImageBytes": 358400
+  },
+  "hub": {
+    "htmlRawBytes": 49152,
+    "htmlGzipBytes": 15360,
+    "threeRawBytes": 622592,
+    "threeGzipBytes": 163840,
+    "orbitControlsRawBytes": 32768,
+    "orbitControlsGzipBytes": 7168,
+    "textureBytes": 768000,
+    "initialRawBytes": 1474560,
+    "initialTransferBytes": 972800
+  },
+  "shared": {
+    "webmcpRawBytes": 5120,
+    "webmcpGzipBytes": 2048
+  }
+}
