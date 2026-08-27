@@ -1,5 +1,6 @@
 // server.js — IOST Terminal: AI trading platform (paper-first execution)
 import express from 'express';
+import compression from 'compression';
 import { createServer } from 'node:http';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -109,6 +110,12 @@ try {
 
 const app = express();
 app.disable('x-powered-by'); // no framework fingerprinting
+app.use(compression({
+  threshold: 1024,
+  // Streaming events must flush immediately rather than wait for a compression
+  // buffer. Everything else uses the package's content-type safety filter.
+  filter: (req, res) => req.path !== '/api/events' && compression.filter(req, res),
+}));
 app.use(express.json({ limit: '200kb' }));
 
 // ---- launch readiness: security headers on EVERY response ----
@@ -680,7 +687,7 @@ app.get('/whitepaper', (req, res) => {
     res.status(404).json({ error: 'whitepaper not available yet' });
   }
 });
-app.use(express.static(join(ROOT, 'public')));
+app.use(express.static(join(ROOT, 'public'), { maxAge: '1h' }));
 
 // ---- legal pages ----
 const LEGAL_PAGES = {};
