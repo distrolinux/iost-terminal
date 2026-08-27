@@ -1,4 +1,4 @@
-# IOST Terminal — AI Real-Trading Platform
+# IOST Terminal — AI Trading Platform — Paper-First
 
 AI real-time trading platform for crypto + stocks. Live market data, AI scoring,
 scanner, risk engine, portfolio AI, news sentiment, IOST on-chain dashboard,
