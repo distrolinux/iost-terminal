@@ -883,7 +883,7 @@ setInterval(setClock, 1000); setClock();
 
 $$('.nav-btn').forEach(btn => btn.addEventListener('click', () => switchView(btn.dataset.view)));
 // ARD: deterministic paths — every view has a stable deep link (/app#scanner, /app#risk, …)
-const VALID_VIEWS = ['scanner', 'scores', 'risk', 'portfolio', 'onchain', 'news', 'assistant', 'journal', 'performance', 'whales', 'smartmoney', 'audit', 'agents', 'points', 'aitt', 'wallet'];
+const VALID_VIEWS = ['scanner', 'scores', 'risk', 'portfolio', 'onchain', 'news', 'assistant', 'journal', 'performance', 'whales', 'smartmoney', 'audit', 'agents', 'trace', 'points', 'aitt', 'wallet'];
 function switchView(view) {
   if (!VALID_VIEWS.includes(view)) view = 'scanner';
   state.activeView = view;
@@ -927,7 +927,7 @@ function gotoApiKeyInput() {
 }
 function refreshView(view) {
   // auth-gated views: paper account data (portfolio, journal, performance) + points + wallet
-  if (['portfolio', 'journal', 'performance', 'points', 'wallet'].includes(view) && !window.Auth?.state?.loggedIn) {
+  if (['portfolio', 'journal', 'performance', 'trace', 'points', 'wallet'].includes(view) && !window.Auth?.state?.loggedIn) {
     const el = $(`#view-${view}`);
     if (el) el.innerHTML = `<div class="card empty">Sign in required — <button class="btn sm" id="authGateBtn">open sign in</button></div>`;
     $('#authGateBtn')?.addEventListener('click', () => window.Auth?.open('login'));
@@ -939,7 +939,60 @@ function refreshView(view) {
     return;
   }
   ({ scanner: renderScanner, scores: renderScores, risk: renderRisk, portfolio: renderPortfolio,
-    onchain: renderOnchain, news: renderNews, assistant: renderAssistant, journal: renderJournal, performance: renderPerformance, whales: renderWhales, smartmoney: renderSmartMoney, audit: renderAudit, agents: renderAgents, points: renderPoints, aitt: renderAITT, wallet: renderWallet })[view]();
+    onchain: renderOnchain, news: renderNews, assistant: renderAssistant, journal: renderJournal, performance: renderPerformance, whales: renderWhales, smartmoney: renderSmartMoney, audit: renderAudit, agents: renderAgents, trace: renderDecisionTrace, points: renderPoints, aitt: renderAITT, wallet: renderWallet })[view]();
+}
+
+// ---------------- Agent Decision Trace (read-only) ----------------
+// Explains what the autonomous loop observed, which policy gate applied, and
+// whether the result stayed paper-only or is waiting for explicit approval.
+async function renderDecisionTrace() {
+  const el = $('#view-trace');
+  el.innerHTML = skeleton();
+  let s;
+  try { s = await api('/api/autopilot'); }
+  catch (e) { el.innerHTML = `<div class="card empty">Decision trace unavailable: ${esc(e.message)}</div>`; return; }
+  const cfg = s.config || {};
+  const actions = (s.actions || []).slice(0, 25);
+  const proposals = s.proposals || [];
+  const typeClass = (type) => type === 'entry' ? 'bull' : ['halt', 'error', 'halt-close'].includes(type) ? 'bear' : ['proposal', 'skip', 'exit', 'reject'].includes(type) ? 'warn' : 'neut';
+  const stage = (type) => ({ start: 'Operator', stop: 'Operator', config: 'Policy', proposal: 'Approval', entry: 'Paper execution', exit: 'Paper execution', skip: 'Risk gate', halt: 'Risk gate', 'halt-close': 'Risk gate', reject: 'Approval', error: 'Fail closed' }[type] || 'Agent loop');
+  el.innerHTML = `
+    <div class="section-title">Agent Decision Trace <span class="sub">evidence → policy → approval → paper execution</span></div>
+    <div class="trace-safety" role="status">PAPER-FIRST · READ-ONLY TRACE · LIVE AND ON-CHAIN ACTIONS REMAIN SEPARATELY DISABLED</div>
+    <ol class="trace-pipeline" aria-label="Autonomous decision pipeline">
+      ${[
+        ['1', 'Observe', 'Market, news and on-chain inputs'],
+        ['2', 'Score', `Composite ≥ ${cfg.openMinScore ?? '—'} · risk ≥ ${cfg.openMaxRisk ?? '—'}`],
+        ['3', 'Risk gate', `R:R ≥ ${cfg.minRr ?? '—'} · ${cfg.accountRiskPct ?? '—'}% risk · halt ${cfg.dailyLossHaltPct ?? '—'}%`],
+        ['4', 'Approval', cfg.requireApproval ? 'Human approval required before execution' : 'Paper mode may execute inside policy'],
+        ['5', 'Paper execute', 'Simulation broker only in this trace'],
+        ['6', 'Journal', 'Outcome and reasoning retained for review'],
+      ].map(([n, title, detail]) => `<li><span class="trace-num mono">${n}</span><strong>${title}</strong><span>${detail}</span></li>`).join('')}
+    </ol>
+    <div class="grid g-3 trace-stats">
+      <div class="card kpi"><span class="k-label">Agent state</span><span class="k-value">${s.enabled ? 'RUNNING' : 'IDLE'}</span><span class="k-sub">${s.ticks || 0} completed ticks</span></div>
+      <div class="card kpi"><span class="k-label">Approval queue</span><span class="k-value">${proposals.length}</span><span class="k-sub">pending · nothing here approves an action</span></div>
+      <div class="card kpi"><span class="k-label">Execution boundary</span><span class="k-value">PAPER</span><span class="k-sub">read-only evidence view</span></div>
+    </div>
+    ${proposals.length ? `<section class="card trace-proposals" aria-labelledby="traceProposalTitle">
+      <div class="section-title" id="traceProposalTitle">Awaiting human approval <span class="sub">inspect only — approve/reject controls remain in the owner workflow</span></div>
+      <div class="trace-proposal-grid">${proposals.map(p => `<article>
+        <div><strong>${esc(p.symbol)}</strong> <span class="chip warn">${esc(p.side)}</span> <span class="chip neut">confidence ${p.confidence ?? '—'}</span></div>
+        <p>${esc(p.reason || 'No reasoning supplied')}</p>
+        <dl><div><dt>Entry</dt><dd>${p.entry ?? '—'}</dd></div><div><dt>Stop</dt><dd>${p.stop ?? '—'}</dd></div><div><dt>Target</dt><dd>${p.target ?? '—'}</dd></div><div><dt>R:R</dt><dd>${p.rr != null ? Number(p.rr).toFixed(2) : '—'}</dd></div></dl>
+      </article>`).join('')}</div>
+    </section>` : ''}
+    <section class="card" aria-labelledby="traceLogTitle">
+      <div class="section-title" id="traceLogTitle">Recent reasoning <span class="sub">newest first · server-owned audit trail</span></div>
+      ${actions.length ? `<ol class="trace-log">${actions.map(a => `<li>
+        <time class="mono" datetime="${new Date(a.ts).toISOString()}">${new Date(a.ts).toLocaleString()}</time>
+        <span class="chip ${typeClass(a.type)}">${esc(a.type)}</span>
+        <strong>${esc(stage(a.type))}</strong>
+        <span class="trace-symbol mono">${esc(a.symbol || 'SYSTEM')}</span>
+        <p>${esc(a.detail || 'No detail')}</p>
+        <span class="mono trace-score">${a.score == null ? '—' : `score ${a.score}`}</span>
+      </li>`).join('')}</ol>` : '<div class="empty">No decisions yet. The trace will populate after the paper agent runs.</div>'}
+    </section>`;
 }
 
 // ---------------- helpers ----------------
@@ -2450,7 +2503,7 @@ function applyAuthGate() {
     const el = $('#' + id);
     if (el) { el.disabled = !ok; el.title = ok ? '' : 'Sign in required'; }
   });
-  if (['portfolio', 'journal', 'performance', 'points', 'wallet'].includes(state.activeView) && !ok) refreshView(state.activeView);
+  if (['portfolio', 'journal', 'performance', 'trace', 'points', 'wallet'].includes(state.activeView) && !ok) refreshView(state.activeView);
   // topbar balance follows the signed-in user's account
   const bal = $('#tbBalance');
   if (!ok && bal) bal.textContent = '--';
@@ -2460,7 +2513,7 @@ function applyAuthGate() {
 window.addEventListener('authchange', (e) => {
   applyAuthGate();
   if (e.detail?.loggedIn) renderCommandRail(); // show the user's balance immediately on sign-in
-  if (e.detail?.loggedIn && ['portfolio', 'journal', 'performance', 'points', 'wallet'].includes(state.activeView)) refreshView(state.activeView);
+  if (e.detail?.loggedIn && ['portfolio', 'journal', 'performance', 'trace', 'points', 'wallet'].includes(state.activeView)) refreshView(state.activeView);
 });
 setTimeout(applyAuthGate, 2500); // safety re-run once auth.js has settled
 

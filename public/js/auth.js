@@ -82,6 +82,8 @@ const Auth = {
   },
   close() {
     const m = $('#authModal');
+    const r = $('#authReset');
+    const resetWasOpen = r && !r.classList.contains('hidden');
     if (m && !m.classList.contains('hidden')) {
       if (m.classList.contains('closing')) return;
       m.classList.add('closing');
@@ -91,13 +93,19 @@ const Auth = {
         this.lastFocus = null;
       }, 150);
     }
-    const r = $('#authReset'); if (r) r.classList.add('hidden');
+    if (r) r.classList.add('hidden');
+    if (resetWasOpen) {
+      if (this.lastFocus?.isConnected) this.lastFocus?.focus({ preventScroll: true });
+      this.lastFocus = null;
+    }
     this.pendingBackupCodes = null;
   },
   trapFocus(e) {
     if (e.key !== 'Tab') return;
-    const modal = $('#authModal');
-    if (!modal || modal.classList.contains('hidden')) return;
+    const modal = ['authModal', 'authReset']
+      .map((id) => document.getElementById(id))
+      .find((dialog) => dialog && !dialog.classList.contains('hidden'));
+    if (!modal) return;
     const focusable = [...modal.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])')]
       .filter((el) => !el.hidden && el.getClientRects().length > 0);
     if (!focusable.length) { e.preventDefault(); return; }
@@ -120,8 +128,8 @@ const Auth = {
     }
     const first = body.querySelector('input, button'); if (first) setTimeout(() => first.focus(), 30);
   },
-  field(label, type, id, opts = '') {
-    return `<div class="field"><label for="${id}">${label}</label><input id="${id}" type="${type}" ${opts} autocomplete="${type === 'password' ? 'current-password' : 'email'}"></div>`;
+  field(label, type, id, opts = '', autocomplete = type === 'password' ? 'current-password' : 'email') {
+    return `<div class="field"><label for="${id}">${label}</label><input id="${id}" type="${type}" ${opts} autocomplete="${autocomplete}"></div>`;
   },
   errBox(msg) {
     return `<p class="auth-err" role="alert">${esc(msg)}</p>`;
@@ -143,7 +151,7 @@ const Auth = {
     return `<div class="auth-head"><div class="auth-title">SIGN IN</div><div class="auth-sub">IOST Terminal · paper execution console</div></div>
       <form id="authForm" novalidate>
         ${this.field('Email', 'email', 'aEmail', 'required')}
-        ${this.field('Password', 'password', 'aPass', 'required')}
+        ${this.field('Password', 'password', 'aPass', 'required', 'current-password')}
         <div id="aErr"></div>
         <button class="btn green block" type="submit">Sign in</button>
       </form>
@@ -187,7 +195,7 @@ const Auth = {
     return `<div class="auth-head"><div class="auth-title">CREATE ACCOUNT</div><div class="auth-sub">Email + password · password reset by email</div></div>
       <form id="authForm" novalidate>
         ${this.field('Email', 'email', 'aEmail', 'required')}
-        ${this.field('Password (min 8 chars)', 'password', 'aPass', 'required minlength="8"')}
+        ${this.field('Password (min 8 chars)', 'password', 'aPass', 'required minlength="8"', 'new-password')}
         <div id="aErr"></div>
         <button class="btn green block" type="submit">Create account</button>
       </form>
@@ -319,6 +327,7 @@ const Auth = {
     const q = new URLSearchParams(location.hash.split('?')[1] || '');
     const token = q.get('token') || '';
     const ov = $('#authReset'); if (!ov) return;
+    if (ov.classList.contains('hidden')) this.lastFocus = document.activeElement;
     ov.classList.remove('hidden');
     const body = $('#authResetBody');
     if (!token) { body.innerHTML = `<div class="auth-head"><div class="auth-title">RESET PASSWORD</div><div class="auth-sub">Missing reset token — use the full link from your email.</div></div>`; return; }
@@ -331,6 +340,7 @@ const Auth = {
         <button class="btn green block" type="submit">Set new password</button>
       </form>
       <div class="auth-links"><button type="button" class="auth-link" id="aToLogin">Sign in instead</button></div>`;
+    setTimeout(() => $('#aPass')?.focus(), 30);
     $('#aToLogin')?.addEventListener('click', () => { this.close(); this.open('login'); });
     $('#authForm')?.addEventListener('submit', async (e) => {
       e.preventDefault();

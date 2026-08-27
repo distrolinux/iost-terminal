@@ -14,7 +14,8 @@ const ok = (name, condition) => {
 const authChange = app.match(/window\.addEventListener\('authchange',[\s\S]*?\n\}\);\nsetTimeout\(applyAuthGate, 2500\)/)?.[0] || '';
 ok('authchange handler exists', authChange.length > 0);
 ok('auth hydration refreshes the active view', /refreshView\(state\.activeView\)/.test(authChange));
-ok('Points is included in auth-gated hydration', /\['portfolio', 'journal', 'performance', 'points', 'wallet'\]/.test(authChange));
+ok('Points is included in auth-gated hydration',
+  /\[[^\]]*'points'[^\]]*\]\.includes\(state\.activeView\)/.test(authChange));
 
 console.log(failures === 0 ? '\nALL PASS ✅' : `\n${failures} FAILURES ❌`);
 process.exit(failures === 0 ? 0 : 1);
