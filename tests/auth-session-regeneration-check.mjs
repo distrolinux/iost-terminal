@@ -2,7 +2,7 @@
 // the session store cannot regenerate the session. No production stores or
 // network services are used.
 import assert from 'node:assert/strict';
-import { completeLoginSession } from '../lib/auth-routes.js';
+import { completeLoginSession, completeRegistrationSession, savePendingTotp } from '../lib/auth-routes.js';
 
 function failingRequest() {
   return {
@@ -42,6 +42,23 @@ for (const [path, successBody] of [
   assert.equal(res.statusCode, 503, `${path} must fail closed`);
   assert.deepEqual(res.body, { error: 'sign-in temporarily unavailable' });
   assert.equal('user' in res.body, false, `${path} must not expose user data`);
+}
+
+{
+  const res = responseRecorder();
+  await completeRegistrationSession(failingRequest(), res, user, { user: publicUser });
+  assert.equal(res.statusCode, 503, 'registration must report an automatic sign-in failure');
+  assert.deepEqual(res.body, {
+    error: 'Account created, but automatic sign-in is temporarily unavailable',
+    accountCreated: true,
+  });
+  assert.equal('user' in res.body, false, 'failed automatic sign-in must not return a signed-in user');
+}
+
+{
+  const req = { session: { save(callback) { callback(new Error('simulated save failure')); } } };
+  const saved = await savePendingTotp(req, user);
+  assert.equal(saved, false, '2FA challenge must fail closed when pending state cannot be saved');
 }
 
 console.log('Auth session-regeneration failure checks passed');

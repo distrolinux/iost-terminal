@@ -11,6 +11,7 @@ const Auth = {
   pendingEmail: null,
   pendingBackupCodes: null,
   lastFocus: null,
+  closeTimer: null,
 
   async init() {
     // password reset link (from email): /app#reset?token=...
@@ -37,10 +38,11 @@ const Auth = {
         const d = await res.json();
         if (d.user) { this.state.loggedIn = true; this.state.user = d.user; this.state.agent = false; }
         else if (d.agent) { this.state.loggedIn = true; this.state.agent = true; this.state.user = null; }
+        else { this.state.loggedIn = false; this.state.user = null; this.state.agent = false; }
       } else {
         this.state.loggedIn = false; this.state.user = null; this.state.agent = false;
       }
-    } catch { this.state.loggedIn = false; }
+    } catch { this.state.loggedIn = false; this.state.user = null; this.state.agent = false; }
     this.renderTopbar();
     window.dispatchEvent(new CustomEvent('authchange', { detail: this.state }));
     return this.state;
@@ -76,7 +78,13 @@ const Auth = {
   // ---------------- modal plumbing ----------------
   open(step) {
     const m = $('#authModal'); if (!m) return;
+    if (this.closeTimer) { clearTimeout(this.closeTimer); this.closeTimer = null; }
     if (m.classList.contains('hidden')) this.lastFocus = document.activeElement;
+    const gate = $('#gateOverlay');
+    if (gate && !gate.classList.contains('hidden')) {
+      gate.dataset.authCovered = '1';
+      gate.classList.add('hidden');
+    }
     m.classList.remove('hidden', 'closing');
     this.show(step || 'login');
   },
@@ -87,10 +95,17 @@ const Auth = {
     if (m && !m.classList.contains('hidden')) {
       if (m.classList.contains('closing')) return;
       m.classList.add('closing');
-      setTimeout(() => {
+      this.closeTimer = setTimeout(() => {
         m.classList.remove('closing'); m.classList.add('hidden');
+        const gate = $('#gateOverlay');
+        if (gate?.dataset.authCovered === '1') {
+          delete gate.dataset.authCovered;
+          const dismissed = gate.dataset.dismissed === '1';
+          if (!dismissed && !this.state.loggedIn) gate.classList.remove('hidden');
+        }
         if (this.lastFocus?.isConnected) this.lastFocus?.focus({ preventScroll: true });
         this.lastFocus = null;
+        this.closeTimer = null;
       }, 150);
     }
     if (r) r.classList.add('hidden');
@@ -121,12 +136,20 @@ const Auth = {
       totp: this.stepTotp, account: this.stepAccount, '2fa-enable': this.step2faEnable,
       '2fa-disable': this.step2faDisable, backup: this.stepBackup }[step];
     if (fn) body.innerHTML = fn.call(this);
+    const labels = {
+      login: 'Account sign in', signup: 'Create account', forgot: 'Reset password',
+      totp: 'Two-factor verification', account: 'Manage account',
+      '2fa-enable': 'Enable two-factor authentication', '2fa-disable': 'Disable two-factor authentication',
+      backup: 'Save backup codes',
+    };
+    const label = labels[step] || 'Account';
+    $('#authModal')?.setAttribute('aria-label', label);
     // ✕ close button — always present, top-right of the auth card
     if (!body.querySelector('.modal-close')) {
-      body.insertAdjacentHTML('afterbegin', '<button class="modal-close" id="authCloseX" aria-label="Close sign in" style="font-size:20px;padding:2px 6px">✕</button>');
+      body.insertAdjacentHTML('afterbegin', `<button class="modal-close" id="authCloseX" aria-label="Close ${esc(label.toLowerCase())}" style="font-size:20px;padding:2px 6px">✕</button>`);
       $('#authCloseX')?.addEventListener('click', () => this.close());
     }
-    const first = body.querySelector('input, button'); if (first) setTimeout(() => first.focus(), 30);
+    const first = body.querySelector('input, button:not(.modal-close)'); if (first) setTimeout(() => first.focus(), 30);
   },
   field(label, type, id, opts = '', autocomplete = type === 'password' ? 'current-password' : 'email') {
     return `<div class="field"><label for="${id}">${label}</label><input id="${id}" type="${type}" ${opts} autocomplete="${autocomplete}"></div>`;
@@ -134,16 +157,23 @@ const Auth = {
   errBox(msg) {
     return `<p class="auth-err" role="alert">${esc(msg)}</p>`;
   },
+  noticeBox(msg) {
+    return `<p class="auth-notice" role="status">${esc(msg)}</p>`;
+  },
 
   async api(path, body) {
-    const res = await fetch(path, {
-      method: body === undefined ? 'GET' : 'POST',
-      headers: body === undefined ? {} : { 'content-type': 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body),
-      credentials: 'same-origin',
-    });
-    const d = await res.json().catch(() => ({}));
-    return { status: res.status, ...d };
+    try {
+      const res = await fetch(path, {
+        method: body === undefined ? 'GET' : 'POST',
+        headers: body === undefined ? {} : { 'content-type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        credentials: 'same-origin',
+      });
+      const d = await res.json().catch(() => ({}));
+      return { status: res.status, ...d };
+    } catch {
+      return { status: 0, error: 'Unable to reach the server. Check your connection and try again.' };
+    }
   },
 
   // ---------------- steps ----------------
@@ -207,11 +237,19 @@ const Auth = {
       e.preventDefault();
       // referral code from the shared link (/app?ref=CODE) — referee +10, referrer +50
       const ref = new URLSearchParams(location.search).get('ref') || undefined;
-      const r = await this.api('/api/auth/register', { email: $('#aEmail').value, password: $('#aPass').value, ref });
+      const email = $('#aEmail').value.trim().toLowerCase();
+      const r = await this.api('/api/auth/register', { email, password: $('#aPass').value, ref });
       if (r.status === 201) {
         await this.refresh(); this.close();
         const refMsg = r.refAward?.ok ? ` · referral applied (+${r.refAward.refereePoints} points)` : (r.refAward && !r.refAward.ok ? '' : '');
         this.toast(`Account created — welcome, ${r.user.email}${refMsg}`);
+        return;
+      }
+      if (r.accountCreated) {
+        this.show('login');
+        const input = $('#aEmail'); if (input) input.value = email;
+        const box = $('#aErr'); if (box) box.innerHTML = this.noticeBox('Account created. Sign in to continue.');
+        $('#aPass')?.focus();
         return;
       }
       $('#aErr').innerHTML = this.errBox(r.error || 'registration failed');
@@ -356,10 +394,15 @@ const Auth = {
   },
 
   async logout() {
-    await this.api('/api/auth/logout', {});
-    this.state.loggedIn = false; this.state.user = null;
+    const result = await this.api('/api/auth/logout', {});
+    if (result.status !== 200 || !result.ok) {
+      await this.refresh();
+      this.toast(result.error || 'Sign out failed. Please try again.');
+      return;
+    }
+    this.state.loggedIn = false; this.state.user = null; this.state.agent = false;
     this.close();
-    this.refresh();
+    await this.refresh();
     this.toast('Signed out');
   },
 };
