@@ -12,7 +12,7 @@ function probe(allowlist, email) {
   const code = `import('./lib/live.js').then(m => console.log(JSON.stringify({cfg:m.liveOwnerConfig(), allowed:m.isLiveAllowed(${JSON.stringify(email)})})))`;
   const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], {
     cwd: process.cwd(),
-    env: { ...process.env, LIVE_EMAIL_ALLOWLIST: allowlist },
+    env: { ...process.env, LIVE_TRADING_ENABLED: '1', LIVE_EMAIL_ALLOWLIST: allowlist },
     encoding: 'utf8',
   });
   if (r.status !== 0) return { error: r.stderr || `exit ${r.status}` };

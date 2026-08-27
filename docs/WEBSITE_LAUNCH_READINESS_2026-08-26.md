@@ -26,12 +26,21 @@
 | Terminal navigation disappeared below 860px | Most product views were unreachable on mobile | Reflowed the full primary navigation into a sticky, horizontally scrollable mobile command bar |
 | Autonomous actions lacked a dedicated inspection surface | Agent behavior and safety decisions were harder to review | Added a signed-in, read-only Decision Trace covering inputs, scoring, risk gates, approvals, paper execution, proposals, and recent reasoning |
 
-### Launch blockers retained
+### Legal review completed for the paper-only website scope
 
-- Terms, Privacy, and Risk Disclosure remain clearly marked drafts with unresolved
-  company, jurisdiction, effective-date, contact, retention, and liability
-  placeholders. They remain `noindex` and excluded from the sitemap pending
-  owner/counsel approval.
+- Canadian counsel approved the public website legal posture on 2026-08-26.
+  Counsel identity and address are retained privately rather than published in
+  this repository. Counsel directed that no exclusive jurisdiction be selected
+  for the independently developed open-source project.
+- Terms, Privacy, and Risk Disclosure now have an effective date, the existing
+  public project contact, no unresolved placeholders, and an explicit paper-only
+  launch boundary. They are indexable and included in the sitemap.
+- This approval is limited to the paper-only website. It is not approval for
+  real-money trading, token deployment, conversion, staking, liquidity, or any
+  public-chain action, and it does not change any AITT release gate.
+- Real-money execution, exchange-key connection, signal pin broadcasts, and
+  IOST account-creation broadcasts now fail closed unless their separate,
+  explicit server-side launch flags are enabled. Those flags remain off.
 - Real-money trading, token deployment, conversion, staking, liquidity, and
   public-chain release actions remain disabled and separately gated.
 

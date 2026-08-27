@@ -1,6 +1,7 @@
 // live.js verification — scratch state only; never touches accounts.json.
 // Exercises allowlist, enable (real keys present), masked state, kill switch.
 process.env.LIVE_EMAIL_ALLOWLIST = 'owner@test.local,owner@example.com';
+process.env.LIVE_TRADING_ENABLED = '1';
 
 const { enableLive, disableLive, getLiveState, isLiveAllowed, liveAuditFile } = await import('../lib/live.js');
 import { readFileSync, existsSync } from 'node:fs';

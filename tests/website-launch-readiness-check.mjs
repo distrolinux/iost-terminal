@@ -13,6 +13,8 @@ const risk = readFileSync(new URL('../public/risk-disclosure.html', import.meta.
 const authJs = readFileSync(new URL('../public/js/auth.js', import.meta.url), 'utf8');
 const appJs = readFileSync(new URL('../public/js/app.js', import.meta.url), 'utf8');
 const css = readFileSync(new URL('../public/css/style.css', import.meta.url), 'utf8');
+const chainJs = readFileSync(new URL('../lib/chain.js', import.meta.url), 'utf8');
+const iostAccountsJs = readFileSync(new URL('../lib/iost-accounts.js', import.meta.url), 'utf8');
 
 function check(name, condition) {
   assert.ok(condition, name);
@@ -33,15 +35,32 @@ check('the sitemap publishes only the canonical AITT URL',
   && sitemapMatch[1].includes("'/aitt'")
   && !sitemapMatch[1].includes("'/token'"));
 
-check('draft legal documents stay out of search indexes and the sitemap',
-  [terms, privacy, risk].every((html) => /<meta name="robots" content="noindex,follow">/.test(html))
-  && !sitemapMatch[1].includes("'/terms'")
-  && !sitemapMatch[1].includes("'/privacy'")
-  && !sitemapMatch[1].includes("'/risk-disclosure'"));
+check('approved legal documents are indexable, discoverable, and contain no placeholders',
+  [terms, privacy, risk].every((html) => /<meta name="robots" content="index,follow">/.test(html))
+  && [terms, privacy, risk].every((html) => !/\[[^\]]+\]/.test(html))
+  && sitemapMatch[1].includes("'/terms'")
+  && sitemapMatch[1].includes("'/privacy'")
+  && sitemapMatch[1].includes("'/risk-disclosure'"));
 
-check('draft legal documents use unambiguous paper-first product wording',
+check('legal documents use unambiguous paper-first product wording',
   [terms, privacy, risk].every((html) => /AI trading platform · paper-first/i.test(html))
   && [terms, privacy, risk].every((html) => !/real-trading/i.test(html)));
+
+check('legal documents describe the public launch as paper-only and keep financial actions unavailable',
+  [terms, privacy, risk].every((html) => /paper-only/i.test(html))
+  && /Live trading is unavailable/.test(risk)
+  && /Real-money execution[^<]+unavailable/.test(terms)
+  && /does not accept exchange API keys or route real-money orders/.test(privacy));
+
+check('real-money trading and exchange-key connection fail closed by default',
+  /process\.env\.LIVE_TRADING_ENABLED === '1'/.test(readFileSync(new URL('../lib/live.js', import.meta.url), 'utf8'))
+  && /if \(!liveTradingAvailable\(\)\) return res\.status\(403\)/.test(server)
+  && /Exchange-key connection and real-money execution are unavailable/.test(appJs));
+
+check('public-chain writes and account creation fail closed by default',
+  /process\.env\.PUBLIC_CHAIN_ACTIONS_ENABLED === '1'/.test(chainJs)
+  && /if \(!publicChainActionsAvailable\(\)\)[\s\S]{0,180}status: 'disabled'/.test(chainJs)
+  && /if \(!publicChainActionsAvailable\(\)\)[\s\S]{0,180}status: 403/.test(iostAccountsJs));
 
 check('server-rendered sentiment defaults missing counts to zero',
   /function sentimentCounts\(market\)/.test(server)
