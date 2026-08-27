@@ -14,7 +14,7 @@ import { calculateRisk, portfolioExposure } from './lib/risk.js';
 import { analyzePortfolio } from './lib/portfolio.js';
 import { getState, closeTrade, resetAccount, setAccountSize, markToMarket, journalStats, ensureAccount, listAccounts, persistAccounts } from './lib/paper.js';
 import { getBroker } from './lib/broker/index.js';
-import { enableLive, disableLive, getLiveState, logLiveEvent, anyLiveEnabled, isLiveAllowed } from './lib/live.js';
+import { enableLive, disableLive, getLiveState, logLiveEvent, anyLiveEnabled, isLiveAllowed, liveTradingAvailable } from './lib/live.js';
 import { checkLiveOrder } from './lib/rails.js';
 import { getFeeConfig, setFeeConfig, canTrade, burnCredits, grantCredits, walletSummary } from './lib/fees.js';
 import { setUserKrakenKey, getUserKrakenKeys, clearUserKrakenKey, userKrakenStatus } from './lib/keys.js';
@@ -682,7 +682,7 @@ app.get('/whitepaper', (req, res) => {
 });
 app.use(express.static(join(ROOT, 'public')));
 
-// ---- legal pages (draft — owner reviews before publishing) ----
+// ---- legal pages ----
 const LEGAL_PAGES = {};
 for (const f of ['terms.html', 'privacy.html', 'risk-disclosure.html']) {
   LEGAL_PAGES[f] = readFileSync(join(ROOT, 'public', f), 'utf8');
@@ -692,9 +692,7 @@ app.get('/privacy', (req, res) => { res.set('Cache-Control', 'no-store'); res.se
 app.get('/risk-disclosure', (req, res) => { res.set('Cache-Control', 'no-store'); res.send(LEGAL_PAGES['risk-disclosure.html']); });
 
 // ---- sitemap.xml ----
-// Draft legal documents are linked in-product but excluded until owner/counsel
-// replace every placeholder and approve publication.
-const SITEMAP_URLS = ['/', '/app', '/hub', '/aitt', '/arena', '/whitepaper'];
+const SITEMAP_URLS = ['/', '/app', '/hub', '/aitt', '/arena', '/whitepaper', '/terms', '/privacy', '/risk-disclosure'];
 app.get('/sitemap.xml', (req, res) => {
   const lastmod = new Date().toISOString().slice(0, 10);
   const urls = SITEMAP_URLS
@@ -2042,10 +2040,11 @@ function brokerForUser(u) {
 // ---- per-user Kraken key connection (v3 — customers trade their own account) ----
 app.get('/api/account/kraken', requireUser, (req, res) => {
   if (!req.session?.userId) return res.status(401).json({ error: 'auth required' });
-  res.json({ ok: true, status: userKrakenStatus(auth.findById(req.session.userId)) });
+  res.json({ ok: true, available: liveTradingAvailable(), status: userKrakenStatus(auth.findById(req.session.userId)) });
 });
 
 app.put('/api/account/kraken', requireUser, async (req, res) => {
+  if (!liveTradingAvailable()) return res.status(403).json({ error: 'exchange-key connection is unavailable in the paper-only launch' });
   if (!req.session?.userId) return res.status(401).json({ error: 'auth required' });
   const { apiKey, apiSecret } = req.body || {};
   if (!apiKey || !apiSecret) return res.status(400).json({ error: 'apiKey and apiSecret required' });

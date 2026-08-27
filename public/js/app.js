@@ -1604,6 +1604,14 @@ async function renderFeeCard(container) {
   let ks = null;
   try { ks = await api('/api/account/kraken'); } catch { return; }
   const kst = ks?.status || {};
+  if (ks?.available !== true) {
+    container.innerHTML = `
+      <div class="card" style="margin-top:16px">
+        <div class="section-title" style="margin-bottom:8px">Trading Keys <span class="sub">paper-only launch</span></div>
+        <div class="muted" style="font-size:12px">Exchange-key connection and real-money execution are unavailable.</div>
+      </div>`;
+    return;
+  }
   container.innerHTML = `
     <div class="card" style="margin-top:16px">
       <div class="section-title" style="margin-bottom:8px">Trading Keys <span class="sub">trade your own account · encrypted, never shown · free</span></div>
@@ -1645,6 +1653,15 @@ async function renderLiveCard(container) {
   let a;
   try { a = await api('/api/account'); } catch { return; }
   const lv = a.live || {};
+  if (lv.available !== true) {
+    container.innerHTML = `
+      <div class="card" style="margin-top:16px">
+        <div class="section-title" style="margin-bottom:8px">Execution Mode <span class="sub">paper-only launch</span></div>
+        <span class="chip neut">PAPER</span>
+        <span class="muted" style="font-size:12px;margin-left:8px">Real-money execution is unavailable.</span>
+      </div>`;
+    return;
+  }
   const liveStyle = 'background:rgba(255,45,85,.15);color:#ff2d55;border-color:rgba(255,45,85,.4)';
   const status = lv.enabled
     ? `<span class="chip" style="${liveStyle}">● LIVE — ${esc(lv.venue || 'kraken')}</span>`

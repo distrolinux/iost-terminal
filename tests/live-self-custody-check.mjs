@@ -12,6 +12,7 @@ process.env.IOST_DATA_DIR = SCRATCH;
 process.env.KRAKEN_API_KEY = '';
 process.env.KRAKEN_API_SECRET = '';
 process.env.LIVE_EMAIL_ALLOWLIST = 'owner@test.local';
+process.env.LIVE_TRADING_ENABLED = '1';
 
 const { enableLive, getLiveState } = await import('../lib/live.js');
 const state = { accountId: 'self-custody-owner-test', positions: [], journal: [], account: {} };
