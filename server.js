@@ -45,6 +45,7 @@ import * as liveProposals from './lib/live-proposals.js';
 import * as management from './lib/management.js';
 import * as triggers from './lib/triggers.js';
 import { runBacktest, describeRule } from './lib/backtest.js';
+import { evaluateAgentStrategy } from './lib/evaluation.js';
 import { auditToken, smartMoney, AUDIT_CHAINS, SIGNAL_CHAINS } from './lib/binance-data.js';
 import session from 'express-session';
 import { FileSessionStore } from './lib/session-store.js';
@@ -251,6 +252,7 @@ const AUDIT_ROUTES = [
   { re: /^\/api\/paper\/close$/, method: 'POST', action: 'paper.close' },
   { re: /^\/api\/paper\/stats$/, method: 'GET', action: 'paper.stats' },
   { re: /^\/api\/paper\/reset$/, method: 'POST', action: 'paper.reset' },
+  { re: /^\/api\/evaluation-lab$/, method: 'POST', action: 'evaluation.run' },
   { re: /^\/api\/audit$/, method: 'GET', action: 'audit.read' },
 ];
 // canonical sha256 of JSON.stringify(sorted keys) — deterministic payload fingerprint
@@ -764,6 +766,7 @@ const OPENAPI_PATHS = {
   '/api/risk': { post: { summary: 'Position size, $ risk, R:R, potential P/L, exposure', tags: ['risk'], security: [], requestBody: { content: { 'application/json': { schema: { type: 'object' } } } } } },
   '/api/leaderboard': { get: { summary: 'Top paper traders by closed P&L (masked identities)', tags: ['social'], security: [] } },
   '/api/backtest': { post: { summary: 'Objective-rules backtest with FXReplay KPIs + honesty caveats', tags: ['analysis'], security: [], requestBody: { content: { 'application/json': { schema: { type: 'object' } } } } } },
+  '/api/evaluation-lab': { post: { summary: 'Paper-only walk-forward strategy evaluation and fail-closed promotion evidence', tags: ['analysis'], requestBody: { content: { 'application/json': { schema: { type: 'object' } } } } } },
   '/api/token-audit': { post: { summary: 'Binance Web3 token security audit (honeypot/rug/tax scan)', tags: ['analysis'], security: [], requestBody: { content: { 'application/json': { schema: { type: 'object', properties: { contractAddress: { type: 'string' }, chainId: { type: 'string' } }, required: ['contractAddress'] } } } } } },
   '/api/smart-money': { get: { summary: 'Whale buy/sell signals (BSC/Solana)', tags: ['analysis'], security: [] } },
   '/api/signals/feed': { get: { summary: 'Public signal feed with on-chain proof status', tags: ['agents'], security: [] } },
@@ -2536,6 +2539,7 @@ const API_INDEX = {
   ],
   leaderboard: { path: '/api/leaderboard', method: 'GET', query: 'period=week|all', purpose: 'PUBLIC social proof: top paper traders by closed P&L (masked identities) — agents can read it too' },
   backtest: { path: '/api/backtest', method: 'POST', body: '{symbol,timeframe?:1d|4h|1h|15m,strategy:{name?,side,entry:{rule:ma-cross|rsi|breakout|ai-score,params},exit:{stopPct?,targetPct?,trailingPct?,maxBars?},sizePct?}}', purpose: 'PUBLIC backtesting (FXReplay methodology): objective rules vs historical bars → expectancy, profit factor, max drawdown, Sharpe, vs buy-and-hold + per-trade journal. Honest caveats included.' },
+  evaluationLab: { path: '/api/evaluation-lab', method: 'POST', body: '{symbol,timeframe,strategy,config?:{trainBars,testBars,stepBars,minimumTrades,costs:{feeBps,spreadBps,slippageBps}}}', purpose: 'AUTHENTICATED paper-only rolling walk-forward evaluation with causal next-bar fills, realistic costs, baselines, calibration, evidence hashes and a fail-closed paper-review gate.' },
   binanceData: [
     { path: '/api/token-audit', method: 'POST', body: '{contractAddress, chainId?:56|8453|CT_501|1}', purpose: 'PUBLIC Binance Web3 token security audit (honeypot/rug-pull/scam/tax scan). No keys. Proxy of web3.binance.com — result normalized: riskLevel 1-5, taxes, verified flag, risk-item checks. NOT investment advice.' },
     { path: '/api/smart-money', method: 'GET', query: 'chainId=56|CT_501&page=1&pageSize=20', purpose: 'PUBLIC Binance Web3 smart-money on-chain signals (BSC/Solana): buy/sell events from tracked whale wallets, trigger vs current price, max gain, exit rate, tags. 30s server cache. NOT investment advice.' },
@@ -2999,6 +3003,21 @@ app.post('/api/backtest', publicLimiter, async (req, res) => {
     res.status(r.ok ? 200 : 400).json(r);
   } catch (e) {
     res.status(502).json({ ok: false, error: e.message });
+  }
+});
+
+// Authenticated, read-only historical analysis. The result can only identify a
+// paper candidate; this route has no execution, live, token or chain mutation.
+app.post('/api/evaluation-lab', publicLimiter, requireUser, async (req, res) => {
+  const { symbol, timeframe = '1d', strategy, config } = req.body || {};
+  if (!symbol || !strategy?.entry?.rule) return res.status(400).json({ error: 'symbol and strategy.entry.rule required' });
+  try {
+    const candles = await getKlines(String(symbol).toUpperCase(), timeframe, 500);
+    const result = evaluateAgentStrategy({ symbol, timeframe, strategy, candles, config });
+    res.status(result.ok ? 200 : 400).json(result);
+  } catch (error) {
+    res.status(502).json({ ok: false, mode: 'paper-only', error: error.message,
+      promotion: { allowed: false, decision: 'HOLD', scope: 'paper-strategy-candidate' } });
   }
 });
 
