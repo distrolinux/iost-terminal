@@ -23,6 +23,7 @@ ok('autopilot REST reads are owner-only', /app\.get\('\/api\/autopilot'[\s\S]*?o
 ok('public SSR omits pending proposal reasoning', !/pendingProposals/.test(server) && !/<dt>Pending proposals<\/dt>/.test(server));
 ok('agent-key atomic writes are 0600 before and after rename', /writeFileSync\(tmp, JSON\.stringify\(store, null, 2\), \{ mode: 0o600 \}\)/.test(agentKeys) && /renameSync\(tmp, STORE_FILE\);\s*chmodSync\(STORE_FILE, 0o600\)/.test(agentKeys));
 ok('users and sessions retain 0600 after atomic rename', /renameSync\(tmp, FILE\);\s*chmodSync\(FILE, 0o600\)/.test(auth) && /renameSync\(tmp, FILE\);\s*chmodSync\(FILE, 0o600\)/.test(sessions));
+ok('users and sessions share the isolated scratch data directory', /process\.env\.IOST_DATA_DIR \|\| join\(ROOT, 'data'\)/.test(auth) && /process\.env\.IOST_DATA_DIR \|\| join\(ROOT, 'data'\)/.test(sessions));
 ok('session-secret is chmod-checked and boot fails closed', /statSync\(f\)\.mode/.test(server) && /refusing boot/.test(server));
 ok('paper guide is replayable, dismissible and keyboard accessible',
   /id="onboardingReplay"/.test(onboardingHtml) && /id="onboardingSkip"/.test(onboardingHtml)
@@ -39,7 +40,7 @@ ok('paper guide state is local and waits for authenticated first-run users',
   && /authchange/.test(onboardingJs) && /detail\?\.loggedIn/.test(onboardingJs)
   && !/authchange[^\n]+once:\s*true/.test(onboardingJs));
 ok('paper guide cache versions and responsive styles are present',
-  /style\.css\?v=2\.17/.test(onboardingHtml) && /onboarding\.js\?v=1\.1\.0/.test(onboardingHtml)
+  /style\.css\?v=2\.18/.test(onboardingHtml) && /onboarding\.js\?v=1\.1\.0/.test(onboardingHtml)
   && /\.onboarding-card/.test(onboardingCss) && /@media \(max-width: 760px\)/.test(onboardingCss));
 
 console.log(failures === 0 ? '\\nALL PASS ✅' : `\\n${failures} FAILURES ❌`);

@@ -46,6 +46,7 @@ import * as management from './lib/management.js';
 import * as triggers from './lib/triggers.js';
 import { runBacktest, describeRule } from './lib/backtest.js';
 import { evaluateAgentStrategy } from './lib/evaluation.js';
+import { compareEvaluations, exportEvaluationCsv, exportEvaluationJson, getEvaluation, listEvaluations, saveEvaluation, secureEvaluationHistoryPermissions } from './lib/evaluation-history.js';
 import { auditToken, smartMoney, AUDIT_CHAINS, SIGNAL_CHAINS } from './lib/binance-data.js';
 import session from 'express-session';
 import { FileSessionStore } from './lib/session-store.js';
@@ -105,6 +106,7 @@ try {
       if ((statSync(p).mode & 0o777) !== 0o600) throw new Error(`${f} permissions must be 0600`);
     }
   }
+  secureEvaluationHistoryPermissions();
 } catch (e) {
   console.error(`[security] refusing boot: sensitive store permissions could not be secured (${e.message})`);
   throw e;
@@ -253,6 +255,10 @@ const AUDIT_ROUTES = [
   { re: /^\/api\/paper\/stats$/, method: 'GET', action: 'paper.stats' },
   { re: /^\/api\/paper\/reset$/, method: 'POST', action: 'paper.reset' },
   { re: /^\/api\/evaluation-lab$/, method: 'POST', action: 'evaluation.run' },
+  { re: /^\/api\/evaluation-lab\/history$/, method: 'GET', action: 'evaluation.history.list' },
+  { re: /^\/api\/evaluation-lab\/history\/compare$/, method: 'GET', action: 'evaluation.history.compare' },
+  { re: /^\/api\/evaluation-lab\/history\/[^/]+$/, method: 'GET', action: 'evaluation.history.read' },
+  { re: /^\/api\/evaluation-lab\/history\/[^/]+\/export$/, method: 'GET', action: 'evaluation.export' },
   { re: /^\/api\/audit$/, method: 'GET', action: 'audit.read' },
 ];
 // canonical sha256 of JSON.stringify(sorted keys) — deterministic payload fingerprint
@@ -767,6 +773,10 @@ const OPENAPI_PATHS = {
   '/api/leaderboard': { get: { summary: 'Paper leaderboard plus qualified public-promotion subset (masked identities)', tags: ['social'], security: [] } },
   '/api/backtest': { post: { summary: 'Objective-rules backtest with FXReplay KPIs + honesty caveats', tags: ['analysis'], security: [], requestBody: { content: { 'application/json': { schema: { type: 'object' } } } } } },
   '/api/evaluation-lab': { post: { summary: 'Paper-only walk-forward strategy evaluation and fail-closed promotion evidence', tags: ['analysis'], requestBody: { content: { 'application/json': { schema: { type: 'object' } } } } } },
+  '/api/evaluation-lab/history': { get: { summary: 'Private retained evaluation history for the current user', tags: ['analysis'] } },
+  '/api/evaluation-lab/history/compare': { get: { summary: 'Compare exactly two current-user evaluation runs', tags: ['analysis'], parameters: [{ name: 'ids', in: 'query', required: true, schema: { type: 'string' } }] } },
+  '/api/evaluation-lab/history/{id}': { get: { summary: 'Read one current-user evaluation run', tags: ['analysis'], parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }] } },
+  '/api/evaluation-lab/history/{id}/export': { get: { summary: 'Deterministic private JSON or CSV evidence export', tags: ['analysis'], parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }, { name: 'format', in: 'query', required: true, schema: { type: 'string', enum: ['json', 'csv'] } }] } },
   '/api/token-audit': { post: { summary: 'Binance Web3 token security audit (honeypot/rug/tax scan)', tags: ['analysis'], security: [], requestBody: { content: { 'application/json': { schema: { type: 'object', properties: { contractAddress: { type: 'string' }, chainId: { type: 'string' } }, required: ['contractAddress'] } } } } } },
   '/api/smart-money': { get: { summary: 'Whale buy/sell signals (BSC/Solana)', tags: ['analysis'], security: [] } },
   '/api/signals/feed': { get: { summary: 'Public signal feed with on-chain proof status', tags: ['agents'], security: [] } },
@@ -2458,6 +2468,15 @@ function requireUser(req, res, next) {
   res.status(401).json({ error: 'auth required' });
 }
 
+// Evaluation history belongs to a real user account. Browser sessions and
+// that user's revocable agent credentials share one private history; platform
+// keys have no user owner and therefore fail closed.
+function evaluationOwner(req) {
+  if (req.session?.userId && auth.findById(req.session.userId)) return req.session.userId;
+  if (req.userAgent?.userId && userAgentHas(req, 'read')) return req.userAgent.userId;
+  return null;
+}
+
 // Per-user paper accounts (v1.8):
 //   session user  → own account, created on first access with fresh $100K
 //   platform key  → the shared 'default' account (platform/agent account)
@@ -2539,7 +2558,8 @@ const API_INDEX = {
   ],
   leaderboard: { path: '/api/leaderboard', method: 'GET', query: 'period=week|all', purpose: 'PUBLIC paper leaderboard plus a promoted subset requiring positive P&L and 5+ closed trades; identities are masked' },
   backtest: { path: '/api/backtest', method: 'POST', body: '{symbol,timeframe?:1d|4h|1h|15m,strategy:{name?,side,entry:{rule:ma-cross|rsi|breakout|ai-score,params},exit:{stopPct?,targetPct?,trailingPct?,maxBars?},sizePct?}}', purpose: 'PUBLIC backtesting (FXReplay methodology): objective rules vs historical bars → expectancy, profit factor, max drawdown, Sharpe, vs buy-and-hold + per-trade journal. Honest caveats included.' },
-  evaluationLab: { path: '/api/evaluation-lab', method: 'POST', body: '{symbol,timeframe,strategy,config?:{trainBars,testBars,stepBars,minimumTrades,costs:{feeBps,spreadBps,slippageBps}}}', purpose: 'AUTHENTICATED paper-only rolling walk-forward evaluation with causal next-bar fills, realistic costs, baselines, calibration, evidence hashes and a fail-closed paper-review gate.' },
+  evaluationLab: { path: '/api/evaluation-lab', method: 'POST', body: '{symbol,timeframe,strategy,config?:{trainBars,testBars,stepBars,minimumTrades,costs:{feeBps,spreadBps,slippageBps}}}', purpose: 'AUTHENTICATED per-user paper-only rolling walk-forward evaluation with causal next-bar fills, realistic costs, baselines, calibration, evidence hashes, private retained history and a fail-closed paper-review gate.' },
+  evaluationHistory: { path: '/api/evaluation-lab/history', method: 'GET', query: 'limit=1..retention maximum', purpose: 'List only the current user history. Read one run at /history/:id, compare two at /history/compare?ids=id1,id2, or export deterministic evidence at /history/:id/export?format=json|csv.' },
   binanceData: [
     { path: '/api/token-audit', method: 'POST', body: '{contractAddress, chainId?:56|8453|CT_501|1}', purpose: 'PUBLIC Binance Web3 token security audit (honeypot/rug-pull/scam/tax scan). No keys. Proxy of web3.binance.com — result normalized: riskLevel 1-5, taxes, verified flag, risk-item checks. NOT investment advice.' },
     { path: '/api/smart-money', method: 'GET', query: 'chainId=56|CT_501&page=1&pageSize=20', purpose: 'PUBLIC Binance Web3 smart-money on-chain signals (BSC/Solana): buy/sell events from tracked whale wallets, trigger vs current price, max gain, exit rate, tags. 30s server cache. NOT investment advice.' },
@@ -3020,16 +3040,65 @@ app.post('/api/backtest', publicLimiter, async (req, res) => {
 // Authenticated, read-only historical analysis. The result can only identify a
 // paper candidate; this route has no execution, live, token or chain mutation.
 app.post('/api/evaluation-lab', publicLimiter, requireUser, async (req, res) => {
+  const ownerId = evaluationOwner(req);
+  if (!ownerId) return res.status(403).json({ error: 'user-bound evaluation history required' });
   const { symbol, timeframe = '1d', strategy, config } = req.body || {};
   if (!symbol || !strategy?.entry?.rule) return res.status(400).json({ error: 'symbol and strategy.entry.rule required' });
   try {
     const candles = await getKlines(String(symbol).toUpperCase(), timeframe, 500);
     const result = evaluateAgentStrategy({ symbol, timeframe, strategy, candles, config });
+    if (result.ok) result.history = saveEvaluation(ownerId, result);
+    res.set('Cache-Control', 'private, no-store');
     res.status(result.ok ? 200 : 400).json(result);
   } catch (error) {
     res.status(502).json({ ok: false, mode: 'paper-only', error: error.message,
       promotion: { allowed: false, decision: 'HOLD', scope: 'paper-strategy-candidate' } });
   }
+});
+
+app.get('/api/evaluation-lab/history', requireUser, (req, res) => {
+  const ownerId = evaluationOwner(req);
+  if (!ownerId) return res.status(403).json({ error: 'user-bound evaluation history required' });
+  try { res.set('Cache-Control', 'private, no-store'); res.json({ ok: true, mode: 'paper-only', ...listEvaluations(ownerId, req.query.limit) }); }
+  catch (error) { res.status(409).json({ ok: false, error: error.message }); }
+});
+
+app.get('/api/evaluation-lab/history/compare', requireUser, (req, res) => {
+  const ownerId = evaluationOwner(req);
+  if (!ownerId) return res.status(403).json({ error: 'user-bound evaluation history required' });
+  try {
+    const result = compareEvaluations(ownerId, String(req.query.ids || '').split(',').filter(Boolean));
+    if (!result) return res.status(404).json({ error: 'evaluation run not found' });
+    res.set('Cache-Control', 'private, no-store'); res.json({ ok: true, ...result });
+  } catch (error) { res.status(400).json({ ok: false, error: error.message }); }
+});
+
+app.get('/api/evaluation-lab/history/:id/export', requireUser, (req, res) => {
+  const ownerId = evaluationOwner(req);
+  if (!ownerId) return res.status(403).json({ error: 'user-bound evaluation history required' });
+  const format = req.query.format === 'csv' ? 'csv' : req.query.format === 'json' ? 'json' : null;
+  if (!format) return res.status(400).json({ error: 'format must be json or csv' });
+  try {
+    const body = format === 'csv' ? exportEvaluationCsv(ownerId, req.params.id) : exportEvaluationJson(ownerId, req.params.id);
+    if (body == null) return res.status(404).json({ error: 'evaluation run not found' });
+    res.set({
+      'Cache-Control': 'private, no-store',
+      'Content-Type': format === 'csv' ? 'text/csv; charset=utf-8' : 'application/json; charset=utf-8',
+      'Content-Disposition': `attachment; filename="iost-evaluation-${req.params.id}.${format}"`,
+      'X-Content-Type-Options': 'nosniff',
+    });
+    res.send(body);
+  } catch (error) { res.status(409).json({ ok: false, error: error.message }); }
+});
+
+app.get('/api/evaluation-lab/history/:id', requireUser, (req, res) => {
+  const ownerId = evaluationOwner(req);
+  if (!ownerId) return res.status(403).json({ error: 'user-bound evaluation history required' });
+  try {
+    const run = getEvaluation(ownerId, req.params.id);
+    if (!run) return res.status(404).json({ error: 'evaluation run not found' });
+    res.set('Cache-Control', 'private, no-store'); res.json({ ok: true, mode: 'paper-only', ...run });
+  } catch (error) { res.status(409).json({ ok: false, error: error.message }); }
 });
 
 // status endpoint — honest ARD: last sweep summary
