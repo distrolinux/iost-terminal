@@ -2257,7 +2257,8 @@ async function renderEvaluationLab() {
           <p>The lab will expose out-of-sample performance, costs, calibration, baselines and every reason the promotion gate holds.</p>
         </div>
       </section>
-    </div>`;
+    </div>
+    <section class="card eval-history" id="evalHistory" aria-live="polite"><div class="section-title">Private evaluation history</div><div class="muted">Loading retained runs…</div></section>`;
 
   const setRuleFields = () => {
     const rule = $('#evRule').value; const p1 = $('#evP1'); const p2 = $('#evP2'); const field2 = $('#evP2Field');
@@ -2283,10 +2284,11 @@ async function renderEvaluationLab() {
     const button = $('#evRun'); const out = $('#evalResult');
     button.disabled = true; button.textContent = 'Evaluating unseen windows…';
     out.innerHTML = `<div class="eval-await is-running"><span class="eval-orbit" aria-hidden="true">⌬</span><strong>Walking forward</strong><p>Freezing parameters, replaying unseen windows and challenging the result against baselines.</p></div>`;
-    try { renderEvaluationResult(out, await post('/api/evaluation-lab', body)); }
+    try { renderEvaluationResult(out, await post('/api/evaluation-lab', body)); await loadEvaluationHistory(); }
     catch (error) { out.innerHTML = `<div class="card eval-error"><strong>Evaluation held closed</strong><p>${esc(error.message)}</p><span>No strategy was promoted.</span></div>`; }
     finally { button.disabled = false; button.innerHTML = 'Run walk-forward evaluation <span>→</span>'; }
   });
+  await loadEvaluationHistory();
 }
 
 function renderEvaluationResult(out, data) {
@@ -2324,10 +2326,108 @@ function renderEvaluationResult(out, data) {
         ${warnings ? `<ul class="eval-findings">${warnings}</ul>` : ''}
       </section>
     </div>
+    <div class="eval-chart-grid">
+      <section class="card"><div class="section-title">Equity <span class="sub">strategy vs causal baselines</span></div><canvas class="eval-chart" id="evEquityChart" aria-label="Evaluation equity and baseline chart"></canvas></section>
+      <section class="card"><div class="section-title">Drawdown <span class="sub">peak-to-trough, out-of-sample</span></div><canvas class="eval-chart" id="evDrawdownChart" aria-label="Evaluation drawdown chart"></canvas></section>
+      <section class="card"><div class="section-title">Baseline equity</div><canvas class="eval-chart" id="evBaselineChart" aria-label="Evaluation baseline equity chart"></canvas></section>
+      <section class="card"><div class="section-title">Confidence calibration <span class="sub">predicted vs observed</span></div><canvas class="eval-chart" id="evCalibrationChart" aria-label="Evaluation confidence calibration chart"></canvas></section>
+    </div>
     <section class="card eval-folds"><div class="section-title">Walk-forward ledger <span class="sub">non-overlapping train/test boundary · ${data.folds?.length || 0} folds</span></div>
       <div class="table-wrap"><table><thead><tr><th>Fold</th><th>Train bars</th><th>Unseen test bars</th><th>Trades</th><th>Return</th></tr></thead><tbody>${folds}</tbody></table></div>
       <div class="eval-hash mono">RESULT HASH · ${esc(data.evidence?.resultHash || 'unavailable')}</div>
     </section>`;
+  requestAnimationFrame(() => drawEvaluationCharts(data));
+}
+
+function drawEvalLines(canvas, datasets, { valueKey = 'equity', zero = false } = {}) {
+  if (!canvas) return;
+  const dpr = devicePixelRatio || 1; const W = canvas.clientWidth || 420; const H = canvas.clientHeight || 170;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  const ctx = canvas.getContext('2d'); ctx.scale(dpr, dpr); ctx.clearRect(0, 0, W, H);
+  const valid = datasets.map(d => ({ ...d, points: (d.points || []).filter(p => Number.isFinite(p?.[valueKey])) })).filter(d => d.points.length);
+  const values = valid.flatMap(d => d.points.map(p => p[valueKey]));
+  if (!values.length) { ctx.fillStyle = 'rgba(232,241,248,.45)'; ctx.font = '11px JetBrains Mono'; ctx.fillText('No chart evidence available', 12, H / 2); return; }
+  const pad = 16; let min = Math.min(...values), max = Math.max(...values); if (zero) { min = Math.min(min, 0); max = Math.max(max, 0); }
+  const span = Math.max(max - min, 1e-9); const longest = Math.max(...valid.map(d => d.points.length));
+  const x = i => pad + i * ((W - pad * 2) / Math.max(longest - 1, 1)); const y = v => H - pad - ((v - min) / span) * (H - pad * 2);
+  ctx.strokeStyle = 'rgba(255,255,255,.06)'; ctx.lineWidth = 1;
+  for (let g = 0; g <= 3; g++) { const gy = pad + g * (H - pad * 2) / 3; ctx.beginPath(); ctx.moveTo(pad, gy); ctx.lineTo(W - pad, gy); ctx.stroke(); }
+  if (zero && min < 0 && max > 0) { ctx.strokeStyle = 'rgba(255,255,255,.2)'; ctx.beginPath(); ctx.moveTo(pad, y(0)); ctx.lineTo(W - pad, y(0)); ctx.stroke(); }
+  for (const dataset of valid) {
+    ctx.strokeStyle = dataset.color; ctx.lineWidth = dataset.width || 1.7; ctx.beginPath();
+    dataset.points.forEach((point, i) => { const px = x(i * (longest - 1) / Math.max(dataset.points.length - 1, 1)); const py = y(point[valueKey]); i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); });
+    ctx.stroke();
+  }
+  ctx.font = '9px JetBrains Mono'; ctx.fillStyle = 'rgba(232,241,248,.55)'; ctx.fillText(fmtNum(max, 2), pad, 10); ctx.fillText(fmtNum(min, 2), pad, H - 3);
+  let lx = W - pad;
+  [...valid].reverse().forEach(d => { const width = ctx.measureText(d.label).width + 16; lx -= width; ctx.fillStyle = d.color; ctx.fillRect(lx, 5, 7, 2); ctx.fillText(d.label, lx + 10, 9); });
+}
+
+function drawCalibration(canvas, buckets) {
+  const points = (buckets || []).map((b, index) => ({ index, predicted: Number(b.predicted), observed: Number(b.observed) }));
+  drawEvalLines(canvas, [
+    { label: 'predicted', color: '#00e5ff', points: points.map(p => ({ value: p.predicted })) },
+    { label: 'observed', color: '#2fffd0', points: points.map(p => ({ value: p.observed })) },
+  ], { valueKey: 'value', zero: true });
+}
+
+function drawEvaluationCharts(data) {
+  const series = data.series || {}; const base = series.baselines || {};
+  drawEvalLines($('#evEquityChart'), [
+    { label: 'strategy', color: '#2fffd0', width: 2.2, points: series.equity },
+    { label: 'buy/hold', color: '#7c5cff', points: base.buyAndHold },
+    { label: 'SMA', color: '#00e5ff', points: base.smaCross },
+    { label: 'cash', color: '#8b98a5', points: base.cash },
+  ]);
+  drawEvalLines($('#evDrawdownChart'), [{ label: 'drawdown %', color: '#ff6157', width: 2, points: series.drawdown }], { valueKey: 'drawdownPct', zero: true });
+  drawEvalLines($('#evBaselineChart'), Object.entries(base).map(([key, points], index) => ({ label: key, color: ['#7c5cff', '#00e5ff', '#8b98a5'][index], points })));
+  drawCalibration($('#evCalibrationChart'), data.calibration?.buckets);
+}
+
+async function loadEvaluationHistory() {
+  const box = $('#evalHistory'); if (!box) return;
+  let history;
+  try { history = await api('/api/evaluation-lab/history'); }
+  catch (error) { box.innerHTML = `<div class="section-title">Private evaluation history</div><div class="muted">History unavailable: ${esc(error.message)}</div>`; return; }
+  const runs = history.runs || [];
+  const rows = runs.map(run => `<tr>
+    <td><input type="checkbox" data-eval-compare="${esc(run.id)}" aria-label="Select ${esc(run.strategy?.name || 'evaluation')} for comparison"></td>
+    <td><strong>${esc(run.symbol)}</strong><span class="eval-history-name">${esc(run.strategy?.name || run.strategy?.rule || 'strategy')}</span></td>
+    <td>${esc(run.timeframe)}</td><td>${new Date(run.createdAt).toLocaleString()}</td>
+    <td class="${(run.metrics?.cumulativeReturnPct || 0) >= 0 ? 'up' : 'down'}">${fmtNum(run.metrics?.cumulativeReturnPct)}%</td>
+    <td><span class="chip ${run.promotion?.allowed ? 'ok' : 'warn'}">${esc(run.promotion?.decision || 'HOLD')}</span></td>
+    <td class="eval-history-actions"><button class="btn sm ghost" data-eval-view="${esc(run.id)}">View</button><a class="btn sm ghost" href="/api/evaluation-lab/history/${esc(run.id)}/export?format=json">JSON</a><a class="btn sm ghost" href="/api/evaluation-lab/history/${esc(run.id)}/export?format=csv">CSV</a></td>
+  </tr>`).join('');
+  box.innerHTML = `<div class="section-title">Private evaluation history <span class="sub">${runs.length}/${history.retention?.maxRuns || 25} retained · ${history.retention?.retentionDays || 90} days · owner-only</span><button class="btn sm" id="evalCompare" disabled>Compare selected</button></div>
+    ${rows ? `<div class="table-wrap"><table><thead><tr><th></th><th>Run</th><th>Bar</th><th>Created</th><th>Return</th><th>Gate</th><th>Evidence</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty">No saved evaluations yet.</div>'}`;
+  const checks = [...box.querySelectorAll('[data-eval-compare]')]; const compare = $('#evalCompare');
+  checks.forEach(check => check.addEventListener('change', () => {
+    const selected = checks.filter(x => x.checked);
+    if (selected.length > 2) { check.checked = false; toast('Select exactly two evaluation runs'); }
+    if (compare) compare.disabled = checks.filter(x => x.checked).length !== 2;
+  }));
+  box.querySelectorAll('[data-eval-view]').forEach(button => button.addEventListener('click', async () => {
+    try { const run = await api(`/api/evaluation-lab/history/${button.dataset.evalView}`); renderEvaluationResult($('#evalResult'), run.evaluation); $('#evalResult')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    catch (error) { toast(`History unavailable: ${error.message}`); }
+  }));
+  compare?.addEventListener('click', async () => {
+    const ids = checks.filter(x => x.checked).map(x => x.dataset.evalCompare);
+    try { renderEvaluationComparison($('#evalResult'), await api(`/api/evaluation-lab/history/compare?ids=${encodeURIComponent(ids.join(','))}`)); $('#evalResult')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    catch (error) { toast(`Comparison unavailable: ${error.message}`); }
+  });
+}
+
+function renderEvaluationComparison(out, data) {
+  const [a, b] = data.runs || []; const delta = data.delta || {};
+  if (!a || !b) return;
+  const cell = (label, key, suffix = '') => `<div class="card kpi"><span class="k-label">Δ ${label}</span><span class="k-value ${(delta[key] || 0) >= 0 ? 'up' : 'down'}">${delta[key] > 0 ? '+' : ''}${fmtNum(delta[key], 4)}${suffix}</span><span class="k-sub">second minus first</span></div>`;
+  out.innerHTML = `<article class="eval-verdict is-hold"><span class="eval-verdict-label">PRIVATE RUN COMPARISON · PAPER EVIDENCE ONLY</span><strong>${esc(a.symbol)} ${esc(a.strategy?.name)} → ${esc(b.symbol)} ${esc(b.strategy?.name)}</strong><p>No strategy state or execution permission changed.</p></article>
+    <div class="grid g-3 eval-kpis">${cell('return', 'cumulativeReturnPct', '%')}${cell('drawdown', 'maxDrawdownPct', '%')}${cell('Sharpe-like', 'sharpeLike')}${cell('win rate', 'winRatePct', '%')}${cell('trades', 'trades')}${cell('costs', 'totalCosts')}</div>
+    <section class="card"><div class="section-title">Equity comparison <span class="sub">normalized paper evidence · stored result hashes preserved</span></div><canvas class="eval-chart eval-chart-wide" id="evCompareChart" aria-label="Two-run equity comparison chart"></canvas><div class="eval-hash mono">A ${esc(a.evidence?.resultHash || '')}<br>B ${esc(b.evidence?.resultHash || '')}</div></section>`;
+  requestAnimationFrame(() => drawEvalLines($('#evCompareChart'), [
+    { label: `A ${a.symbol}`, color: '#00e5ff', points: a.series?.equity, width: 2 },
+    { label: `B ${b.symbol}`, color: '#2fffd0', points: b.series?.equity, width: 2 },
+  ]));
 }
 
 // ---------------- Journal ----------------

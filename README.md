@@ -75,6 +75,8 @@ remain separate from deployment and do not enable any money or token boundary.
 | `lib/news.js` | News + sentiment engine (RSS, key-free): headlines classified bullish/neutral/bearish |
 | `lib/onchain.js` | IOST mainnet dashboard via the configured operator node (or public RPC fallback): head/LIB finality, TPS, peers, freshness, large transfers, gas/RAM |
 | `lib/paper.js` | Paper trading engine + AI journal (every trade: entry, stop, target, reason, AI confidence, result) |
+| `lib/evaluation.js` | Causal rolling walk-forward evaluation, cost modeling, baselines, calibration, charts and fail-closed paper-review evidence |
+| `lib/evaluation-history.js` | Private per-user retained evaluation history, same-owner comparison, integrity checks and deterministic JSON/CSV evidence exports |
 
 ## Data sources
 

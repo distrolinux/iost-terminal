@@ -587,9 +587,19 @@ body.cmd .ticker-wrap { background: rgba(6, 10, 17, .9); border-color: rgba(0, 2
 .eval-baseline>strong { text-align:right; font-family:var(--mono); }
 .eval-findings { margin:0; padding-left:18px; color:var(--warn); font-size:11px; line-height:1.65; }.eval-findings.is-failure { color:var(--down); }.eval-clear { color:var(--mint); font-size:11px; }
 .eval-hash { margin-top:9px; color:var(--dim); font-size:9px; overflow-wrap:anywhere; }
+.eval-chart-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-bottom:12px; }
+.eval-chart-grid>.card { min-width:0; padding:14px; }
+.eval-chart { display:block; width:100%; height:170px; }
+.eval-chart-wide { height:230px; }
+.eval-history { margin-top:14px; padding:14px; }
+.eval-history .section-title { align-items:center; }
+.eval-history .section-title .btn { margin-left:auto; }
+.eval-history-name { display:block; max-width:180px; color:var(--dim); font-size:9px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.eval-history-actions { display:flex; gap:5px; white-space:nowrap; }
+.eval-history-actions .btn { text-decoration:none; }
 .eval-error { padding:20px; border-color:rgba(255,92,92,.35)!important; }.eval-error strong { color:var(--down); }.eval-error p,.eval-error span { color:var(--muted); font-size:11px; }
 @media (max-width: 1050px) { .eval-layout { grid-template-columns:1fr; }.eval-await { min-height:260px; } }
-@media (max-width: 760px) { .eval-boundary { flex-direction:column; }.eval-form { padding:13px; }.eval-fields { grid-template-columns:1fr; }.eval-pipeline { grid-template-columns:repeat(6,125px); }.eval-baseline { grid-template-columns:80px 1fr 58px; } }
+@media (max-width: 760px) { .eval-boundary { flex-direction:column; }.eval-form { padding:13px; }.eval-fields,.eval-chart-grid { grid-template-columns:1fr; }.eval-pipeline { grid-template-columns:repeat(6,125px); }.eval-baseline { grid-template-columns:80px 1fr 58px; }.eval-history-actions { flex-wrap:wrap; }.eval-chart { height:150px; } }
 @media (prefers-reduced-motion: reduce) { .eval-await.is-running .eval-orbit { animation:none; } }
 
 /* ================= auth (v1.7) — terminal-themed, ARD-compliant ================= */

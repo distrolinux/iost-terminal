@@ -8,18 +8,25 @@ const home = readFileSync(new URL('../public/index.html', import.meta.url), 'utf
 
 assert.match(html, /data-view="evaluation"[^>]+View Agent Evaluation Lab/);
 assert.match(html, /id="view-evaluation"[^>]+Agent Evaluation Lab view/);
-assert.match(html, /\/css\/style\.css\?v=2\.17/);
-assert.match(html, /\/js\/app\.js\?v=2\.21\.0/);
+assert.match(html, /\/css\/style\.css\?v=2\.18/);
+assert.match(html, /\/js\/app\.js\?v=2\.22\.0/);
 assert.match(app, /VALID_VIEWS = \[[^\]]*'evaluation'/);
 assert.match(app, /async function renderEvaluationLab\(\)/);
 assert.match(app, /post\('\/api\/evaluation-lab'/);
 assert.match(app, /next-bar-open/i);
 assert.match(app, /ELIGIBLE_FOR_PAPER_REVIEW/);
 assert.match(app, /minimum out-of-sample/i);
+assert.match(app, /async function loadEvaluationHistory\(\)/);
+assert.match(app, /\/api\/evaluation-lab\/history\/compare\?ids=/);
+assert.match(app, /format=json/);
+assert.match(app, /format=csv/);
+assert.match(app, /function drawEvaluationCharts\(data\)/);
 assert.match(app, /\['portfolio',[^\]]*'evaluation'/);
 assert.doesNotMatch(app.slice(app.indexOf('async function renderEvaluationLab()'), app.indexOf('// ---------------- Journal')), /enableLive|live\/enable|conversion|phase4|deploy/);
 assert.match(css, /\.eval-pipeline/);
 assert.match(css, /\.eval-baseline/);
+assert.match(css, /\.eval-chart-grid/);
+assert.match(css, /\.eval-history/);
 assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.eval-form/);
 assert.match(home, /Agent Evaluation Lab/);
 assert.match(home, /walk-forward[^<]+future-data leakage/i);

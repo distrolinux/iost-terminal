@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { evaluateAgentStrategy, promotionPolicy } from '../lib/evaluation.js';
+import { evaluateAgentStrategy, promotionPolicy, verifyEvaluationEvidence } from '../lib/evaluation.js';
 
 function candles(count = 260, mutateFuture = false) {
   const out = [];
@@ -40,10 +40,16 @@ assert.ok(Number.isFinite(base.calibration.expectedCalibrationError));
 assert.equal(base.promotion.scope, 'paper-strategy-candidate');
 assert.equal(base.promotion.allowed, base.promotion.failures.length === 0);
 assert.match(base.evidence.resultHash, /^[a-f0-9]{64}$/);
+assert.equal(verifyEvaluationEvidence(base), true);
+assert.ok(base.series.equity.length > 2);
+assert.equal(base.series.equity.length, base.series.drawdown.length);
+assert.deepEqual(Object.keys(base.series.baselines).sort(), ['buyAndHold', 'cash', 'smaCross'].sort());
+assert.ok(base.series.equity.every((point, index, rows) => !index || point.index > rows[index - 1].index));
 
 const changed = evaluateAgentStrategy({ symbol: 'IOST', timeframe: '1d', strategy, candles: candles(260, true), config });
 assert.deepEqual(changed.folds[0], base.folds[0]);
 assert.deepEqual(changed.trades.filter((t) => t.fold === 1), base.trades.filter((t) => t.fold === 1));
+assert.equal(verifyEvaluationEvidence({ ...base, metrics: { ...base.metrics, trades: base.metrics.trades + 1 } }), false);
 
 const tooSmall = evaluateAgentStrategy({ symbol: 'IOST', timeframe: '1d', strategy, candles: candles(100), config });
 assert.equal(tooSmall.ok, false);
@@ -51,6 +57,9 @@ assert.equal(tooSmall.promotion.allowed, false);
 const invalidSize = evaluateAgentStrategy({ symbol: 'IOST', timeframe: '1d', strategy: { ...strategy, sizePct: 'NaN' }, candles: candles(), config });
 assert.equal(invalidSize.ok, false);
 assert.equal(invalidSize.promotion.allowed, false);
+const invalidSymbol = evaluateAgentStrategy({ symbol: '=IMPORTXML()', timeframe: '1d', strategy, candles: candles(), config });
+assert.equal(invalidSymbol.ok, false);
+assert.equal(invalidSymbol.promotion.allowed, false);
 
 const gate = promotionPolicy({ metrics: { trades: 200, maxDrawdownPct: 5, sharpeLike: 2, cumulativeReturnPct: 20 },
   baselines: { buyAndHold: { returnPct: 2 }, smaCross: { returnPct: 1 } },
