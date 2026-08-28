@@ -262,6 +262,22 @@ h2 .muted-line { color: var(--dim); }
 .cta .orb.a { width: 420px; height: 420px; background: rgba(0, 229, 255, .16); left: 8%; top: 10%; }
 .cta .orb.b { width: 520px; height: 520px; background: rgba(124, 92, 255, .14); right: 6%; bottom: 0; }
 
+/* ---------- evaluation proof layer ---------- */
+.eval-showcase { padding: 90px 40px; border-top: 1px solid rgba(0,229,255,.12); border-bottom: 1px solid rgba(124,92,255,.16); background: linear-gradient(110deg,rgba(0,229,255,.055),transparent 45%,rgba(124,92,255,.07)); }
+.eval-showcase-inner { display:grid; grid-template-columns:1.05fr .95fr; gap:54px; align-items:center; max-width:1200px; margin:auto; }
+.eval-kicker { color:var(--mint); font:700 11px var(--mono); letter-spacing:.14em; }
+.eval-showcase h2 { margin:14px 0 18px; font-size:clamp(34px,4.8vw,68px); line-height:.98; text-transform:uppercase; }
+.eval-showcase p { max-width:640px; color:var(--muted); font-size:15px; line-height:1.7; }
+.eval-proof { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:26px 0; padding:0; list-style:none; }
+.eval-proof li { padding:11px; border:1px solid rgba(0,229,255,.16); border-radius:8px; background:rgba(6,10,17,.55); }
+.eval-proof b,.eval-proof span { display:block; }.eval-proof b { color:var(--cyan); font:700 11px var(--mono); }.eval-proof span { margin-top:4px; color:var(--dim); font-size:10px; }
+.eval-console { padding:18px; border:1px solid rgba(0,229,255,.2); border-radius:14px; background:rgba(5,9,16,.82); box-shadow:0 22px 60px rgba(0,0,0,.38),0 0 40px rgba(124,92,255,.08); }
+.eval-console-head { display:flex; justify-content:space-between; padding-bottom:11px; border-bottom:1px solid rgba(255,255,255,.07); color:var(--dim); font:10px var(--mono); letter-spacing:.1em; }
+.eval-console-head strong { color:var(--warn); }.eval-console-flow { display:grid; grid-template-columns:repeat(5,1fr); gap:5px; margin:14px 0; }
+.eval-console-flow span { padding:8px 4px; border:1px solid rgba(0,229,255,.13); border-radius:6px; text-align:center; color:var(--muted); font:9px var(--mono); }
+.eval-console dl { display:grid; grid-template-columns:1fr auto; gap:8px; margin:0; font:11px var(--mono); }.eval-console dt { color:var(--dim); }.eval-console dd { margin:0; color:var(--text); }.eval-console .hold { color:var(--warn); }
+@media (max-width:900px) { .eval-showcase-inner { grid-template-columns:1fr; }.eval-console { max-width:680px; } }
+
 /* ---------- footer ---------- */
 footer { border-top: 1px solid var(--line); padding: 40px; display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; font-size: 12px; color: var(--dim); }
 footer .links { display: flex; gap: 24px; }
@@ -290,6 +306,7 @@ footer .links a:hover { color: var(--text); }
   .cta { padding: 140px 20px; }
   footer { padding: 32px 20px; }
   footer .links { width: 100%; max-width: 100%; flex-wrap: wrap; gap: 14px 20px; }
+  .eval-showcase { padding:72px 20px; }.eval-proof { grid-template-columns:1fr; }.eval-console-flow { grid-template-columns:1fr 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -353,6 +370,27 @@ footer .links a:hover { color: var(--text); }
 </header>
 
 <div class="strip" id="signal" role="marquee" aria-label="Live market signal tape"><div class="strip-track" id="stripTrack"><span class="strip-item">scanning live tape…</span></div></div>
+
+<section class="eval-showcase" aria-labelledby="evaluationTitle">
+  <div class="eval-showcase-inner">
+    <div>
+      <div class="eval-kicker">PAPER EVIDENCE · FAIL-CLOSED</div>
+      <h2 id="evaluationTitle">Agent Evaluation Lab</h2>
+      <p>Challenge a strategy before it earns trust. Rolling walk-forward windows prevent future-data leakage; realistic fees, spread and slippage expose fragile edges; baselines and confidence calibration decide whether the result stays on hold.</p>
+      <ul class="eval-proof">
+        <li><b>NO LEAKAGE</b><span>signal now · fill next bar</span></li>
+        <li><b>REAL COSTS</b><span>fee · spread · slippage</span></li>
+        <li><b>HARD GATE</b><span>paper review only</span></li>
+      </ul>
+      <a class="btn" href="/app#evaluation" aria-label="Open the paper-only Agent Evaluation Lab">Open Evaluation Lab <span class="arr">→</span></a>
+    </div>
+    <div class="eval-console" aria-label="Illustrative fail-closed evaluation evidence">
+      <div class="eval-console-head"><span>WALK-FORWARD · OUT OF SAMPLE</span><strong>HOLD</strong></div>
+      <div class="eval-console-flow"><span>FREEZE</span><span>TRAIN</span><span>TEST</span><span>COST</span><span>GATE</span></div>
+      <dl><dt>Execution</dt><dd>next-bar-open</dd><dt>Baselines</dt><dd>buy &amp; hold · SMA</dd><dt>Confidence</dt><dd>Brier · calibration</dd><dt>Authority</dt><dd class="hold">paper candidate only</dd></dl>
+    </div>
+  </div>
+</section>
 
 <section class="manifesto" id="manifesto">
   <div class="sec-num reveal">02 / Thesis</div>
