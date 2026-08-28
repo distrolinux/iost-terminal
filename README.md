@@ -81,6 +81,7 @@ remain separate from deployment and do not enable any money or token boundary.
 - Crypto: OKX (primary) → KuCoin → Gate.io (Binance/Bybit geo-blocked from this host)
 - Stocks: Yahoo Finance (delayed) → FMP demo fallback
 - On-chain: `IOST_RPC` operator node when configured, otherwise public RPC `api.iost.io`; the dashboard exposes source label, node freshness, peer health and head-to-LIB finality gap
+- Chain identity: IOSTcallister (`iost_4_life`) is the verified IOST L1 producer; L1 chain 1024 supplies telemetry and signal proofs. AITT remains unissued and separately gated for the EVM-compatible IOST L2, chain 182. `GET /api/chain/identity` exposes this distinction to agents without copying the changing producer rank.
 - News: CoinDesk / Cointelegraph / Decrypt RSS (no API key)
 
 ## Agent API (for Hermes / custom agents)

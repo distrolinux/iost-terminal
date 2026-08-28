@@ -416,7 +416,7 @@ async function renderAgents() {
       <div class="card kpi"><span class="k-label">Agents</span><span class="k-value">${st.agents ?? 0}</span><span class="k-sub">${(st.pinned ?? 0) + (st.queued ?? 0)} provable signals</span></div>
       <div class="card kpi"><span class="k-label">Signals</span><span class="k-value">${st.signals ?? 0}</span><span class="k-sub">${st.queued ?? 0} queued · ${st.pinned ?? 0} pinned on-chain</span></div>
       <div class="card kpi"><span class="k-label">Follows</span><span class="k-value">${st.follows ?? 0}</span><span class="k-sub">${st.copiedPositions ?? 0} copied paper positions</span></div>
-      <div class="card kpi"><span class="k-label">Trust layer</span><span class="k-value" style="font-size:15px">${chain?.ok ? '⛓ IOST mainnet' : '⛓ RPC unreachable'}</span><span class="k-sub">${chain?.headBlock ? 'head block #' + chain.headBlock : 'iost-mainnet'}${chain?.configured ? '' : ' · pin key OFF → queued'}</span></div>
+      <div class="card kpi"><span class="k-label">L1 trust layer</span><span class="k-value" style="font-size:15px">${chain?.ok ? '⛓ IOST mainnet' : '⛓ RPC unreachable'}</span><span class="k-sub">${esc(chain?.identity?.operator?.displayName || 'IOSTcallister')} · ${chain?.headBlock ? 'head #' + chain.headBlock : 'chain 1024'}${chain?.configured ? '' : ' · pin key OFF'}</span></div>
     </div>
     <div class="card" style="margin-bottom:16px">
       <div class="section-title" style="margin-bottom:8px">Agent registry <span class="sub">win rates from real paper journals · provable track records</span></div>
@@ -1917,6 +1917,10 @@ async function renderOnchain() {
   try { o = await api('/api/onchain'); state.onchain = o; } catch (e) { el.innerHTML = `<div class="card empty">On-chain unavailable: ${esc(e.message)}</div>`; return; }
   const c = o.chain;
   const n = o.node || {};
+  const identity = o.identity || {};
+  const operator = identity.operator || {};
+  const l1 = identity.layers?.l1 || {};
+  const l2 = identity.layers?.l2 || {};
   const nodeHealthy = n.status === 'healthy';
   const nodeStatus = nodeHealthy ? '<span class="up">● healthy</span>' : n.status === 'degraded' ? '<span class="warn">● degraded</span>' : '<span class="down">● offline</span>';
   const age = n.headAgeSec == null ? '—' : `${n.headAgeSec}s`;
@@ -1924,9 +1928,27 @@ async function renderOnchain() {
   const maxTx = Math.max(...o.series.map(s => s.txs), 1);
   const bars = o.series.slice(-30).map(s => `<i title="block ${s.height}: ${s.txs} tx" style="height:${Math.max(6, (s.txs / maxTx) * 100)}%"></i>`).join('');
   el.innerHTML = `
-    <div class="section-title">IOST On-Chain Dashboard <span class="sub">mainnet · ${nodeStatus}</span></div>
+    <div class="section-title">IOST Dual-Chain Trust <span class="sub">Layer 1 telemetry · Layer 2 token readiness</span></div>
+    <div class="grid g-2" style="margin-bottom:16px">
+      <section class="card" aria-labelledby="l1TrustTitle">
+        <div class="section-title" id="l1TrustTitle" style="margin-bottom:8px">IOST Layer 1 <span class="sub">producer identity + trust anchoring</span></div>
+        <div class="grid g-2">
+          <div class="kpi"><span class="k-label">Verified producer</span><span class="k-value" style="font-size:17px">${esc(operator.displayName || 'IOSTcallister')}</span><span class="k-sub mono">${esc(operator.account || 'iost_4_life')} · ${esc(operator.country || 'Canada')}</span></div>
+          <div class="kpi"><span class="k-label">Native network</span><span class="k-value" style="font-size:17px">chain ${l1.chainId ?? 1024}</span><span class="k-sub">${esc(l1.runtime || 'IOST V8VM')} · ${nodeStatus}</span></div>
+        </div>
+        <p class="muted" style="font-size:11px;margin-top:10px">Rank is live and may change. <a href="${esc(operator.explorer || 'https://iostscan.com/en/account/iost_4_life')}" target="_blank" rel="noopener">Verify producer ↗</a> · <a href="${esc(operator.ranking || 'https://iostscan.com/en/producers')}" target="_blank" rel="noopener">live ranking ↗</a></p>
+      </section>
+      <section class="card" aria-labelledby="l2TrustTitle">
+        <div class="section-title" id="l2TrustTitle" style="margin-bottom:8px">IOST Layer 2 <span class="sub">AITT canonical home</span></div>
+        <div class="grid g-2">
+          <div class="kpi"><span class="k-label">EVM network</span><span class="k-value" style="font-size:17px">chain ${l2.chainId ?? 182}</span><span class="k-sub">${esc(l2.runtime || 'EVM / Solidity')}</span></div>
+          <div class="kpi"><span class="k-label">AITT status</span><span class="k-value warn" style="font-size:17px">NOT ISSUED</span><span class="k-sub">pre-launch · no contract address</span></div>
+        </div>
+        <p class="muted" style="font-size:11px;margin-top:10px">Layer 2 is separate from the producer node and remains fail-closed. <a href="${esc(l2.explorer || 'https://l2-scan.iost.io')}" target="_blank" rel="noopener">L2 explorer ↗</a></p>
+      </section>
+    </div>
     <div class="card" style="margin-bottom:16px">
-      <div class="section-title" style="margin-bottom:8px">Node trust <span class="sub">read-only network source</span></div>
+      <div class="section-title" style="margin-bottom:8px">Layer 1 node health <span class="sub">read-only telemetry source · not the L2 token RPC</span></div>
       <div class="grid g-3">
         <div class="kpi"><span class="k-label">Source</span><span class="k-value" style="font-size:15px">${esc(n.label || 'IOST RPC')}</span><span class="k-sub">${n.source === 'operator-node' ? 'operator configured' : 'public fallback'}</span></div>
         <div class="kpi"><span class="k-label">Node software</span><span class="k-value" style="font-size:15px">${esc(n.version || '—')}</span><span class="k-sub">${esc(n.mode || 'mode unavailable')}</span></div>
