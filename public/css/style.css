@@ -707,3 +707,28 @@ body.onboarding-open #authReset { display: none !important; }
   .onboarding-card p { min-height: 0; }
 }
 @media (prefers-reduced-motion: reduce) { .onboarding-card { scroll-behavior: auto; } }
+
+/* ---------- owner agent control center ---------- */
+.control-boundary {
+  margin-bottom: 14px; padding: 9px 12px; border: 1px solid rgba(47, 255, 208, .3);
+  border-radius: 9px; background: rgba(47, 255, 208, .055); color: var(--muted);
+  font: 600 11px/1.4 var(--mono); letter-spacing: .06em;
+}
+.control-boundary strong { color: var(--mint); }
+.control-kpis { margin-bottom: 14px; }
+.control-activity { margin-bottom: 14px; }
+.control-activity-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.control-activity-grid > div { display: flex; flex-direction: column; gap: 5px; padding: 11px; border: 1px solid var(--border); border-radius: 9px; background: rgba(255,255,255,.018); }
+.control-activity-grid span:not(.k-label) { color: var(--muted); font-size: 12px; line-height: 1.45; }
+.control-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.btn.danger { background: var(--down); color: #180303; }
+.control-wallets { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; }
+.control-wallet { padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: rgba(255,255,255,.018); }
+.control-wallet-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.control-wallet-head > div { display: flex; flex-direction: column; gap: 3px; }
+.control-wallet dl { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 12px 0; }
+.control-wallet dl div { display: flex; flex-direction: column; gap: 2px; }
+.control-wallet dt { color: var(--dim); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
+.control-wallet dd { margin: 0; font: 600 12px/1.4 var(--mono); }
+.control-capabilities { display: flex; flex-wrap: wrap; gap: 5px; min-height: 25px; margin-bottom: 10px; }
+@media (max-width: 640px) { .control-activity-grid { grid-template-columns: 1fr; } }

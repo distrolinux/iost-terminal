@@ -883,7 +883,7 @@ setInterval(setClock, 1000); setClock();
 
 $$('.nav-btn').forEach(btn => btn.addEventListener('click', () => switchView(btn.dataset.view)));
 // ARD: deterministic paths — every view has a stable deep link (/app#scanner, /app#risk, …)
-const VALID_VIEWS = ['scanner', 'scores', 'risk', 'portfolio', 'onchain', 'news', 'assistant', 'journal', 'performance', 'whales', 'smartmoney', 'audit', 'agents', 'trace', 'points', 'aitt', 'wallet'];
+const VALID_VIEWS = ['scanner', 'scores', 'risk', 'portfolio', 'onchain', 'news', 'assistant', 'journal', 'performance', 'whales', 'smartmoney', 'audit', 'agents', 'control', 'trace', 'points', 'aitt', 'wallet'];
 function switchView(view) {
   if (!VALID_VIEWS.includes(view)) view = 'scanner';
   state.activeView = view;
@@ -927,7 +927,7 @@ function gotoApiKeyInput() {
 }
 function refreshView(view) {
   // auth-gated views: paper account data (portfolio, journal, performance) + points + wallet
-  if (['portfolio', 'journal', 'performance', 'trace', 'points', 'wallet'].includes(view) && !window.Auth?.state?.loggedIn) {
+  if (['portfolio', 'journal', 'performance', 'control', 'trace', 'points', 'wallet'].includes(view) && !window.Auth?.state?.loggedIn) {
     const el = $(`#view-${view}`);
     if (el) el.innerHTML = `<div class="card empty">Sign in required — <button class="btn sm" id="authGateBtn">open sign in</button></div>`;
     $('#authGateBtn')?.addEventListener('click', () => window.Auth?.open('login'));
@@ -939,7 +939,96 @@ function refreshView(view) {
     return;
   }
   ({ scanner: renderScanner, scores: renderScores, risk: renderRisk, portfolio: renderPortfolio,
-    onchain: renderOnchain, news: renderNews, assistant: renderAssistant, journal: renderJournal, performance: renderPerformance, whales: renderWhales, smartmoney: renderSmartMoney, audit: renderAudit, agents: renderAgents, trace: renderDecisionTrace, points: renderPoints, aitt: renderAITT, wallet: renderWallet })[view]();
+    onchain: renderOnchain, news: renderNews, assistant: renderAssistant, journal: renderJournal, performance: renderPerformance, whales: renderWhales, smartmoney: renderSmartMoney, audit: renderAudit, agents: renderAgents, control: renderAgentControl, trace: renderDecisionTrace, points: renderPoints, aitt: renderAITT, wallet: renderWallet })[view]();
+}
+
+// ---------------- Owner Agent Control Center ----------------
+// One operational view over the server's existing policy and revocation rails.
+// It is intentionally paper-first and never receives API-key or venue secrets.
+async function renderAgentControl() {
+  const el = $('#view-control');
+  el.innerHTML = skeleton();
+  let s;
+  try { s = await api('/api/agent-control'); }
+  catch (e) {
+    el.innerHTML = `<div class="card empty">Agent Control Center is available only to the platform owner. <span class="mono">${esc(e.message)}</span></div>`;
+    return;
+  }
+  const ap = s.autopilot || {};
+  const last = ap.lastAction;
+  const money = (minor) => `$${(Number(minor || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const keys = s.keys || [];
+  const agentWallets = s.wallets || [];
+  el.innerHTML = `
+    <div class="section-title">Agent Control Center <span class="sub">owner-only operations · server-enforced limits</span></div>
+    <div class="control-boundary" role="status">Execution boundary · <strong>PAPER</strong> · live and on-chain execution remain separately gated</div>
+    <div class="grid g-3 control-kpis">
+      <div class="card kpi"><span class="k-label">Autonomous agent</span><span class="k-value ${ap.enabled ? 'up' : ''}">${ap.running ? 'WORKING' : ap.enabled ? 'READY' : 'PAUSED'}</span><span class="k-sub">${ap.ticks || 0} ticks · ${ap.dayTrades || 0} paper trades today</span></div>
+      <div class="card kpi"><span class="k-label">Active access</span><span class="k-value">${s.keyStats?.active || 0}</span><span class="k-sub">agent keys · ${s.keyStats?.revoked || 0} revoked</span></div>
+      <div class="card kpi"><span class="k-label">Pending approvals</span><span class="k-value">${(s.approvals?.paper || 0) + (s.approvals?.live || 0)}</span><span class="k-sub">${s.approvals?.paper || 0} paper · ${s.approvals?.live || 0} live (cannot auto-execute)</span></div>
+    </div>
+    <section class="card control-activity" aria-labelledby="controlActivityTitle">
+      <div class="section-title" id="controlActivityTitle">Agent activity</div>
+      <div class="control-activity-grid">
+        <div><span class="k-label">Current task</span><strong>${esc(ap.currentTask || 'Unknown')}</strong></div>
+        <div><span class="k-label">Last action</span><strong>${esc(last?.type || 'None yet')}</strong><span>${esc(last?.detail || 'No agent action recorded')}</span></div>
+      </div>
+      <div class="control-actions">
+        <button class="btn sm ${ap.enabled ? 'ghost' : 'green'}" id="controlAutopilot">${ap.enabled ? 'Pause agent' : 'Start paper agent'}</button>
+        <button class="btn sm ghost" id="controlApproval">${ap.config?.requireApproval ? 'Approval required' : 'Require approval'}</button>
+        <button class="btn sm danger" id="controlEmergency">Emergency stop</button>
+      </div>
+    </section>
+    <section class="card" aria-labelledby="controlKeysTitle">
+      <div class="section-title" id="controlKeysTitle">Permissions <span class="sub">scoped keys · secrets never displayed here</span></div>
+      ${keys.length ? `<div class="table-wrap"><table><thead><tr><th>Agent</th><th>Scopes</th><th>Last used</th><th>Status</th><th></th></tr></thead><tbody>${keys.map(k => `<tr>
+        <td><strong>${esc(k.name)}</strong><div class="mono muted">${esc(k.prefix)}…</div></td>
+        <td>${(k.scopes || []).map(scope => `<span class="chip ${scope === 'trade-live' ? 'warn' : scope === 'trade-paper' ? 'bull' : 'neut'}">${esc(scope)}</span>`).join(' ')}</td>
+        <td class="mono">${k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString() : 'never'}</td>
+        <td>${k.revokedAt ? '<span class="chip neut">revoked</span>' : '<span class="chip bull">active</span>'}</td>
+        <td>${k.revokedAt ? '' : `<button class="btn sm ghost" data-control-revoke="${esc(k.id)}">Revoke</button>`}</td>
+      </tr>`).join('')}</tbody></table></div>` : '<div class="empty">No agent keys created.</div>'}
+    </section>
+    <section class="card" aria-labelledby="controlBudgetTitle">
+      <div class="section-title" id="controlBudgetTitle">Wallet budgets <span class="sub">integer minor-unit rails enforced before agent execution</span></div>
+      ${agentWallets.length ? `<div class="control-wallets">${agentWallets.map(w => {
+        const lim = w.limits?.USD || {};
+        const usage = w.usage || {};
+        return `<article class="control-wallet">
+          <div class="control-wallet-head"><div><strong>${esc(w.name)}</strong><span class="mono muted">${esc(w.walletId)}</span></div><span class="chip ${w.status === 'active' ? 'bull' : 'warn'}">${esc(w.status)}</span></div>
+          <dl><div><dt>Balance</dt><dd>${money(w.balanceMinor)}</dd></div><div><dt>Per trade</dt><dd>${lim.maxPerTxMinor ? money(lim.maxPerTxMinor) : 'Unlimited'}</dd></div><div><dt>Daily used</dt><dd>${money(usage.dailyUsedMinor)} / ${lim.dailyCapMinor ? money(lim.dailyCapMinor) : 'Unlimited'}</dd></div><div><dt>Weekly used</dt><dd>${money(usage.weeklyUsedMinor)} / ${lim.weeklyCapMinor ? money(lim.weeklyCapMinor) : 'Unlimited'}</dd></div></dl>
+          <div class="control-capabilities">${(w.capabilities || []).map(c => `<span class="chip neut">${esc(c)}</span>`).join(' ') || '<span class="muted">No execution capabilities</span>'}</div>
+          <button class="btn sm ghost" data-wallet-state="${w.status === 'active' ? 'suspend' : 'reactivate'}" data-wallet-id="${esc(w.walletId)}">${w.status === 'active' ? 'Pause wallet' : 'Reactivate wallet'}</button>
+        </article>`;
+      }).join('')}</div>` : '<div class="empty">No agent wallets configured.</div>'}
+    </section>`;
+
+  $('#controlAutopilot')?.addEventListener('click', async () => {
+    await post(ap.enabled ? '/api/autopilot/stop' : '/api/autopilot/start', {});
+    toast(ap.enabled ? '⏸ Paper agent paused' : '▶ Paper agent started');
+    renderAgentControl();
+  });
+  $('#controlApproval')?.addEventListener('click', async () => {
+    await post('/api/autopilot/config', { requireApproval: !ap.config?.requireApproval });
+    toast(!ap.config?.requireApproval ? '✓ Human approval is now required' : 'Approval mode disabled for paper execution');
+    renderAgentControl();
+  });
+  $('#controlEmergency')?.addEventListener('click', async () => {
+    if (!confirm('Emergency stop: pause the agent, suspend every agent wallet, cancel open live orders, and disable live execution?')) return;
+    const r = await post('/api/agent-control/emergency-stop', {});
+    toast(`⛔ Emergency stop complete · ${r.suspendedWallets?.length || 0} wallet(s) suspended`);
+    renderAgentControl();
+  });
+  el.querySelectorAll('[data-control-revoke]').forEach(b => b.addEventListener('click', async () => {
+    if (!confirm('Revoke this agent key? It will stop working immediately.')) return;
+    await api(`/api/agent-keys/${b.dataset.controlRevoke}`, { method: 'DELETE' });
+    toast('🔑 Agent key revoked'); renderAgentControl();
+  }));
+  el.querySelectorAll('[data-wallet-state]').forEach(b => b.addEventListener('click', async () => {
+    await post(`/api/wallets/${b.dataset.walletId}/${b.dataset.walletState}`, {});
+    toast(b.dataset.walletState === 'suspend' ? '⏸ Agent wallet paused' : '✓ Agent wallet reactivated');
+    renderAgentControl();
+  }));
 }
 
 // ---------------- Agent Decision Trace (read-only) ----------------
@@ -2555,7 +2644,7 @@ function applyAuthGate() {
     const el = $('#' + id);
     if (el) { el.disabled = !ok; el.title = ok ? '' : 'Sign in required'; }
   });
-  if (['portfolio', 'journal', 'performance', 'trace', 'points', 'wallet'].includes(state.activeView) && !ok) refreshView(state.activeView);
+  if (['portfolio', 'journal', 'performance', 'control', 'trace', 'points', 'wallet'].includes(state.activeView) && !ok) refreshView(state.activeView);
   // topbar balance follows the signed-in user's account
   const bal = $('#tbBalance');
   if (!ok && bal) bal.textContent = '--';
@@ -2565,7 +2654,7 @@ function applyAuthGate() {
 window.addEventListener('authchange', (e) => {
   applyAuthGate();
   if (e.detail?.loggedIn) renderCommandRail(); // show the user's balance immediately on sign-in
-  if (e.detail?.loggedIn && ['portfolio', 'journal', 'performance', 'trace', 'points', 'wallet'].includes(state.activeView)) refreshView(state.activeView);
+  if (e.detail?.loggedIn && ['portfolio', 'journal', 'performance', 'control', 'trace', 'points', 'wallet'].includes(state.activeView)) refreshView(state.activeView);
 });
 setTimeout(applyAuthGate, 2500); // safety re-run once auth.js has settled
 
