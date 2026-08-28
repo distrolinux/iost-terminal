@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Sora:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/css/style.css?v=2.16">
+<link rel="stylesheet" href="/css/style.css?v=2.17">
 </head>
 <body class="cmd">
 <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -20,6 +20,7 @@
     <span class="brand-tag">AI COMMAND CENTER</span>
   </div>
   <button class="nav-btn tb-agent" data-view="assistant" aria-label="View AI trade assistant"><span class="ic">✦</span><span class="lbl">Agent</span></button>
+  <button class="nav-btn tb-find" id="navSearchMobile" type="button" aria-label="Search terminal destinations" aria-haspopup="dialog"><span class="ic">⌕</span><span class="lbl">Find</span></button>
   <div class="tb-status" role="status" aria-live="polite">
     <span class="live-dot" id="liveDot" aria-label="Connection"></span>
     <span class="tb-net mono" id="netStatus">ONLINE</span>
@@ -38,27 +39,40 @@
 <div class="cmd-body">
   <aside class="sidebar" aria-label="Command navigation">
     <nav class="side-nav">
-      <button class="nav-btn is-active" data-view="scanner" aria-label="View AI market scanner"><span class="ic">▤</span><span class="lbl">Markets</span></button>
-      <button class="nav-btn" data-view="scores" aria-label="View AI trade scores"><span class="ic">◈</span><span class="lbl">Scores</span></button>
-      <button class="nav-btn" data-view="risk" aria-label="View risk calculator"><span class="ic">⚖</span><span class="lbl">Risk</span></button>
-      <button class="nav-btn" data-view="portfolio" aria-label="View portfolio AI"><span class="ic">◔</span><span class="lbl">Pfolio</span></button>
-      <button class="nav-btn" data-view="onchain" aria-label="View IOST on-chain dashboard"><span class="ic">⛓</span><span class="lbl">Chain</span></button>
-      <button class="nav-btn" data-view="news" aria-label="View market news and sentiment"><span class="ic">✉</span><span class="lbl">News</span></button>
-      <button class="nav-btn" data-view="journal" aria-label="View AI trading journal"><span class="ic">▦</span><span class="lbl">Journal</span></button>
-      <button class="nav-btn" data-view="performance" aria-label="View performance analytics"><span class="ic">◮</span><span class="lbl">Perf</span></button>
-      <button class="nav-btn" data-view="evaluation" aria-label="View Agent Evaluation Lab"><span class="ic">⌬</span><span class="lbl">Eval</span></button>
-      <button class="nav-btn" data-view="whales" aria-label="View large trades log"><span class="ic">🐋</span><span class="lbl">Whales</span></button>
-      <button class="nav-btn" data-view="smartmoney" aria-label="View smart money on-chain signals"><span class="ic">⚡</span><span class="lbl">Signals</span></button>
-      <button class="nav-btn" data-view="audit" aria-label="View token security audit"><span class="ic">🛡</span><span class="lbl">Audit</span></button>
-      <button class="nav-btn" data-view="agents" aria-label="View decentralized AI agents marketplace"><span class="ic">🤖</span><span class="lbl">Agents</span></button>
-      <button class="nav-btn" data-view="control" aria-label="View owner agent control center"><span class="ic">⏻</span><span class="lbl">Control</span></button>
-      <button class="nav-btn" data-view="trace" aria-label="View agent decision trace"><span class="ic">⌁</span><span class="lbl">Trace</span></button>
-      <button class="nav-btn" data-view="points" aria-label="View platform points and referral program"><span class="ic">◆</span><span class="lbl">Points</span></button>
-      <button class="nav-btn" data-view="aitt" aria-label="View AITT token info"><span class="ic">◈</span><span class="lbl">AITT</span></button>
-      <button class="nav-btn" data-view="wallet" aria-label="View your free IOST wallet"><span class="ic">👛</span><span class="lbl">Wallet</span></button>
+      <div class="nav-group" data-nav-group="Observe">
+        <span class="nav-group-label">Observe</span>
+        <button class="nav-btn is-active" data-view="scanner" aria-label="View AI market scanner"><span class="ic">▤</span><span class="lbl">Markets</span></button>
+        <button class="nav-btn" data-view="scores" aria-label="View AI trade scores"><span class="ic">◈</span><span class="lbl">Scores</span></button>
+        <button class="nav-btn" data-view="news" aria-label="View market news and sentiment"><span class="ic">✉</span><span class="lbl">News</span></button>
+        <button class="nav-btn" data-view="whales" aria-label="View large trades log"><span class="ic">🐋</span><span class="lbl">Whales</span></button>
+        <button class="nav-btn" data-view="smartmoney" aria-label="View smart money on-chain signals"><span class="ic">⚡</span><span class="lbl">Signals</span></button>
+      </div>
+      <div class="nav-group" data-nav-group="Plan">
+        <span class="nav-group-label">Plan</span>
+        <button class="nav-btn" data-view="risk" aria-label="View risk calculator"><span class="ic">⚖</span><span class="lbl">Risk</span></button>
+        <button class="nav-btn" data-view="portfolio" aria-label="View portfolio AI"><span class="ic">◔</span><span class="lbl">Pfolio</span></button>
+        <button class="nav-btn" data-view="journal" aria-label="View AI trading journal"><span class="ic">▦</span><span class="lbl">Journal</span></button>
+        <button class="nav-btn" data-view="performance" aria-label="View performance analytics"><span class="ic">◮</span><span class="lbl">Perf</span></button>
+        <button class="nav-btn" data-view="evaluation" aria-label="View Agent Evaluation Lab"><span class="ic">⌬</span><span class="lbl">Eval</span></button>
+      </div>
+      <div class="nav-group" data-nav-group="Agents">
+        <span class="nav-group-label">Agents</span>
+        <button class="nav-btn" data-view="agents" aria-label="View decentralized AI agents marketplace"><span class="ic">🤖</span><span class="lbl">Agents</span></button>
+        <button class="nav-btn" data-view="control" aria-label="View owner agent control center"><span class="ic">⏻</span><span class="lbl">Control</span></button>
+        <button class="nav-btn" data-view="trace" aria-label="View agent decision trace"><span class="ic">⌁</span><span class="lbl">Trace</span></button>
+        <button class="nav-btn" data-view="onchain" aria-label="View IOST on-chain dashboard"><span class="ic">⛓</span><span class="lbl">Chain</span></button>
+        <button class="nav-btn" data-view="audit" aria-label="View token security audit"><span class="ic">🛡</span><span class="lbl">Audit</span></button>
+      </div>
+      <div class="nav-group" data-nav-group="Account">
+        <span class="nav-group-label">Account</span>
+        <button class="nav-btn" data-view="points" aria-label="View platform points and referral program"><span class="ic">◆</span><span class="lbl">Points</span></button>
+        <button class="nav-btn" data-view="aitt" aria-label="View AITT token info"><span class="ic">◈</span><span class="lbl">AITT</span></button>
+        <button class="nav-btn" data-view="wallet" aria-label="View your free IOST wallet"><span class="ic">👛</span><span class="lbl">Wallet</span></button>
+      </div>
     </nav>
     <div class="side-foot">
-      <button class="side-link onboarding-replay" id="onboardingReplay" type="button" aria-label="Replay the paper trading guide"><span class="ic">?</span><span class="lbl">Guide</span></button>
+      <button class="side-link" id="navSearchBtn" type="button" aria-label="Search terminal destinations" aria-haspopup="dialog"><span class="ic">⌘</span><span class="lbl">Find</span></button>
+      <button class="side-link onboarding-replay" id="onboardingReplay" type="button" aria-label="Replay the first session mission"><span class="ic">?</span><span class="lbl">Mission</span></button>
       <!-- Logs tab hidden per owner decision 2026-08-10 (raw /api/audit endpoint still available) -->
       <a class="side-link" href="/" aria-label="Back to landing page"><span class="ic">⌂</span><span class="lbl">Home</span></a>
       <span class="side-link badge-io" role="img" aria-label="Signals proven on the IOST blockchain" title="Every signal is SHA-256 hash-pinned on IOST mainnet"><span class="ic">⛓</span><span class="lbl">PROVEN ON IOST</span></span>
@@ -136,15 +150,27 @@
 <!-- first-run paper guide: navigation only, never submits an order -->
 <div class="onboarding-layer hidden" id="onboardingLayer" role="dialog" aria-modal="true" aria-labelledby="onboardingTitle" aria-describedby="onboardingText">
   <div class="onboarding-card" id="onboardingCard" role="document">
-    <div class="onboarding-kicker mono" id="onboardingProgress">PAPER GUIDE</div>
+    <div class="onboarding-kicker mono" id="onboardingProgress">FIRST SESSION MISSION</div>
     <h2 id="onboardingTitle">Welcome to IOST Terminal</h2>
     <p id="onboardingText">Learn the paper-trading workflow without moving real money.</p>
+    <div class="onboarding-mission" id="onboardingMission" aria-label="First session mission progress"></div>
     <div class="onboarding-safety" id="onboardingSafety">SIMULATION ONLY · NO ORDER IS PLACED BY THIS GUIDE</div>
     <div class="onboarding-actions">
       <button class="btn sm ghost" id="onboardingBack" type="button">Back</button>
       <button class="onboarding-skip" id="onboardingSkip" type="button">Skip guide</button>
       <button class="btn sm green" id="onboardingNext" type="button">Next</button>
     </div>
+  </div>
+</div>
+
+<!-- fast destination launcher: navigation only, never performs a trade -->
+<div class="modal-backdrop hidden nav-palette" id="navPalette" role="dialog" aria-modal="true" aria-labelledby="navPaletteTitle">
+  <div class="modal nav-palette-card" role="document">
+    <div class="nav-palette-head"><div><span class="mono">COMMAND NAVIGATION</span><h2 id="navPaletteTitle">Where do you want to work?</h2></div><button class="gate-close" id="navPaletteClose" type="button" aria-label="Close destination search">✕</button></div>
+    <label class="sr-only" for="navPaletteInput">Search terminal destinations</label>
+    <input class="nav-palette-input" id="navPaletteInput" type="search" autocomplete="off" aria-label="Search terminal destinations" placeholder="Search markets, risk, evaluation…">
+    <div class="nav-palette-results" id="navPaletteResults" role="list" aria-label="Terminal destinations"></div>
+    <p class="nav-palette-note mono">NAVIGATION ONLY · NO ORDER OR CHAIN ACTION IS EXECUTED</p>
   </div>
 </div>
 
@@ -180,9 +206,9 @@
 
 <script defer src="/js/vendor/lightweight-charts.js"></script>
 <script defer src="/js/vendor/tweetnacl.min.js"></script>
-<script type="module" src="/js/app.js?v=2.20.0"></script>
+<script type="module" src="/js/app.js?v=2.21.0"></script>
 <script type="module" src="/js/auth.js?v=2.9.0"></script>
-<script type="module" src="/js/onboarding.js?v=1.0.0"></script>
+<script type="module" src="/js/onboarding.js?v=1.1.0"></script>
 <script type="application/json" id="agent-state">null</script>
 <script defer src="/js/webmcp.js"></script>
 </body>

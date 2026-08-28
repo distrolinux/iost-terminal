@@ -34,12 +34,12 @@ ok('paper guide blocks underlying controls and account-dialog stacking',
   /pointer-events: auto/.test(onboardingCss) && /pointer-events: none !important/.test(onboardingCss)
   && /body\.onboarding-open #gateOverlay/.test(onboardingCss));
 ok('paper guide state is local and waits for authenticated first-run users',
-  /iost\.onboarding\.paper\.v1/.test(onboardingJs) && /params\.has\('auth'\)/.test(onboardingJs)
+  /iost\.onboarding\.paper\.v2/.test(onboardingJs) && /params\.has\('auth'\)/.test(onboardingJs)
   && /location\.hash\.startsWith\('#reset'\)/.test(onboardingJs)
   && /authchange/.test(onboardingJs) && /detail\?\.loggedIn/.test(onboardingJs)
   && !/authchange[^\n]+once:\s*true/.test(onboardingJs));
 ok('paper guide cache versions and responsive styles are present',
-  /style\.css\?v=2\.16/.test(onboardingHtml) && /onboarding\.js\?v=1\.0\.0/.test(onboardingHtml)
+  /style\.css\?v=2\.17/.test(onboardingHtml) && /onboarding\.js\?v=1\.1\.0/.test(onboardingHtml)
   && /\.onboarding-card/.test(onboardingCss) && /@media \(max-width: 760px\)/.test(onboardingCss));
 
 console.log(failures === 0 ? '\\nALL PASS ✅' : `\\n${failures} FAILURES ❌`);

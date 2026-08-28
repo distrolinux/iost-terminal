@@ -48,7 +48,7 @@ layer. Full spec + Coinbase CDP research folded in: repo `docs/PHASE2_WALLET.md`
 - `POST /api/backtest` — rule-based backtest vs historical bars (expectancy, profit factor, max DD, Sharpe)
 - `POST /api/token-audit` — Binance Web3 token safety scan (honeypot/rug-pull/tax)
 - `GET /api/smart-money` — whale buy/sell signals (BSC/Solana)
-- `GET /api/leaderboard` — top paper traders by closed P&L (masked identities)
+- `GET /api/leaderboard` — paper leaderboard plus qualified promotion subset (positive P&L, 5+ closed trades, masked identities)
 
 ## MCP
 

@@ -1,38 +1,56 @@
 // First-run paper-trading guide. This module only switches dashboard views and
 // highlights existing controls; it never calls an API or activates a control.
-const STORAGE_KEY = 'iost.onboarding.paper.v1';
+const STORAGE_KEY = 'iost.onboarding.paper.v2';
 const $ = (selector) => document.querySelector(selector);
 
 const steps = [
   {
+    label: 'Welcome',
     title: 'Welcome to the paper terminal',
-    text: 'Start with $100,000 in virtual funds and learn the workflow using simulated positions. Paper results are educational and do not predict future returns.',
+    text: 'Your first-session mission follows one safe loop: observe, inspect, plan, simulate, review and challenge. Nothing in this mission submits an order or moves money.',
     target: null,
   },
   {
+    label: 'Observe',
     title: '1. Scan the markets',
     text: 'Markets shows live-data candidates across the watchlist. Treat every signal as research input—not an instruction to trade.',
     target: '[data-view="scanner"]', view: 'scanner',
   },
   {
+    label: 'Inspect',
     title: '2. Inspect the evidence',
     text: 'Scores breaks a setup into momentum, volume, news and risk inputs. Check the components instead of relying on one headline number.',
     target: '[data-view="scores"]', view: 'scores',
   },
   {
+    label: 'Plan',
     title: '3. Set a risk boundary',
     text: 'Use Risk to plan account size, maximum risk and exits before considering a simulated position.',
     target: '[data-view="risk"]', view: 'risk',
   },
   {
+    label: 'Simulate',
     title: '4. Paper execution stays deliberate',
     text: 'BUY and SELL require sign-in and lead into the paper workflow. This guide never clicks them or places an order. Live execution remains separately gated.',
     target: '.rail-card.exec', side: true,
   },
   {
+    label: 'Review',
     title: '5. Review the journal',
     text: 'Journal records simulated entries, exits and reasoning. Use it to review decisions, losses and discipline—not just winning trades.',
     target: '[data-view="journal"]', view: 'journal',
+  },
+  {
+    label: 'Measure',
+    title: '6. Measure the whole record',
+    text: 'Performance turns the paper journal into win rate, expectancy, profit factor and drawdown. Small samples remain evidence warnings, not proof.',
+    target: '[data-view="performance"]', view: 'performance',
+  },
+  {
+    label: 'Challenge',
+    title: '7. Challenge the strategy',
+    text: 'Evaluation runs walk-forward tests with realistic costs, baselines and confidence calibration. Even a passing result is eligible for paper review only.',
+    target: '[data-view="evaluation"]', view: 'evaluation',
   },
 ];
 
@@ -45,6 +63,7 @@ const back = $('#onboardingBack');
 const next = $('#onboardingNext');
 const skip = $('#onboardingSkip');
 const replay = $('#onboardingReplay');
+const mission = $('#onboardingMission');
 let index = 0;
 let previousFocus = null;
 let highlighted = null;
@@ -58,6 +77,18 @@ function clearHighlight() {
   highlighted = null;
 }
 
+function renderMission() {
+  if (!mission) return;
+  mission.replaceChildren(...steps.map((step, stepIndex) => {
+    const marker = document.createElement('span');
+    marker.dataset.missionStep = String(stepIndex + 1);
+    marker.textContent = step.label;
+    if (stepIndex < index) marker.classList.add('is-done');
+    if (stepIndex === index) { marker.classList.add('is-current'); marker.setAttribute('aria-current', 'step'); }
+    return marker;
+  }));
+}
+
 function showStep() {
   const step = steps[index];
   clearHighlight();
@@ -67,7 +98,8 @@ function showStep() {
   highlighted?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   title.textContent = step.title;
   text.textContent = step.text;
-  progress.textContent = `PAPER GUIDE · ${index + 1}/${steps.length}`;
+  progress.textContent = `FIRST SESSION MISSION · ${index + 1}/${steps.length}`;
+  renderMission();
   back.disabled = index === 0;
   next.textContent = index === steps.length - 1 ? 'Finish' : 'Next';
   card.classList.toggle('is-side', Boolean(step.side));

@@ -881,7 +881,58 @@ function setClock() {
 }
 setInterval(setClock, 1000); setClock();
 
-$$('.nav-btn').forEach(btn => btn.addEventListener('click', () => switchView(btn.dataset.view)));
+$$('.nav-btn[data-view]').forEach(btn => btn.addEventListener('click', () => switchView(btn.dataset.view)));
+
+function setupNavPalette() {
+  const overlay = $('#navPalette'); const input = $('#navPaletteInput'); const results = $('#navPaletteResults');
+  const openers = [$('#navSearchBtn'), $('#navSearchMobile')].filter(Boolean); const closeButton = $('#navPaletteClose');
+  if (!overlay || !input || !results || !openers.length || !closeButton) return;
+  const commands = $$('.sidebar .nav-btn[data-view]').map((button) => ({
+    button, view: button.dataset.view, label: button.querySelector('.lbl')?.textContent?.trim() || button.dataset.view,
+    group: button.closest('.nav-group')?.dataset.navGroup || 'Terminal', icon: button.querySelector('.ic')?.textContent?.trim() || '›',
+    description: button.getAttribute('aria-label') || '',
+  }));
+  let lastFocus = null;
+
+  const render = () => {
+    const query = input.value.trim().toLowerCase();
+    const matches = commands.filter((command) => !query || `${command.label} ${command.group} ${command.description}`.toLowerCase().includes(query));
+    results.replaceChildren(...matches.map((command) => {
+      const option = document.createElement('button');
+      option.type = 'button'; option.className = 'nav-palette-option';
+      const icon = document.createElement('span'); icon.className = 'nav-palette-icon'; icon.textContent = command.icon;
+      const copy = document.createElement('span'); const name = document.createElement('strong'); const group = document.createElement('small');
+      name.textContent = command.label; group.textContent = command.group; copy.append(name, group);
+      const arrow = document.createElement('span'); arrow.className = 'mono'; arrow.textContent = '→';
+      option.append(icon, copy, arrow);
+      option.addEventListener('click', () => { close(); switchView(command.view); });
+      return option;
+    }));
+    if (!matches.length) {
+      const empty = document.createElement('p'); empty.className = 'nav-palette-empty'; empty.textContent = 'No destination matches that search.';
+      results.replaceChildren(empty);
+    }
+  };
+  const anotherDialogIsOpen = () => ['onboardingLayer', 'gateOverlay', 'authModal', 'authReset', 'detailModal']
+    .some((id) => { const node = document.getElementById(id); return node && !node.classList.contains('hidden'); });
+  const open = () => { if (anotherDialogIsOpen()) return; lastFocus = document.activeElement; overlay.classList.remove('hidden'); input.value = ''; render(); input.focus(); };
+  const close = () => { overlay.classList.add('hidden'); lastFocus?.focus?.(); };
+  openers.forEach((opener) => opener.addEventListener('click', open)); closeButton.addEventListener('click', close); input.addEventListener('input', render);
+  overlay.addEventListener('click', (event) => { if (event.target === overlay) close(); });
+  document.addEventListener('keydown', (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); overlay.classList.contains('hidden') ? open() : close(); }
+    if (event.key === 'Escape' && !overlay.classList.contains('hidden')) { event.preventDefault(); close(); }
+    if (event.key === 'Enter' && document.activeElement === input) results.querySelector('.nav-palette-option')?.click();
+    if (event.key === 'Tab' && !overlay.classList.contains('hidden')) {
+      const controls = [closeButton, input, ...results.querySelectorAll('.nav-palette-option')];
+      const first = controls[0]; const last = controls.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    }
+  });
+}
+setupNavPalette();
+
 // ARD: deterministic paths — every view has a stable deep link (/app#scanner, /app#risk, …)
 const VALID_VIEWS = ['scanner', 'scores', 'risk', 'portfolio', 'onchain', 'news', 'assistant', 'journal', 'performance', 'evaluation', 'whales', 'smartmoney', 'audit', 'agents', 'control', 'trace', 'points', 'aitt', 'wallet'];
 function switchView(view) {
@@ -1967,7 +2018,7 @@ async function renderTriggersCard(container) {
 async function renderLeaderboardCard(container) {
   let lb = null;
   try { lb = await api('/api/leaderboard'); } catch { return; }
-  const rows = (lb.top || []).map(r => `
+  const rows = (lb.promoted || []).map(r => `
     <tr>
       <td class="mono">#${r.rank}</td>
       <td>${esc(r.trader)}</td>
@@ -1977,10 +2028,10 @@ async function renderLeaderboardCard(container) {
     </tr>`).join('');
   container.innerHTML = `
     <div class="card" style="margin-top:16px">
-      <div class="section-title" style="margin-bottom:8px">Leaderboard <span class="sub">top paper traders · ${esc(lb.period)} · public</span></div>
+      <div class="section-title" style="margin-bottom:8px">Leaderboard <span class="sub">qualified paper evidence · ${esc(lb.period)} · public</span></div>
       ${rows ? `<div class="table-wrap"><table style="font-size:12px"><thead><tr><th>#</th><th>Trader</th><th>P&L</th><th>Win rate</th><th>Trades</th></tr></thead><tbody>${rows}</tbody></table></div>`
-        : '<div class="muted" style="font-size:12px">No closed trades yet this period — be the first on the board.</div>'}
-      <div class="muted" style="font-size:11px;margin-top:8px">Beats the weekly +500 points bounty. Identities masked — social proof without doxxing.</div>
+        : '<div class="muted" style="font-size:12px">No paper trader has cleared the public evidence bar yet.</div>'}
+      <div class="muted" style="font-size:11px;margin-top:8px">Positive period P&amp;L and ${lb.qualification?.minimumTrades || 5}+ closed paper trades required. ${lb.qualification?.provisionalCount || 0} provisional record(s) hidden. Identities remain masked.</div>
     </div>`;
 }
 

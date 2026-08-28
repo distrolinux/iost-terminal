@@ -150,7 +150,7 @@
 - `GET /api/management` — last position-management sweep (trailing exits + DCA adds + errors)
 
 ### Public tools
-- `GET /api/leaderboard?period=week|all` — top paper traders by closed P&L (masked)
+- `GET /api/leaderboard?period=week|all` — paper leaderboard plus qualified promotion subset (positive P&L, 5+ closed trades, masked identities)
 - `POST /api/backtest {symbol,timeframe?,strategy:{...}}` — objective rules vs historical bars → expectancy, profit factor, max drawdown, Sharpe, vs buy-and-hold (honest caveats included)
 - `POST /api/token-audit {contractAddress, chainId?}` — Binance Web3 token security audit (honeypot/rug-pull/scam/tax scan)
 - `GET /api/smart-money?chainId=&page=&pageSize=` — Binance Web3 whale buy/sell signals

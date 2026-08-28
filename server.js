@@ -563,10 +563,10 @@ function renderPage(name) {
       html = html.replace('<div class="visor-tape" id="vTape">SYNCING…</div>', `<div class="visor-tape" id="vTape">${esc(tape)}</div>`);
     }
     // leaderboard section — SSR'd into the first response (agents see it too)
-    const lb = computeLeaderboard('week', 5);
-    const lbRows = lb.length
-      ? lb.map((r) => `<div class="lb-row"><span class="lb-rank mono">#${r.rank}</span><span class="lb-name">${esc(r.trader)}</span><span class="lb-pnl ${r.pnl >= 0 ? 'up' : 'down'}">$${r.pnl.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span><span class="lb-rate mono">${r.winRate}%</span><span class="lb-trades mono">${r.trades} trades</span></div>`).join('')
-      : '<div class="lb-empty">No closed trades yet — be the first on the board.</div>';
+    const promotion = leaderboardPromotion(computeLeaderboard('week', 10), 5);
+    const lbRows = promotion.eligible.length
+      ? promotion.eligible.map((r) => `<div class="lb-row"><span class="lb-rank mono">#${r.rank}</span><span class="lb-name">${esc(r.trader)}</span><span class="lb-pnl up">$${r.pnl.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span><span class="lb-rate mono">${r.winRate}%</span><span class="lb-trades mono">${r.trades} trades</span></div>`).join('')
+      : '<div class="lb-empty"><strong>No paper trader has cleared the public evidence bar yet.</strong><span>Qualification requires positive weekly P&amp;L and at least 5 closed paper trades.</span></div>';
     html = html.replace('--lb-rows--', lbRows);
   }
 
@@ -624,7 +624,7 @@ function markdownFor(name) {
   const c = s?.onchain?.chain;
   const mood = m ? (m.bullish > m.bearish ? '🟢 bullish' : m.bearish > m.bullish ? '🔴 bearish' : '⚪ mixed') : 'n/a';
   const moodCounts = m ? `${Number(m.bullish) || 0} bull · ${Number(m.neutral) || 0} neutral · ${Number(m.bearish) || 0} bear headlines` : 'n/a';
-  const lb = computeLeaderboard('week', 5);
+  const lb = leaderboardPromotion(computeLeaderboard('week', 10), 5).eligible;
   return `${base}
 ## Live snapshot (${new Date(s?.ts || Date.now()).toISOString()})
 
@@ -764,7 +764,7 @@ const OPENAPI_PATHS = {
   '/api/chain/identity': { get: { summary: 'Public IOSTCallister operator identity and explicitly separated IOST L1/L2 roles', tags: ['meta'], security: [] } },
   '/api/assistant': { post: { summary: 'Natural-language market Q&A synthesized from live data', tags: ['intelligence'], security: [], requestBody: { content: { 'application/json': { schema: { type: 'object', properties: { question: { type: 'string' } }, required: ['question'] } } } } } },
   '/api/risk': { post: { summary: 'Position size, $ risk, R:R, potential P/L, exposure', tags: ['risk'], security: [], requestBody: { content: { 'application/json': { schema: { type: 'object' } } } } } },
-  '/api/leaderboard': { get: { summary: 'Top paper traders by closed P&L (masked identities)', tags: ['social'], security: [] } },
+  '/api/leaderboard': { get: { summary: 'Paper leaderboard plus qualified public-promotion subset (masked identities)', tags: ['social'], security: [] } },
   '/api/backtest': { post: { summary: 'Objective-rules backtest with FXReplay KPIs + honesty caveats', tags: ['analysis'], security: [], requestBody: { content: { 'application/json': { schema: { type: 'object' } } } } } },
   '/api/evaluation-lab': { post: { summary: 'Paper-only walk-forward strategy evaluation and fail-closed promotion evidence', tags: ['analysis'], requestBody: { content: { 'application/json': { schema: { type: 'object' } } } } } },
   '/api/token-audit': { post: { summary: 'Binance Web3 token security audit (honeypot/rug/tax scan)', tags: ['analysis'], security: [], requestBody: { content: { 'application/json': { schema: { type: 'object', properties: { contractAddress: { type: 'string' }, chainId: { type: 'string' } }, required: ['contractAddress'] } } } } } },
@@ -2537,7 +2537,7 @@ const API_INDEX = {
     { path: '/api/triggers/:id/toggle', method: 'POST', body: '{enabled:bool}', purpose: 'enable/disable a trigger' },
     { path: '/api/triggers/events', method: 'GET', query: 'since=ts&limit=N', purpose: 'recent trigger events (what fired, when, value seen)' },
   ],
-  leaderboard: { path: '/api/leaderboard', method: 'GET', query: 'period=week|all', purpose: 'PUBLIC social proof: top paper traders by closed P&L (masked identities) — agents can read it too' },
+  leaderboard: { path: '/api/leaderboard', method: 'GET', query: 'period=week|all', purpose: 'PUBLIC paper leaderboard plus a promoted subset requiring positive P&L and 5+ closed trades; identities are masked' },
   backtest: { path: '/api/backtest', method: 'POST', body: '{symbol,timeframe?:1d|4h|1h|15m,strategy:{name?,side,entry:{rule:ma-cross|rsi|breakout|ai-score,params},exit:{stopPct?,targetPct?,trailingPct?,maxBars?},sizePct?}}', purpose: 'PUBLIC backtesting (FXReplay methodology): objective rules vs historical bars → expectancy, profit factor, max drawdown, Sharpe, vs buy-and-hold + per-trade journal. Honest caveats included.' },
   evaluationLab: { path: '/api/evaluation-lab', method: 'POST', body: '{symbol,timeframe,strategy,config?:{trainBars,testBars,stepBars,minimumTrades,costs:{feeBps,spreadBps,slippageBps}}}', purpose: 'AUTHENTICATED paper-only rolling walk-forward evaluation with causal next-bar fills, realistic costs, baselines, calibration, evidence hashes and a fail-closed paper-review gate.' },
   binanceData: [
@@ -2957,6 +2957,7 @@ function principalUserId(req) {
 // Ranks paper accounts by closed-trade P&L for the period (week | all).
 // Identities are masked (t***@domain) — social proof without doxxing.
 // Shared by GET /api/leaderboard and the landing-page SSR section.
+const LEADERBOARD_PROMOTION_MIN_TRADES = 5;
 function computeLeaderboard(period = 'week', limit = 10) {
   const since = period === 'all' ? 0 : Date.now() - 7 * 24 * 3600 * 1000;
   const rows = [];
@@ -2973,10 +2974,12 @@ function computeLeaderboard(period = 'week', limit = 10) {
       const em = u?.email || acc.owner;
       label = em.includes('@') ? `${em.slice(0, 1)}***@${em.split('@')[1]}` : `${em.slice(0, 4)}…`;
     }
+    const trades = closed.length;
     rows.push({
       rank: 0, trader: label, pnl: Math.round(pnl * 100) / 100,
-      winRate: closed.length ? Math.round((wins / closed.length) * 1000) / 10 : 0,
-      trades: closed.length, wins, losses: closed.length - wins,
+      winRate: trades ? Math.round((wins / trades) * 1000) / 10 : 0,
+      trades, wins, losses: trades - wins,
+      eligibleForPromotion: trades >= LEADERBOARD_PROMOTION_MIN_TRADES && pnl > 0,
       equity: Math.round(equity * 100) / 100, period,
     });
   }
@@ -2985,9 +2988,17 @@ function computeLeaderboard(period = 'week', limit = 10) {
   return rows.slice(0, limit);
 }
 
+function leaderboardPromotion(rows, limit = 5) {
+  const eligible = rows.filter((row) => row.eligibleForPromotion).slice(0, limit).map((row, index) => ({ ...row, rank: index + 1 }));
+  return { eligible, qualification: { minimumTrades: LEADERBOARD_PROMOTION_MIN_TRADES, requiresPositivePnl: true,
+    provisionalCount: rows.filter((row) => !row.eligibleForPromotion).length,
+    message: `Public promotion requires positive period P&L and at least ${LEADERBOARD_PROMOTION_MIN_TRADES} closed paper trades.` } };
+}
+
 app.get('/api/leaderboard', (req, res) => {
   const period = req.query.period === 'all' ? 'all' : 'week';
-  res.json({ ok: true, period, generatedAt: Date.now(), top: computeLeaderboard(period, 10) });
+  const top = computeLeaderboard(period, 10); const promotion = leaderboardPromotion(top, 5);
+  res.json({ ok: true, period, generatedAt: Date.now(), top, promoted: promotion.eligible, qualification: promotion.qualification });
 });
 
 // ---------- v1.15 backtesting (FXReplay methodology, honest KPIs) ----------

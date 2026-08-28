@@ -587,14 +587,15 @@ footer .links a:hover { color: var(--text); }
     .lb-pnl { text-align: right; font-weight: 700; }
     .lb-pnl.up { color: var(--up); } .lb-pnl.down { color: var(--down); }
     .lb-rate, .lb-trades { color: var(--muted); font-size: 12.5px; text-align: right; }
-    .lb-empty { padding: 26px 22px; color: var(--muted); font-size: 14px; }
+    .lb-empty { display: flex; flex-direction: column; gap: 6px; padding: 26px 22px; color: var(--muted); font-size: 13px; }
+    .lb-empty strong { color: var(--text); font-size: 14px; }
     .lb-foot { margin-top: 14px; color: var(--dim); font-size: 12px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .lb-cta { margin-left: auto; }
     @media (max-width: 640px) { .lb-row { grid-template-columns: 40px 1fr 100px; } .lb-rate, .lb-trades { display: none; } }
   </style>
   <div class="lb-head">
     <div>
-      <div class="lb-sub">Live social proof · paper competition</div>
+      <div class="lb-sub">Qualified paper evidence · honest samples</div>
       <h2 class="lb-title">Top <span class="grad">paper traders</span></h2>
     </div>
     <a class="btn ghost small" href="/app" aria-label="Join the paper trading competition">Join the board →</a>
@@ -603,7 +604,7 @@ footer .links a:hover { color: var(--text); }
     <div class="lb-rows" id="lbRows">--lb-rows--</div>
   </div>
   <div class="lb-foot">
-    <span>Weekly paper competition · in-app points have no token or cash value during pre-launch</span>
+    <span>Public promotion requires positive weekly P&amp;L and 5+ closed paper trades · in-app points have no token or cash value during pre-launch</span>
     <span class="lb-cta mono" id="lbTs"></span>
   </div>
 </section>
@@ -1074,7 +1075,7 @@ updateVisor();
       const r = await fetch('/api/leaderboard', { headers: { Accept: 'application/json' } });
       if (!r.ok) return;
       const d = await r.json();
-      const rows = (d.top || []).map(x => `
+      const rows = (d.promoted || []).map(x => `
         <div class="lb-row">
           <span class="lb-rank mono">#${x.rank}</span>
           <span class="lb-name">${String(x.trader || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))}</span>
@@ -1082,7 +1083,7 @@ updateVisor();
           <span class="lb-rate mono">${x.winRate}%</span>
           <span class="lb-trades mono">${x.trades} trades</span>
         </div>`).join('');
-      if (rows) box.innerHTML = rows;
+      box.innerHTML = rows || '<div class="lb-empty"><strong>No paper trader has cleared the public evidence bar yet.</strong><span>Qualification requires positive weekly P&amp;L and at least 5 closed paper trades.</span></div>';
       if (ts) ts.textContent = `updated ${new Date(d.generatedAt).toLocaleTimeString()} UTC`;
     } catch { /* SSR copy stays */ }
   }
