@@ -20,6 +20,32 @@ const gradeClass = (g) => g.toLowerCase().replace(/\s+/g, '-');
 
 const state = { scan: [], scores: [], news: null, onchain: null, paper: null, portfolio: null, activeView: 'scanner' };
 let sseOk = false;
+let detailLastFocus = null;
+
+function detailFocusable() {
+  return $$('#detailBody a[href], #detailBody button:not([disabled]), #detailBody input:not([disabled]), #detailBody select:not([disabled]), #detailBody textarea:not([disabled]), #detailBody [tabindex]:not([tabindex="-1"])')
+    .filter(el => !el.hidden && el.offsetParent !== null);
+}
+function openDetailDialog(label, opener = document.activeElement) {
+  const modal = $('#detailModal');
+  if (!modal) return;
+  detailLastFocus = opener instanceof HTMLElement ? opener : null;
+  modal.setAttribute('aria-label', label || 'Details');
+  modal.classList.remove('hidden', 'closing');
+  requestAnimationFrame(() => (detailFocusable()[0] || $('#detailBody'))?.focus());
+}
+function trapDetailFocus(event) {
+  const modal = $('#detailModal');
+  if (!modal || modal.classList.contains('hidden')) return;
+  if (event.key === 'Escape') { event.preventDefault(); closeDetail(); return; }
+  if (event.key !== 'Tab') return;
+  const focusable = detailFocusable();
+  if (!focusable.length) { event.preventDefault(); $('#detailBody')?.focus(); return; }
+  const first = focusable[0], last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+}
+document.addEventListener('keydown', trapDetailFocus);
 
 // ---------------- animation helpers ----------------
 function animateNum(el, to, dur = 700) {
@@ -116,7 +142,7 @@ function openWhaleModal(w, symbol, type) {
       <button class="btn sm ghost" id="whaleClose">Close</button>
       ${link ? `<a class="btn sm" href="${link}" target="_blank" rel="noopener">Open ${esc(w.source || 'exchange')} ↗</a>` : ''}
     </div>`;
-  $('#detailModal').classList.remove('hidden');
+  openDetailDialog(`Large ${symbol} trade details`);
   $('#whaleClose')?.addEventListener('click', closeDetail);
   const x = $('#detailBody .modal-close'); if (x) x.onclick = closeDetail;
 }
@@ -1174,14 +1200,14 @@ async function renderScanner(fromTick = false) {
   const cmc = global.cmc && global.cmc.enabled ? global.cmc : null;
   const domBtc = cmc ? cmc.btcDominance : global.btcDominance;
   const domEth = cmc ? cmc.ethDominance : null;
-  const moverRow = (m) => `<tr class="clickable" data-sym="${esc(m.symbol)}"><td><strong>${esc(m.symbol)}</strong></td><td class="mono">$${fmtNum(m.price)}</td><td class="mono ${m.change24hPct >= 0 ? 'up' : 'down'}">${pct(m.change24hPct)}</td></tr>`;
+  const moverRow = (m) => `<tr class="clickable" data-sym="${esc(m.symbol)}" role="button" tabindex="0" aria-label="Open ${esc(m.symbol)} asset details"><td><strong>${esc(m.symbol)}</strong></td><td class="mono">$${fmtNum(m.price)}</td><td class="mono ${m.change24hPct >= 0 ? 'up' : 'down'}">${pct(m.change24hPct)}</td></tr>`;
   const priceCls = (sym, price) => {
     const p = prevPrices[sym];
     if (p == null || p === price) return '';
     return price > p ? 'flash-up' : 'flash-down';
   };
   const rows = state.scan.map((a, i) => `
-    <tr class="clickable anim-row" data-sym="${a.symbol}" style="animation-delay:${fromTick ? 0 : Math.min(i * 20, 320)}ms">
+    <tr class="clickable anim-row" role="button" tabindex="0" aria-label="Open ${esc(a.symbol)} asset details" data-sym="${a.symbol}" style="animation-delay:${fromTick ? 0 : Math.min(i * 20, 320)}ms">
       <td><strong>${a.symbol}</strong> <span class="chip ${a.type === 'stock' ? 'acc' : 'neut'}">${a.type}</span></td>
       <td class="mono dim">${a.rank != null ? '#' + a.rank : '—'}</td>
       <td class="mono">${a.marketCap != null ? fmtCap(a.marketCap) : '—'}</td>
@@ -1220,7 +1246,11 @@ async function renderScanner(fromTick = false) {
         <tbody>${rows}</tbody>
       </table>
     </div>`;
-  $$('#view-scanner tr.clickable').forEach(tr => tr.addEventListener('click', () => openDetail(tr.dataset.sym)));
+  $$('#view-scanner tr.clickable').forEach(tr => {
+    const activate = () => openDetail(tr.dataset.sym);
+    tr.addEventListener('click', activate);
+    tr.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); } });
+  });
   state._prices = Object.fromEntries(state.scan.map(a => [a.symbol, a.price]));
   buildTicker();
   if (!fromTick) {
@@ -1239,7 +1269,7 @@ async function renderScanner(fromTick = false) {
 async function openDetail(symbol) {
   const modal = $('#detailModal');
   $('#detailBody').innerHTML = '<div class="skeleton" style="height:300px"></div>';
-  modal.classList.remove('hidden', 'closing');
+  openDetailDialog(`${symbol} asset details`);
   const [klines, score, probs, paper] = await Promise.all([
     api(`/api/klines/${symbol}?bar=15m&limit=200`).catch(() => []),
     api(`/api/score/${symbol}`).catch(() => null),
@@ -1266,12 +1296,12 @@ async function openDetail(symbol) {
     ${prob?.drivers?.length ? `<div class="drivers">Signal triggered by: ${prob.drivers.map(d => `<span class="chip">${esc(d)}</span>`).join(' ')}</div>` : ''}
 
     <div class="tabs" role="tablist" aria-label="Progressive disclosure layers">
-      <button class="tab is-active" data-tab="overview" role="tab" aria-selected="true">Overview<span class="lv">L1</span></button>
-      <button class="tab" data-tab="analysis" role="tab" aria-selected="false">Analysis<span class="lv">L2</span></button>
-      <button class="tab" data-tab="pro" role="tab" aria-selected="false">Pro / Agent<span class="lv">L3</span></button>
+      <button class="tab is-active" id="detail-tab-overview" data-tab="overview" role="tab" aria-controls="tab-overview" aria-selected="true" tabindex="0">Overview<span class="lv">L1</span></button>
+      <button class="tab" id="detail-tab-analysis" data-tab="analysis" role="tab" aria-controls="tab-analysis" aria-selected="false" tabindex="-1">Analysis<span class="lv">L2</span></button>
+      <button class="tab" id="detail-tab-pro" data-tab="pro" role="tab" aria-controls="tab-pro" aria-selected="false" tabindex="-1">Pro / Agent<span class="lv">L3</span></button>
     </div>
 
-    <div class="tab-panel" id="tab-overview" role="tabpanel">
+    <div class="tab-panel" id="tab-overview" role="tabpanel" aria-labelledby="detail-tab-overview">
       <div class="card" style="padding:16px">
         <div class="section-title">Event — ${symbol}/USDT <span class="sub">binary outcome · paper execution</span></div>
         <div class="prob-gauge" aria-hidden="true"><i style="width:${pctVal ?? 50}%"></i><span class="marker" style="left:${pctVal ?? 50}%"></span></div>
@@ -1296,7 +1326,7 @@ async function openDetail(symbol) {
       </div>
     </div>
 
-    <div class="tab-panel hidden" id="tab-analysis" role="tabpanel">
+    <div class="tab-panel hidden" id="tab-analysis" role="tabpanel" aria-labelledby="detail-tab-analysis">
       <div class="card" style="padding:16px">
         <div class="section-title">Probability timeline <span class="sub">upside probability · CI band · 50% midline</span></div>
         <canvas class="prob-chart" id="probChart" aria-label="Probability timeline chart for ${symbol}"></canvas>
@@ -1324,7 +1354,7 @@ async function openDetail(symbol) {
       </div>
     </div>
 
-    <div class="tab-panel hidden" id="tab-pro" role="tabpanel">
+    <div class="tab-panel hidden" id="tab-pro" role="tabpanel" aria-labelledby="detail-tab-pro">
       <div class="card" style="padding:16px">
         <div class="section-title">Level 3 — order book depth <span class="sub">OKX SPOT ${symbol}/USDT · top 12 levels</span></div>
         <div id="obBody"><div class="muted" style="font-size:12px">loading…</div></div>
@@ -1349,14 +1379,24 @@ async function openDetail(symbol) {
   $('#dTradeShort').onclick = () => { closeDetail(); openTradeModal(symbol, 'short', score?.composite); };
   $('#dAsk').onclick = () => { closeDetail(); switchView('assistant'); askAssistant(`why is ${symbol} moving today?`); };
 
-  $$('#detailBody .tab').forEach(btn => btn.addEventListener('click', () => {
+  const activateDetailTab = (btn) => {
     const t = btn.dataset.tab;
-    $$('#detailBody .tab').forEach(b => { b.classList.toggle('is-active', b.dataset.tab === t); b.setAttribute('aria-selected', b.dataset.tab === t ? 'true' : 'false'); });
+    $$('#detailBody .tab').forEach(b => { const active = b.dataset.tab === t; b.classList.toggle('is-active', active); b.setAttribute('aria-selected', active ? 'true' : 'false'); b.tabIndex = active ? 0 : -1; });
     $$('#detailBody .tab-panel').forEach(p => p.classList.add('hidden'));
     $(`#tab-${t}`).classList.remove('hidden');
     if (t === 'analysis') initAnalysis();
     if (t === 'pro') loadProLayer();
-  }));
+  };
+  $$('#detailBody .tab').forEach((btn, index, tabs) => {
+    btn.addEventListener('click', () => activateDetailTab(btn));
+    btn.addEventListener('keydown', (event) => {
+      if (!['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
+      event.preventDefault();
+      const target = event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs[tabs.length - 1]
+        : tabs[(index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length];
+      activateDetailTab(target); target.focus();
+    });
+  });
 
   let analysisInited = false;
   async function initAnalysis() {
@@ -1451,7 +1491,11 @@ function closeDetail() {
   if (!m || m.classList.contains('hidden')) return;
   if (m.classList.contains('closing')) return;
   m.classList.add('closing');
-  setTimeout(() => { m.classList.remove('closing'); m.classList.add('hidden'); }, 150);
+  setTimeout(() => {
+    m.classList.remove('closing'); m.classList.add('hidden');
+    detailLastFocus?.focus({ preventScroll: true });
+    detailLastFocus = null;
+  }, 150);
 }
 $('#detailModal').addEventListener('click', e => { if (e.target === $('#detailModal')) closeDetail(); });
 
@@ -2326,11 +2370,12 @@ function renderEvaluationResult(out, data) {
         ${warnings ? `<ul class="eval-findings">${warnings}</ul>` : ''}
       </section>
     </div>
+    <p id="evChartSummary" class="sr-only">Evaluation charts summarize ${m.trades ?? 0} out-of-sample trades, ${fmtNum(m.cumulativeReturnPct)} percent net return, ${fmtNum(m.maxDrawdownPct)} percent maximum drawdown, and calibration error ${fmtNum(cal.expectedCalibrationError, 4)}. The paper-review gate decision is ${pass ? 'eligible for human paper review' : 'hold'}.</p>
     <div class="eval-chart-grid">
-      <section class="card"><div class="section-title">Equity <span class="sub">strategy vs causal baselines</span></div><canvas class="eval-chart" id="evEquityChart" aria-label="Evaluation equity and baseline chart"></canvas></section>
-      <section class="card"><div class="section-title">Drawdown <span class="sub">peak-to-trough, out-of-sample</span></div><canvas class="eval-chart" id="evDrawdownChart" aria-label="Evaluation drawdown chart"></canvas></section>
-      <section class="card"><div class="section-title">Baseline equity</div><canvas class="eval-chart" id="evBaselineChart" aria-label="Evaluation baseline equity chart"></canvas></section>
-      <section class="card"><div class="section-title">Confidence calibration <span class="sub">predicted vs observed</span></div><canvas class="eval-chart" id="evCalibrationChart" aria-label="Evaluation confidence calibration chart"></canvas></section>
+      <section class="card"><div class="section-title">Equity <span class="sub">strategy vs causal baselines</span></div><canvas class="eval-chart" id="evEquityChart" role="img" aria-describedby="evChartSummary" aria-label="Evaluation equity and baseline chart"></canvas></section>
+      <section class="card"><div class="section-title">Drawdown <span class="sub">peak-to-trough, out-of-sample</span></div><canvas class="eval-chart" id="evDrawdownChart" role="img" aria-describedby="evChartSummary" aria-label="Evaluation drawdown chart"></canvas></section>
+      <section class="card"><div class="section-title">Baseline equity</div><canvas class="eval-chart" id="evBaselineChart" role="img" aria-describedby="evChartSummary" aria-label="Evaluation baseline equity chart"></canvas></section>
+      <section class="card"><div class="section-title">Confidence calibration <span class="sub">predicted vs observed</span></div><canvas class="eval-chart" id="evCalibrationChart" role="img" aria-describedby="evChartSummary" aria-label="Evaluation confidence calibration chart"></canvas></section>
     </div>
     <section class="card eval-folds"><div class="section-title">Walk-forward ledger <span class="sub">non-overlapping train/test boundary · ${data.folds?.length || 0} folds</span></div>
       <div class="table-wrap"><table><thead><tr><th>Fold</th><th>Train bars</th><th>Unseen test bars</th><th>Trades</th><th>Return</th></tr></thead><tbody>${folds}</tbody></table></div>
@@ -2635,7 +2680,7 @@ function openPositionManagement(positionId, positions) {
       <button class="btn ghost" id="mCancel">Cancel</button>
     </div>
     <div class="dim" style="font-size:11px;margin-top:10px">Trailing levels ratchet with price and are re-checked every 60s. DCA triggers only when the score stays ≥ 55 — the AI won't average down into a dying setup.</div>`;
-  modal.classList.remove('hidden');
+  openDetailDialog(`Manage ${pos.symbol} paper position`);
   $('#detailBody .modal-close').onclick = closeDetail;
   $('#mCancel').onclick = closeDetail;
   $('#mDca')?.addEventListener('change', (e) => {
@@ -2690,7 +2735,7 @@ function openTradeModal(symbol = '', side = 'long', confidence = null) {
       <button class="btn ghost" id="tCancel">Cancel</button>
     </div>
     <div class="dim" style="font-size:11px;margin-top:12px">Paper execution — simulated fill at current market price. No real money moves.</div>`;
-  modal.classList.remove('hidden');
+  openDetailDialog(`Open ${symbol || 'a'} paper trade`);
   $('#detailBody .modal-close').onclick = closeDetail;
   $('#tCancel').onclick = closeDetail;
   $('#tDca')?.addEventListener('change', (e) => {
@@ -2836,6 +2881,9 @@ function drawGauge(cv, pct, dir) {
   const ctx = cv.getContext('2d'); ctx.scale(dpr, dpr);
   const w = cv.clientWidth, h = cv.clientHeight;
   ctx.clearRect(0, 0, w, h);
+  // The intelligence rail is hidden at narrow breakpoints. Avoid constructing
+  // a negative-radius arc while its canvas has no rendered width.
+  if (w < 32 || h < 32) return;
   const cx = w / 2, cy = h - 10, r = Math.min(w / 2 - 8, h - 16);
   const v = Math.max(0, Math.min(100, pct ?? 50)) / 100;
   ctx.lineWidth = 11; ctx.lineCap = 'round';

@@ -33,9 +33,9 @@ assert.match(authUi, /result\.status !== 200 \|\| !result\.ok[\s\S]*Sign out fai
   'the client must preserve authenticated state when logout fails');
 assert.match(authUi, /const labels = \{[\s\S]*signup: 'Create account'[\s\S]*setAttribute\('aria-label', label\)/,
   'account dialogs must expose labels matching the active step');
-assert.match(app, /\/js\/auth\.js\?v=2\.9\.0/,
+assert.match(app, /\/js\/auth\.js\?v=2\.10\.0/,
   'account journey changes must be cache-versioned');
-assert.match(app, /\/js\/app\.js\?v=2\.22\.0/,
+assert.match(app, /\/js\/app\.js\?v=2\.23\.1/,
   'gate journey changes must be cache-versioned');
 
 console.log('Auth and onboarding journey contracts passed');

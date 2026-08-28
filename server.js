@@ -55,8 +55,10 @@ import rateLimit from 'express-rate-limit';
 import * as auth from './lib/auth.js';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
+const DATA_DIR = process.env.IOST_DATA_DIR || join(ROOT, 'data');
 const PORT = process.env.PORT || 8787;
 const AITT_DOC_VERSION = '2.3';
+process.umask(0o077);
 
 // ---- .env loader (KEY=VALUE, '#' comments; real env vars win) ----
 import { readFileSync, existsSync, writeFileSync, mkdirSync, chmodSync, statSync, appendFile } from 'node:fs';
@@ -76,7 +78,7 @@ import crypto from 'node:crypto';
 // ---- session secret: env SESSION_SECRET, or persisted generated file (reused across restarts) ----
 function loadSessionSecret() {
   if (process.env.SESSION_SECRET) return process.env.SESSION_SECRET;
-  const f = join(ROOT, 'data', 'session-secret');
+  const f = join(DATA_DIR, 'session-secret');
   try {
     if (existsSync(f)) {
       chmodSync(f, 0o600);
@@ -89,7 +91,7 @@ function loadSessionSecret() {
     /* missing file -> generate below */
   }
   const secret = crypto.randomBytes(32).toString('hex');
-  mkdirSync(join(ROOT, 'data'), { recursive: true });
+  mkdirSync(DATA_DIR, { recursive: true });
   writeFileSync(f, secret, { mode: 0o600 });
   chmodSync(f, 0o600);
   if ((statSync(f).mode & 0o777) !== 0o600) throw new Error('session-secret permissions must be 0600');
@@ -99,8 +101,15 @@ function loadSessionSecret() {
 // defense-in-depth: data stores hold hashes / TOTP blobs / encrypted key
 // material — keep them owner-only at boot (tmp+rename writes reset perms).
 try {
-  for (const f of ['accounts.json', 'users.json', 'agent-keys.json', 'sessions.json', 'session-secret', 'stakes.json', 'slashes.json', 'points.json', 'wallets.json', 'agent-audit.jsonl', 'live-audit.jsonl', 'arena-audit.jsonl']) {
-    const p = join(ROOT, 'data', f);
+  for (const f of [
+    'accounts.json', 'paper.json', 'users.json', 'agent-keys.json', 'sessions.json', 'session-secret',
+    'stakes.json', 'slashes.json', 'points.json', 'wallets.json', 'limits.json', 'freeze.json',
+    'pacts.json', 'evm-wallets.json', 'aitt-claims-v2.json', 'aitt-points-snapshot.json',
+    'iost_accounts.json', 'pending_pins.json', 'signals.json', 'follows.json', 'triggers.json',
+    'payments.json', 'fee-config.json', 'live-proposals.json', 'agent-audit.jsonl',
+    'live-audit.jsonl', 'arena-audit.jsonl',
+  ]) {
+    const p = join(DATA_DIR, f);
     if (existsSync(p)) {
       chmodSync(p, 0o600);
       if ((statSync(p).mode & 0o777) !== 0o600) throw new Error(`${f} permissions must be 0600`);
@@ -125,14 +134,16 @@ app.use(express.json({ limit: '200kb' }));
 // ---- launch readiness: security headers on EVERY response ----
 // Pragmatic CSP: the app ships inline scripts/styles (landing shader, hub scene,
 // SSR machine layer) and same-origin APIs only. 'unsafe-inline' is required by
-// the inline <script>/<style> blocks; 'unsafe-eval' is a safety valve for
-// WebGL/three.js bundles (not currently needed — see browser test below).
+// the inline <script>/<style> blocks. Dynamic evaluation remains disallowed.
 const SECURITY_HEADERS = {
   'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY',
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Cross-Origin-Resource-Policy': 'same-origin',
+  'X-Permitted-Cross-Domain-Policies': 'none',
   'Referrer-Policy': 'strict-origin-when-cross-origin',
-  'Permissions-Policy': 'geolocation=(), microphone=(), camera=()',
+  'Permissions-Policy': 'accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()',
   'Content-Security-Policy': [
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline'",
@@ -170,7 +181,7 @@ app.use(session({
   store: new FileSessionStore(), // survives restarts — no more surprise logouts
   resave: false,
   saveUninitialized: false,
-  cookie: { httpOnly: true, sameSite: 'lax', secure: 'auto', maxAge: 4 * 3600 * 1000 }, // 4h, then auto logout
+  cookie: { httpOnly: true, sameSite: 'lax', secure: 'auto', priority: 'high', maxAge: 4 * 3600 * 1000 }, // 4h, then auto logout
 }));
 
 // ---------- machine-first agent layer ----------
@@ -208,6 +219,22 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+// Authenticated API responses and every authentication response may contain
+// account state or credential-flow metadata. Keep them out of browser/shared
+// caches and make cache-key boundaries explicit for intermediaries.
+app.use((req, res, next) => {
+  const apiRequest = req.path.startsWith('/api/') || req.path.startsWith('/oauth/');
+  const authFlow = req.path.startsWith('/api/auth/');
+  const privateRoute = ['/api/evaluation-lab/history', '/api/account/', '/api/admin/', '/api/paper', '/api/agent-keys']
+    .some((prefix) => req.path.startsWith(prefix));
+  if (apiRequest && (authFlow || privateRoute || req.session?.userId || req.agentKey || req.userAgent)) {
+    res.set('Cache-Control', 'private, no-store, max-age=0');
+    res.set('Pragma', 'no-cache');
+    res.set('Vary', 'Cookie, Authorization, X-API-Key');
+  }
+  next();
+});
 // shared public-API limiter for resource-heavy endpoints (upstream calls / CPU work).
 // Defined before any route uses it (TDZ-safe): scanner/risk/assistant register earlier in the file.
 const PUBLIC_LIMIT = Number.parseInt(process.env.PUBLIC_RATE_LIMIT || '60', 10) || 60;
@@ -240,7 +267,7 @@ function userAgentHas(req, scope) {
 // or agent endpoint is recorded with a payload HASH only — never raw payload
 // contents, API keys, emails or passwords. JSONL append via fs.appendFile —
 // the file is never rewritten. Reading the tail: GET /api/audit?agent=&limit=
-const AUDIT_FILE = join(ROOT, 'data', 'agent-audit.jsonl');
+const AUDIT_FILE = join(DATA_DIR, 'agent-audit.jsonl');
 const AUDIT_ROUTES = [
   { re: /^\/api\/signals$/, method: 'POST', action: 'signal.publish' },
   { re: /^\/api\/signals\/feed$/, method: 'GET', action: 'signals.feed' },
@@ -288,8 +315,8 @@ app.use((req, res, next) => {
       statusCode: res.statusCode,
     };
     try {
-      mkdirSync(join(ROOT, 'data'), { recursive: true });
-      appendFile(AUDIT_FILE, JSON.stringify(entry) + '\n', () => {});
+      mkdirSync(DATA_DIR, { recursive: true });
+      appendFile(AUDIT_FILE, JSON.stringify(entry) + '\n', { mode: 0o600 }, () => {});
     } catch (e) { console.warn(`[audit] append failed: ${e.message}`); }
   });
   next();

@@ -102,11 +102,11 @@ check('account dialogs trap keyboard focus and restore the opener',
 
 check('account password fields expose the correct password-manager purpose',
   /this\.field\('Password', 'password', 'aPass', 'required', 'current-password'\)/.test(authJs)
-  && /this\.field\('Password \(min 8 chars\)', 'password', 'aPass', 'required minlength="8"', 'new-password'\)/.test(authJs)
+  && /this\.field\('Password \(8–72 UTF-8 bytes\)', 'password', 'aPass', 'required minlength="8"', 'new-password'\)/.test(authJs)
   && /autocomplete="new-password"/.test(authJs));
 
 check('account dialog accessibility changes are cache-versioned',
-  /\/js\/auth\.js\?v=2\.9\.0/.test(app));
+  /\/js\/auth\.js\?v=2\.10\.0/.test(app));
 
 check('the AITT page declares its canonical URL',
   /<link rel="canonical" href="https:\/\/iostcallister\.com\/aitt">/.test(token));
@@ -128,7 +128,7 @@ for (const [name, html] of [['landing', home], ['AITT', token], ['Terminal', app
 
 check('Terminal skip-link styles are cache-versioned',
   /\.skip-link\s*\{/.test(css)
-  && /\/css\/style\.css\?v=2\.18/.test(app));
+  && /\/css\/style\.css\?v=2\.19/.test(app));
 
 check('Terminal mobile navigation keeps every primary view reachable',
   /@media \(max-width: 860px\)[\s\S]{0,900}\.sidebar \{ display: block;/.test(css)

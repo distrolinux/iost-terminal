@@ -225,7 +225,7 @@ const Auth = {
     return `<div class="auth-head"><div class="auth-title">CREATE ACCOUNT</div><div class="auth-sub">Email + password · password reset by email</div></div>
       <form id="authForm" novalidate>
         ${this.field('Email', 'email', 'aEmail', 'required')}
-        ${this.field('Password (min 8 chars)', 'password', 'aPass', 'required minlength="8"', 'new-password')}
+        ${this.field('Password (8–72 UTF-8 bytes)', 'password', 'aPass', 'required minlength="8"', 'new-password')}
         <div id="aErr"></div>
         <button class="btn green block" type="submit">Create account</button>
       </form>
@@ -369,9 +369,9 @@ const Auth = {
     ov.classList.remove('hidden');
     const body = $('#authResetBody');
     if (!token) { body.innerHTML = `<div class="auth-head"><div class="auth-title">RESET PASSWORD</div><div class="auth-sub">Missing reset token — use the full link from your email.</div></div>`; return; }
-    const v = await this.api(`/api/auth/reset/validate?token=${encodeURIComponent(token)}`);
+    const v = await this.api('/api/auth/reset/validate', { token });
     if (v.valid !== true) { body.innerHTML = `<div class="auth-head"><div class="auth-title">LINK INVALID OR EXPIRED</div><div class="auth-sub">Reset links are single-use and expire after 45 minutes. Request a new one.</div></div>`; return; }
-    body.innerHTML = `<div class="auth-head"><div class="auth-title">CHOOSE A NEW PASSWORD</div><div class="auth-sub">Minimum 8 characters. All current sessions will be signed out.</div></div>
+    body.innerHTML = `<div class="auth-head"><div class="auth-title">CHOOSE A NEW PASSWORD</div><div class="auth-sub">Use 8–72 UTF-8 bytes. All current sessions will be signed out.</div></div>
       <form id="authForm" novalidate>
         <div class="field"><label for="aPass">New password</label><input id="aPass" type="password" required minlength="8" autocomplete="new-password"></div>
         <div id="aErr"></div>
