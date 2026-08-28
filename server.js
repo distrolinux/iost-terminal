@@ -53,6 +53,11 @@ import { FileSessionStore } from './lib/session-store.js';
 import { authRouter, authLimiter, sameOriginMutation } from './lib/auth-routes.js';
 import rateLimit from 'express-rate-limit';
 import * as auth from './lib/auth.js';
+import {
+  MCP_LEGACY_VERSION, MCP_MODERN_VERSION, MCP_SUPPORTED_VERSIONS, MCP_TASKS_EXTENSION,
+  buildMcpTools, hasTasksCapability, modernResult, validateModernRequest, validateToolArguments, withModernMeta,
+} from './lib/mcp-protocol.js';
+import { createMcpTaskStore } from './lib/mcp-tasks.js';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.IOST_DATA_DIR || join(ROOT, 'data');
@@ -107,7 +112,7 @@ try {
     'pacts.json', 'evm-wallets.json', 'aitt-claims-v2.json', 'aitt-points-snapshot.json',
     'iost_accounts.json', 'pending_pins.json', 'signals.json', 'follows.json', 'triggers.json',
     'payments.json', 'fee-config.json', 'live-proposals.json', 'agent-audit.jsonl',
-    'live-audit.jsonl', 'arena-audit.jsonl',
+    'live-audit.jsonl', 'arena-audit.jsonl', 'mcp-tasks.json',
   ]) {
     const p = join(DATA_DIR, f);
     if (existsSync(p)) {
@@ -188,10 +193,10 @@ app.use(session({
 // API keys (optional; agents SHOULD authenticate). Set AGENT_KEYS="k1,k2" — no default (fail closed).
 // Registered BEFORE all routes so every protected route can see a valid key.
 const AGENT_KEYS = new Set((process.env.AGENT_KEYS || '').split(',').map(s => s.trim()).filter(Boolean));
-// OAuth 2.0 bearer tokens (v1.17): opaque tokens minted at POST /oauth/token
+// OAuth 2.0 bearer tokens (v1.17): opaque, resource-bound tokens minted at POST /oauth/token
 // via client_credentials (client_id = agent-key id, client_secret = full itk_ key).
 // In-memory, TTL 24h, revocable via /oauth/revoke — a restart clears them (documented).
-const oauthTokens = new Map(); // token -> { userId, keyId, scopes, expiresAt }
+const oauthTokens = new Map(); // token -> { userId, keyId, scopes, resource, expiresAt }
 app.use((req, res, next) => {
   const key = req.get('x-api-key') || '';
   req.agentKey = key && AGENT_KEYS.has(key) ? key : null;
@@ -209,11 +214,15 @@ app.use((req, res, next) => {
   if (!req.userAgent) {
     const authz = req.get('authorization') || '';
     if (/^Bearer\s+/i.test(authz)) {
-      const entry = oauthTokens.get(authz.replace(/^Bearer\s+/i, '').trim());
-      if (entry && entry.expiresAt > Date.now() && agentKeys.isActiveKey(entry.keyId, entry.userId)) {
+      const bearerToken = authz.replace(/^Bearer\s+/i, '').trim();
+      const entry = oauthTokens.get(bearerToken);
+      const expectedResource = req.path === '/mcp' ? `${SITE_URL}/mcp` : `${SITE_URL}/`;
+      const active = !!(entry && entry.expiresAt > Date.now() && agentKeys.isActiveKey(entry.keyId, entry.userId));
+      if (active && entry.resource === expectedResource) {
         req.userAgent = { userId: entry.userId, keyId: entry.keyId, name: 'oauth', scopes: entry.scopes.slice() };
-      } else if (entry) {
-        oauthTokens.delete(authz.replace(/^Bearer\s+/i, '').trim());
+      } else {
+        req.invalidBearer = true;
+        if (entry && !active) oauthTokens.delete(bearerToken);
       }
     }
   }
@@ -224,7 +233,7 @@ app.use((req, res, next) => {
 // account state or credential-flow metadata. Keep them out of browser/shared
 // caches and make cache-key boundaries explicit for intermediaries.
 app.use((req, res, next) => {
-  const apiRequest = req.path.startsWith('/api/') || req.path.startsWith('/oauth/');
+  const apiRequest = req.path.startsWith('/api/') || req.path.startsWith('/oauth/') || req.path === '/mcp';
   const authFlow = req.path.startsWith('/api/auth/');
   const privateRoute = ['/api/evaluation-lab/history', '/api/account/', '/api/admin/', '/api/paper', '/api/agent-keys']
     .some((prefix) => req.path.startsWith(prefix));
@@ -287,6 +296,7 @@ const AUDIT_ROUTES = [
   { re: /^\/api\/evaluation-lab\/history\/[^/]+$/, method: 'GET', action: 'evaluation.history.read' },
   { re: /^\/api\/evaluation-lab\/history\/[^/]+\/export$/, method: 'GET', action: 'evaluation.export' },
   { re: /^\/api\/audit$/, method: 'GET', action: 'audit.read' },
+  { re: /^\/mcp$/, method: 'POST', action: 'mcp.request' },
 ];
 // canonical sha256 of JSON.stringify(sorted keys) — deterministic payload fingerprint
 function canonicalHash(obj) {
@@ -298,7 +308,7 @@ function canonicalHash(obj) {
   return crypto.createHash('sha256').update(JSON.stringify(sort(obj ?? {}))).digest('hex');
 }
 app.use((req, res, next) => {
-  if (!req.agentKey) return next();
+  if (!(req.agentKey || req.userAgent)) return next();
   const rule = AUDIT_ROUTES.find((r) => r.method === req.method && r.re.test(req.path));
   if (!rule) return next();
   const payload = req.body && typeof req.body === 'object' ? req.body : {};
@@ -877,6 +887,18 @@ app.get('/.well-known/oauth-protected-resource', (req, res) => {
     bearer_methods_supported: ['header'],
   });
 });
+// RFC 9728 path-specific metadata for the protected MCP resource.
+app.get('/.well-known/oauth-protected-resource/mcp', (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.type('application/json');
+  res.json({
+    resource: `${SITE_URL}/mcp`,
+    authorization_servers: [SITE_URL],
+    scopes_supported: ['read', 'trade-paper'],
+    bearer_methods_supported: ['header'],
+    resource_documentation: `${SITE_URL}/auth.md`,
+  });
+});
 
 // ---- real OAuth 2.0 client_credentials grant (no fake metadata) ----
 // client_id = agent-key id (public), client_secret = the full itk_ secret.
@@ -904,11 +926,15 @@ app.post('/oauth/token', oauthLimiter, oauthForm, (req, res) => {
   if (!principal) {
     return res.status(401).json({ error: 'invalid_client', error_description: 'unknown client_id or bad client_secret' });
   }
+  const resource = String(req.body.resource || `${SITE_URL}/`);
+  if (![`${SITE_URL}/`, `${SITE_URL}/mcp`].includes(resource)) {
+    return res.status(400).json({ error: 'invalid_target', error_description: 'resource must identify the IOST Terminal API or MCP endpoint' });
+  }
   const token = crypto.randomBytes(32).toString('base64url');
   const expiresAt = Date.now() + 24 * 3600 * 1000;
-  oauthTokens.set(token, { ...principal, expiresAt });
+  oauthTokens.set(token, { ...principal, resource, expiresAt });
   res.set('Cache-Control', 'no-store');
-  res.json({ access_token: token, token_type: 'Bearer', expires_in: 86400, scope: principal.scopes.join(' ') });
+  res.json({ access_token: token, token_type: 'Bearer', expires_in: 86400, scope: principal.scopes.join(' '), resource });
 });
 app.post('/oauth/revoke', oauthForm, (req, res) => {
   const tok = String(req.body.token || '');
@@ -937,7 +963,7 @@ Agents can read public market data with **no auth**, and act on an account with 
 ## OAuth 2.0 (client_credentials)
 Discovery: \`/.well-known/oauth-authorization-server\` (RFC 8414) · \`/.well-known/oauth-protected-resource\` (RFC 9728).
 - \`client_id\` = the key's id (shown in the app), \`client_secret\` = the full \`itk_…\` secret.
-- \`POST /oauth/token\` with \`grant_type=client_credentials\` (form body or HTTP Basic) → \`access_token\` (Bearer, 24h, opaque, in-memory).
+- \`POST /oauth/token\` with \`grant_type=client_credentials\` (form body or HTTP Basic) → \`access_token\` (Bearer, 24h, opaque, in-memory). MCP clients include \`resource=${SITE_URL}/mcp\`; tokens are audience-bound and cannot be replayed across resources.
 - Use \`Authorization: Bearer <token>\` — resolves to the same identity + scopes as the key.
 - Revoke: \`POST /oauth/revoke\` with \`{token}\`, or revoke the source agent key to invalidate every bearer derived from it immediately.
 
@@ -945,6 +971,13 @@ Discovery: \`/.well-known/oauth-authorization-server\` (RFC 8414) · \`/.well-kn
 Agent-key paper opens require the \`trade-paper\` scope, a positive \`entry\` and
 \`size\`, an owned agent \`walletId\`, and an active wallet-bound \`pactId\`.
 Human-session paper execution remains unchanged.
+
+## MCP 2026-07-28
+Endpoint: \`POST ${SITE_URL}/mcp\`. Public tools are read-only. A user-bound key or
+an MCP-resource-bound bearer token adds private evaluation/account tools; the
+\`trade-paper\` scope adds \`paper_trade_open\` and \`paper_trade_close\`. Paper opens
+still require the wallet and Pact fields above. No MCP tool can execute a live,
+token, conversion, wallet-send, swap, or public-chain action.
 
 ## Live trading — human-in-the-loop
 Agents never execute live trades directly. With a \`trade-live\` key an agent submits a
@@ -961,18 +994,68 @@ app.get('/auth.md', (req, res) => {
   res.send(AUTH_MD);
 });
 
-// ---- MCP server card (SEP-1649 draft) + real streamable-HTTP MCP endpoint ----
-const MCP_VERSION = '2025-06-18';
-const MCP_TOOLS = [
-  { name: 'market_snapshot', description: 'Live platform snapshot: top AI trade scores, market mood, IOST mainnet state, autopilot status (from the 30s server cache — no per-call scans).', inputSchema: { type: 'object', properties: {} } },
-  { name: 'asset_scores', description: '0-100 AI trade scores for every watchlist asset (composite + momentum/volume/news/risk subscores).', inputSchema: { type: 'object', properties: {} } },
-  { name: 'analyze_symbol', description: 'Full AI analysis for one symbol: score, subscores, indicators, signals, price.', inputSchema: { type: 'object', properties: { symbol: { type: 'string', description: 'e.g. IOST, BTC, ETH, SOL, AAPL, NVDA' } }, required: ['symbol'] } },
-  { name: 'news_sentiment', description: 'Latest headlines + bullish/bearish/neutral classification.', inputSchema: { type: 'object', properties: {} } },
-  { name: 'chain_status', description: 'IOST mainnet dashboard: TPS, head block, peers, large transfers.', inputSchema: { type: 'object', properties: {} } },
-  { name: 'platform_help', description: 'What IOST Terminal is and how to connect: endpoints, auth, skills index, MCP card, ARD manifest.', inputSchema: { type: 'object', properties: {} } },
-  { name: 'health', description: 'Liveness + version.', inputSchema: { type: 'object', properties: {} } },
-];
-async function mcpToolCall(name, args) {
+// ---- MCP 2026-07-28 stateless streamable HTTP + bounded legacy compatibility ----
+// The modern endpoint exposes public read tools anonymously. Private account,
+// evaluation and paper-trade tools appear only for a user-bound credential with
+// the matching scope. Tool annotations are hints; this server always enforces
+// authorization independently at execution time.
+const MCP_SERVER_INFO = Object.freeze({
+  name: 'iost-terminal', version: DISCOVERY_VERSION,
+  description: 'Paper-only AI trading analysis, evaluation and execution with server-enforced authorization rails.',
+  websiteUrl: SITE_URL,
+});
+const mcpTaskStore = createMcpTaskStore({ dataDir: DATA_DIR });
+
+function mcpAccess(req) {
+  if (req.userAgent) return { authenticated: true, ownerId: req.userAgent.userId, scopes: req.userAgent.scopes.slice() };
+  if (req.session?.userId && auth.findById(req.session.userId)) {
+    return { authenticated: true, ownerId: req.session.userId, scopes: ['read'] };
+  }
+  return { authenticated: false, ownerId: null, scopes: [] };
+}
+
+function mcpToolAllowed(req, name) {
+  const access = mcpAccess(req);
+  return buildMcpTools(access).some((tool) => tool.name === name);
+}
+
+function mcpAuthorizationStatus(req) {
+  const access = mcpAccess(req);
+  const ident = signalIdentity(req);
+  const wallet = ident ? wallets.findWallet(ident.agentId, 'agent') : null;
+  const ownerPacts = ident ? pacts.listPacts(ident.agentId) : [];
+  return {
+    ok: true, mode: 'paper-only', scopes: access.scopes,
+    emergencyFreeze: freeze.freezeState(),
+    wallet: wallet ? {
+      walletId: wallet.walletId, name: wallet.name, status: wallet.status,
+      limits: wallet.limits, capabilities: wallet.capabilities, approvalRequired: wallet.approvalRequired,
+    } : null,
+    pacts: ownerPacts.map((pact) => ({
+      pactId: pact.pactId, agentWalletId: pact.agentWalletId, status: pact.status,
+      approvalRequired: pact.policies?.approvalRequired ?? true, completion: pact.completion,
+      spentMinor: pact.spentMinor, expiresAt: pact.expiresAt,
+    })),
+    canOpenPaperTrade: !!(req.userAgent && userAgentHas(req, 'trade-paper') && wallet && wallet.status === 'active'
+      && ownerPacts.some((pact) => pact.status === 'active' && pact.agentWalletId === wallet.walletId)),
+  };
+}
+
+async function runMcpEvaluation(req, args) {
+  const ownerId = evaluationOwner(req);
+  if (!ownerId) throw Object.assign(new Error('user-bound evaluation history required'), { status: 403 });
+  const symbol = String(args?.symbol || '').toUpperCase();
+  const timeframe = String(args?.timeframe || '1d');
+  const strategy = args?.strategy;
+  if (!symbol || !strategy?.entry?.rule) throw Object.assign(new Error('symbol and strategy.entry.rule required'), { status: 400 });
+  const candles = await getKlines(symbol, timeframe, 500);
+  const result = evaluateAgentStrategy({ symbol, timeframe, strategy, candles, config: args?.config });
+  if (result.ok) result.history = saveEvaluation(ownerId, result);
+  return result;
+}
+
+async function mcpToolCall(req, name, args) {
+  if (!mcpToolAllowed(req, name)) throw Object.assign(new Error('unknown or unauthorized tool'), { protocolCode: -32602 });
   switch (name) {
     case 'market_snapshot': {
       const s = ssrState;
@@ -1000,9 +1083,50 @@ async function mcpToolCall(name, args) {
       api: `${SITE_URL}/api`, openapi: `${SITE_URL}/openapi.json`, llms: `${SITE_URL}/llms.txt`,
       auth: `${SITE_URL}/auth.md`, ard: `${SITE_URL}/.well-known/ai-catalog.json`,
       skills: `${SITE_URL}/.well-known/agent-skills/index.json`, mcpCard: `${SITE_URL}/.well-known/mcp/server-card.json`,
-      note: 'Read-only MCP tools. Execution stays on the REST API with scoped agent keys + owner-approved live proposals.',
+      protocolVersions: MCP_SUPPORTED_VERSIONS,
+      note: 'Authenticated MCP agents may evaluate and trade paper accounts through scoped keys, agent wallets and active Pacts. Real-money, token and public-chain actions are unavailable.',
     };
     case 'health': return { ok: true, version: DISCOVERY_VERSION, ts: Date.now() };
+    case 'agent_authorization_status': return mcpAuthorizationStatus(req);
+    case 'paper_account': return await markToMarket(accountFor(req).accountId);
+    case 'paper_stats': return journalStats(accountFor(req).accountId);
+    case 'evaluation_history': {
+      const ownerId = evaluationOwner(req);
+      if (!ownerId) throw Object.assign(new Error('user-bound evaluation history required'), { status: 403 });
+      return { ok: true, mode: 'paper-only', ...listEvaluations(ownerId, args?.limit) };
+    }
+    case 'evaluation_run': return await runMcpEvaluation(req, args);
+    case 'paper_trade_open': {
+      if (!req.userAgent || !userAgentHas(req, 'trade-paper')) {
+        throw Object.assign(new Error('trade-paper scoped user agent key required'), { status: 403 });
+      }
+      const entry = Number(args?.entry || 0);
+      const size = Number(args?.size || 0);
+      const notionalMinor = entry > 0 && size > 0 ? Math.trunc(entry * size * 100) : 0;
+      const gate = agentSpendGate(req, notionalMinor, {
+        walletId: args?.walletId, pactId: args?.pactId,
+        recipient: args?.recipient, protocol: args?.protocol,
+      });
+      if (!gate.ok) throw Object.assign(new Error(gate.message || gate.reason || 'agent spend denied'), { status: 402 });
+      try {
+        const placed = await getBroker('paper').placeOrder({ ...(args || {}), accountId: accountFor(req).accountId });
+        const settled = settleAgentSpend(gate, !!placed.ok);
+        if (!settled.ok && placed.ok) {
+          await closeTrade(placed.position?.id, placed.position?.entry, accountFor(req).accountId, 'MCP authorization settlement failed');
+          throw new Error('agent authorization settlement failed');
+        }
+        return placed;
+      } catch (error) {
+        settleAgentSpend(gate, false);
+        throw error;
+      }
+    }
+    case 'paper_trade_close': {
+      if (!req.userAgent || !userAgentHas(req, 'trade-paper')) {
+        throw Object.assign(new Error('trade-paper scoped user agent key required'), { status: 403 });
+      }
+      return await closeTrade(args?.positionId, args?.exitPrice, accountFor(req).accountId, 'MCP agent paper close');
+    }
     default: throw new Error(`unknown tool: ${name}`);
   }
 }
@@ -1010,42 +1134,123 @@ app.get('/.well-known/mcp/server-card.json', (req, res) => {
   res.set('Access-Control-Allow-Origin', '*');
   res.type('application/json');
   res.json({
-    serverInfo: { name: 'iost-terminal', version: DISCOVERY_VERSION },
-    protocolVersion: MCP_VERSION,
+    serverInfo: MCP_SERVER_INFO,
+    protocolVersion: MCP_MODERN_VERSION,
+    supportedVersions: MCP_SUPPORTED_VERSIONS,
     transport: { type: 'streamable-http', endpoint: `${SITE_URL}/mcp` },
-    capabilities: { tools: { listChanged: false } },
+    capabilities: { tools: { listChanged: false }, extensions: { [MCP_TASKS_EXTENSION]: {} } },
+    safety: { mode: 'paper-only', realMoney: false, tokenActions: false, publicChainActions: false },
   });
 });
-app.post('/mcp', express.json({ limit: '128kb' }), async (req, res) => {
+app.post('/mcp', publicLimiter, async (req, res) => {
   const msg = req.body;
   const reply = (payload, httpStatus = 200) => res.status(httpStatus).json(payload);
+  if (req.invalidBearer) {
+    res.set('WWW-Authenticate', `Bearer resource_metadata="${SITE_URL}/.well-known/oauth-protected-resource/mcp"`);
+    return reply({ jsonrpc: '2.0', id: msg?.id ?? null, error: { code: -32001, message: 'Invalid or wrong-audience bearer token' } }, 401);
+  }
   if (!msg || msg.jsonrpc !== '2.0' || typeof msg.method !== 'string') {
     return reply({ jsonrpc: '2.0', id: msg?.id ?? null, error: { code: -32600, message: 'Invalid Request' } }, 400);
   }
   const id = msg.id ?? null;
+  const requestedVersion = req.get('mcp-protocol-version') || msg.params?._meta?.['io.modelcontextprotocol/protocolVersion'];
+  const modern = requestedVersion === MCP_MODERN_VERSION;
+  if (modern) {
+    const headers = Object.fromEntries(Object.entries(req.headers).map(([key, value]) => [key.toLowerCase(), Array.isArray(value) ? value[0] : value]));
+    const validation = validateModernRequest(msg, headers);
+    if (!validation.ok) return reply({ jsonrpc: '2.0', id, error: validation.error }, validation.status);
+  } else if (requestedVersion && requestedVersion !== MCP_LEGACY_VERSION) {
+    return reply({ jsonrpc: '2.0', id, error: { code: -32022, message: 'Unsupported protocol version', data: { supported: MCP_SUPPORTED_VERSIONS, requested: requestedVersion } } }, 400);
+  }
+
+  const access = mcpAccess(req);
+  const taskOwner = access.ownerId;
+  const success = (result) => reply({ jsonrpc: '2.0', id, result: modern ? withModernMeta(result, MCP_SERVER_INFO) : result });
+
+  if (modern && msg.method === 'server/discover') {
+    return success({
+      resultType: 'complete', supportedVersions: MCP_SUPPORTED_VERSIONS,
+      capabilities: { tools: { listChanged: false }, extensions: { [MCP_TASKS_EXTENSION]: {} } },
+      instructions: 'Public tools are read-only. Authenticate with a user-bound agent key for private evaluations and wallet/Pact-authorized paper trades. Real-money, token and public-chain actions are unavailable.',
+      ttlMs: 300_000, cacheScope: 'public',
+    });
+  }
   if (msg.method === 'initialize') {
-    return reply({ jsonrpc: '2.0', id, result: { protocolVersion: MCP_VERSION, capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'iost-terminal', version: DISCOVERY_VERSION } } });
+    if (modern) return reply({ jsonrpc: '2.0', id, error: { code: -32601, message: 'Method not found: initialize' } }, 404);
+    return reply({ jsonrpc: '2.0', id, result: { protocolVersion: MCP_LEGACY_VERSION, capabilities: { tools: { listChanged: false } }, serverInfo: MCP_SERVER_INFO } });
   }
   if (msg.method === 'notifications/initialized' || msg.method === 'notifications/cancelled') {
     return res.status(202).end(); // JSON-RPC notification — no body
   }
   if (msg.method === 'tools/list') {
-    return reply({ jsonrpc: '2.0', id, result: { tools: MCP_TOOLS } });
+    const tools = buildMcpTools(access);
+    return success(modern
+      ? { resultType: 'complete', tools, ttlMs: access.authenticated ? 0 : 60_000, cacheScope: access.authenticated ? 'private' : 'public' }
+      : { tools });
   }
   if (msg.method === 'tools/call') {
     const name = String(msg.params?.name || '');
     const args = msg.params?.arguments ?? {};
+    const argumentValidation = validateToolArguments(name, args, access);
+    if (!argumentValidation.ok) {
+      return reply({ jsonrpc: '2.0', id, error: { code: -32602, message: argumentValidation.error } });
+    }
+    if (modern && name === 'evaluation_run' && hasTasksCapability(msg)) {
+      if (!taskOwner || !mcpToolAllowed(req, name)) {
+        return reply({ jsonrpc: '2.0', id, error: { code: -32602, message: 'unknown or unauthorized tool' } });
+      }
+      let task;
+      try {
+        task = mcpTaskStore.create({ ownerId: taskOwner, toolName: name, requestHash: canonicalHash(args) });
+      } catch (error) {
+        return reply({ jsonrpc: '2.0', id, error: { code: -32603, message: error.message } });
+      }
+      setTimeout(async () => {
+        try {
+          if (mcpTaskStore.get(taskOwner, task.taskId)?.status !== 'working') return;
+          const data = await runMcpEvaluation(req, args);
+          if (mcpTaskStore.get(taskOwner, task.taskId)?.status === 'working') {
+            mcpTaskStore.complete(taskOwner, task.taskId, modernResult(data, MCP_SERVER_INFO));
+          }
+        } catch (error) {
+          mcpTaskStore.fail(taskOwner, task.taskId, { code: error.protocolCode || -32603, message: error.message });
+        }
+      }, 25);
+      return success({ resultType: 'task', ...task });
+    }
     try {
-      const data = await mcpToolCall(name, args);
-      return reply({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }], isError: false } });
+      const data = await mcpToolCall(req, name, args);
+      const result = modern ? modernResult(data, MCP_SERVER_INFO) : { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }], isError: false };
+      return reply({ jsonrpc: '2.0', id, result });
     } catch (e) {
-      return reply({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: `error: ${e.message}` }], isError: true } });
+      if (e.protocolCode) return reply({ jsonrpc: '2.0', id, error: { code: e.protocolCode, message: e.message } });
+      const errorData = { ok: false, error: e.message, mode: 'paper-only' };
+      const result = modern ? modernResult(errorData, MCP_SERVER_INFO, { isError: true }) : { content: [{ type: 'text', text: `error: ${e.message}` }], isError: true };
+      return reply({ jsonrpc: '2.0', id, result });
     }
   }
-  if (msg.method === 'ping') {
-    return reply({ jsonrpc: '2.0', id, result: {} });
+  if (modern && ['tasks/get', 'tasks/update', 'tasks/cancel'].includes(msg.method)) {
+    if (!hasTasksCapability(msg)) {
+      return reply({ jsonrpc: '2.0', id, error: { code: -32021, message: 'Tasks extension capability required', data: { requiredCapabilities: { extensions: { [MCP_TASKS_EXTENSION]: {} } } } } }, 400);
+    }
+    if (!taskOwner) return reply({ jsonrpc: '2.0', id, error: { code: -32602, message: 'private task owner required' } });
+    const taskId = String(msg.params?.taskId || '');
+    const existing = mcpTaskStore.get(taskOwner, taskId);
+    if (!existing) return reply({ jsonrpc: '2.0', id, error: { code: -32602, message: 'task not found' } });
+    if (msg.method === 'tasks/get') return success({ resultType: 'complete', ...existing });
+    if (msg.method === 'tasks/cancel') {
+      const cancelled = mcpTaskStore.cancel(taskOwner, taskId);
+      if (!cancelled) return reply({ jsonrpc: '2.0', id, error: { code: -32602, message: 'task is already terminal' } });
+      return success({ resultType: 'complete', ...cancelled });
+    }
+    const updated = mcpTaskStore.updateInput(taskOwner, taskId, msg.params?.inputResponses);
+    if (!updated) return reply({ jsonrpc: '2.0', id, error: { code: -32602, message: 'task is not awaiting input' } });
+    return success({ resultType: 'complete', ...updated });
   }
-  return reply({ jsonrpc: '2.0', id, error: { code: -32601, message: `Method not found: ${msg.method}` } });
+  if (msg.method === 'ping') {
+    return success(modern ? { resultType: 'complete' } : {});
+  }
+  return reply({ jsonrpc: '2.0', id, error: { code: -32601, message: `Method not found: ${msg.method}` } }, modern ? 404 : 200);
 });
 
 // ---- ARD manifest (Agentic Resource Discovery) — /.well-known/ai-catalog.json ----
@@ -1067,7 +1272,7 @@ app.get('/.well-known/ai-catalog.json', (req, res) => {
       {
         identifier: 'urn:air:iostcallister.com:mcp:terminal',
         urn: 'urn:air:iostcallister.com:mcp:terminal',
-        displayName: 'IOST Terminal MCP server (read-only tools)',
+        displayName: 'IOST Terminal MCP server (private evaluation and paper-only trading)',
         type: 'application/vnd.mcp+json',
         url: `${SITE_URL}/.well-known/mcp/server-card.json`,
         representativeQueries: ['what tools does the IOST Terminal expose over MCP', 'get market snapshot', 'analyze a symbol'],

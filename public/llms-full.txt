@@ -35,7 +35,7 @@
 - [/.well-known/api-catalog](/.well-known/api-catalog) — RFC 9727 linkset
 - [/.well-known/ai-catalog.json](/.well-known/ai-catalog.json) — ARD manifest
 - [/.well-known/mcp/server-card.json](/.well-known/mcp/server-card.json) — MCP card
-- [/mcp](/mcp) — MCP streamable-HTTP endpoint (read-only tools)
+- [/mcp](/mcp) — MCP 2026-07-28 streamable-HTTP endpoint (public reads, private evaluation and authorized paper-only execution)
 - [/.well-known/agent-skills/index.json](/.well-known/agent-skills/index.json) — skills index
 - [/.well-known/agent-card.json](/.well-known/agent-card.json) — A2A agent card
 - [/auth.md](/auth.md) — agent authentication guide
@@ -155,12 +155,15 @@
 - `POST /api/token-audit {contractAddress, chainId?}` — Binance Web3 token security audit (honeypot/rug-pull/scam/tax scan)
 - `GET /api/smart-money?chainId=&page=&pageSize=` — Binance Web3 whale buy/sell signals
 
-## MCP (read-only tools)
+## MCP 2026-07-28 (paper-only)
 
-Endpoint: `POST /mcp` (streamable HTTP, JSON-RPC 2.0). Tools:
-`market_snapshot`, `asset_scores`, `analyze_symbol`, `news_sentiment`, `chain_status`,
-`platform_help`, `health`. Execution stays on the REST API with scoped
-agent keys + owner-approved proposals.
+Endpoint: `POST /mcp` (stateless streamable HTTP, JSON-RPC 2.0). Anonymous clients see
+only public read tools. A resource-bound bearer token or per-user agent key with `read`
+adds the user's private paper account, statistics and causal evaluation history. The
+`trade-paper` scope adds paper open/close tools, but an open still requires an owned
+agent wallet and active wallet-bound Pact. Long evaluations support owner-bound MCP
+Tasks. MCP never exposes live orders, money movement, token conversion or public-chain
+mutation. Bounded 2025-06-18 compatibility remains available during migration.
 
 ## AITT — Agent Intelligence Trading Token
 
