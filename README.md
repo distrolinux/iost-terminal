@@ -73,14 +73,14 @@ remain separate from deployment and do not enable any money or token boundary.
 | `lib/risk.js` | Position sizing: account size + max risk % + entry + stop → size, $ risk, R:R, potential P/L, exposure |
 | `lib/portfolio.js` | Portfolio AI: whole-portfolio exposure, concentration, composition, suggestions |
 | `lib/news.js` | News + sentiment engine (RSS, key-free): headlines classified bullish/neutral/bearish |
-| `lib/onchain.js` | IOST mainnet dashboard via public RPC: head block, TPS, active addresses, large transfers, gas/RAM |
+| `lib/onchain.js` | IOST mainnet dashboard via the configured operator node (or public RPC fallback): head/LIB finality, TPS, peers, freshness, large transfers, gas/RAM |
 | `lib/paper.js` | Paper trading engine + AI journal (every trade: entry, stop, target, reason, AI confidence, result) |
 
 ## Data sources
 
 - Crypto: OKX (primary) → KuCoin → Gate.io (Binance/Bybit geo-blocked from this host)
 - Stocks: Yahoo Finance (delayed) → FMP demo fallback
-- On-chain: IOST public RPC `api.iost.io`
+- On-chain: `IOST_RPC` operator node when configured, otherwise public RPC `api.iost.io`; the dashboard exposes source label, node freshness, peer health and head-to-LIB finality gap
 - News: CoinDesk / Cointelegraph / Decrypt RSS (no API key)
 
 ## Agent API (for Hermes / custom agents)

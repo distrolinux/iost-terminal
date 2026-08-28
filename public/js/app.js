@@ -1916,19 +1916,32 @@ async function renderOnchain() {
   let o;
   try { o = await api('/api/onchain'); state.onchain = o; } catch (e) { el.innerHTML = `<div class="card empty">On-chain unavailable: ${esc(e.message)}</div>`; return; }
   const c = o.chain;
+  const n = o.node || {};
+  const nodeHealthy = n.status === 'healthy';
+  const nodeStatus = nodeHealthy ? '<span class="up">● healthy</span>' : n.status === 'degraded' ? '<span class="warn">● degraded</span>' : '<span class="down">● offline</span>';
+  const age = n.headAgeSec == null ? '—' : `${n.headAgeSec}s`;
+  const finality = c.finalityGapBlocks == null ? '—' : `${fmtNum(c.finalityGapBlocks, 0)} blocks`;
   const maxTx = Math.max(...o.series.map(s => s.txs), 1);
   const bars = o.series.slice(-30).map(s => `<i title="block ${s.height}: ${s.txs} tx" style="height:${Math.max(6, (s.txs / maxTx) * 100)}%"></i>`).join('');
   el.innerHTML = `
-    <div class="section-title">IOST On-Chain Dashboard <span class="sub">live mainnet · ${c.live ? '<span class="up">● live</span>' : '<span class="down">● offline</span>'}</span></div>
+    <div class="section-title">IOST On-Chain Dashboard <span class="sub">mainnet · ${nodeStatus}</span></div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="section-title" style="margin-bottom:8px">Node trust <span class="sub">read-only network source</span></div>
+      <div class="grid g-3">
+        <div class="kpi"><span class="k-label">Source</span><span class="k-value" style="font-size:15px">${esc(n.label || 'IOST RPC')}</span><span class="k-sub">${n.source === 'operator-node' ? 'operator configured' : 'public fallback'}</span></div>
+        <div class="kpi"><span class="k-label">Node software</span><span class="k-value" style="font-size:15px">${esc(n.version || '—')}</span><span class="k-sub">${esc(n.mode || 'mode unavailable')}</span></div>
+        <div class="kpi"><span class="k-label">Freshness</span><span class="k-value" style="font-size:15px">${age}</span><span class="k-sub">RPC ${n.responseMs ?? '—'} ms · tx pool ${n.txPoolSize ?? '—'}</span></div>
+      </div>
+    </div>
     <div class="stat-cards">
-      <div class="card kpi"><span class="k-label">Head block</span><span class="k-value">${fmtNum(c.headBlock, 0)}</span><span class="k-sub">${esc(c.netName)}</span></div>
+      <div class="card kpi"><span class="k-label">Head block</span><span class="k-value">${fmtNum(c.headBlock, 0)}</span><span class="k-sub">LIB ${fmtNum(c.libBlock, 0)} · ${esc(c.netName)}</span></div>
       <div class="card kpi"><span class="k-label">TPS</span><span class="k-value">${c.tps}</span><span class="k-sub">${c.avgTxPerBlock} tx/block</span></div>
-      <div class="card kpi"><span class="k-label">Peers</span><span class="k-value">${c.peerCount ?? '—'}</span><span class="k-sub">lib lag ${c.latencyMs ?? '—'} ms</span></div>
-      <div class="card kpi"><span class="k-label">Active addresses</span><span class="k-value">${c.activeAddresses}</span><span class="k-sub">${c.transactions24h} txs · last ${o.series.length} blocks</span></div>
+      <div class="card kpi"><span class="k-label">Finality gap</span><span class="k-value" style="font-size:18px">${finality}</span><span class="k-sub">${c.finalityLagSec ?? '—'}s head-to-LIB</span></div>
+      <div class="card kpi"><span class="k-label">Peers</span><span class="k-value">${c.peerCount ?? '—'}</span><span class="k-sub">${n.inboundPeers ?? '—'} in · ${n.outboundPeers ?? '—'} out</span></div>
     </div>
     <div class="grid g-2" style="margin-bottom:16px">
       <div class="card">
-        <div class="section-title" style="margin-bottom:8px">Network activity <span class="sub">txs per block</span></div>
+        <div class="section-title" style="margin-bottom:8px">Network activity <span class="sub">${c.sampleTransactions} txs · ${c.activeAddresses} active addresses in ${c.sampleBlockCount} sampled blocks</span></div>
         <div class="mini-bar">${bars || '<div class="empty">no block data</div>'}</div>
       </div>
       <div class="card">
