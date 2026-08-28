@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Sora:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/css/style.css?v=2.15">
+<link rel="stylesheet" href="/css/style.css?v=2.16">
 </head>
 <body class="cmd">
 <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -46,6 +46,7 @@
       <button class="nav-btn" data-view="news" aria-label="View market news and sentiment"><span class="ic">✉</span><span class="lbl">News</span></button>
       <button class="nav-btn" data-view="journal" aria-label="View AI trading journal"><span class="ic">▦</span><span class="lbl">Journal</span></button>
       <button class="nav-btn" data-view="performance" aria-label="View performance analytics"><span class="ic">◮</span><span class="lbl">Perf</span></button>
+      <button class="nav-btn" data-view="evaluation" aria-label="View Agent Evaluation Lab"><span class="ic">⌬</span><span class="lbl">Eval</span></button>
       <button class="nav-btn" data-view="whales" aria-label="View large trades log"><span class="ic">🐋</span><span class="lbl">Whales</span></button>
       <button class="nav-btn" data-view="smartmoney" aria-label="View smart money on-chain signals"><span class="ic">⚡</span><span class="lbl">Signals</span></button>
       <button class="nav-btn" data-view="audit" aria-label="View token security audit"><span class="ic">🛡</span><span class="lbl">Audit</span></button>
@@ -74,6 +75,7 @@
     <div class="view hidden" id="view-assistant" aria-label="AI trade assistant view"></div>
     <div class="view hidden" id="view-journal" aria-label="AI trading journal view"></div>
     <div class="view hidden" id="view-performance" aria-label="Performance analytics view"></div>
+    <div class="view hidden" id="view-evaluation" aria-label="Agent Evaluation Lab view"></div>
     <div class="view hidden" id="view-whales" aria-label="Large trades log view"></div>
     <div class="view hidden" id="view-smartmoney" aria-label="Smart money signals view"></div>
     <div class="view hidden" id="view-audit" aria-label="Token security audit view"></div>
@@ -178,7 +180,7 @@
 
 <script defer src="/js/vendor/lightweight-charts.js"></script>
 <script defer src="/js/vendor/tweetnacl.min.js"></script>
-<script type="module" src="/js/app.js?v=2.19.0"></script>
+<script type="module" src="/js/app.js?v=2.20.0"></script>
 <script type="module" src="/js/auth.js?v=2.9.0"></script>
 <script type="module" src="/js/onboarding.js?v=1.0.0"></script>
 <script type="application/json" id="agent-state">null</script>

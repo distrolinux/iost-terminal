@@ -883,7 +883,7 @@ setInterval(setClock, 1000); setClock();
 
 $$('.nav-btn').forEach(btn => btn.addEventListener('click', () => switchView(btn.dataset.view)));
 // ARD: deterministic paths — every view has a stable deep link (/app#scanner, /app#risk, …)
-const VALID_VIEWS = ['scanner', 'scores', 'risk', 'portfolio', 'onchain', 'news', 'assistant', 'journal', 'performance', 'whales', 'smartmoney', 'audit', 'agents', 'control', 'trace', 'points', 'aitt', 'wallet'];
+const VALID_VIEWS = ['scanner', 'scores', 'risk', 'portfolio', 'onchain', 'news', 'assistant', 'journal', 'performance', 'evaluation', 'whales', 'smartmoney', 'audit', 'agents', 'control', 'trace', 'points', 'aitt', 'wallet'];
 function switchView(view) {
   if (!VALID_VIEWS.includes(view)) view = 'scanner';
   state.activeView = view;
@@ -927,7 +927,7 @@ function gotoApiKeyInput() {
 }
 function refreshView(view) {
   // auth-gated views: paper account data (portfolio, journal, performance) + points + wallet
-  if (['portfolio', 'journal', 'performance', 'control', 'trace', 'points', 'wallet'].includes(view) && !window.Auth?.state?.loggedIn) {
+  if (['portfolio', 'journal', 'performance', 'evaluation', 'control', 'trace', 'points', 'wallet'].includes(view) && !window.Auth?.state?.loggedIn) {
     const el = $(`#view-${view}`);
     if (el) el.innerHTML = `<div class="card empty">Sign in required — <button class="btn sm" id="authGateBtn">open sign in</button></div>`;
     $('#authGateBtn')?.addEventListener('click', () => window.Auth?.open('login'));
@@ -939,7 +939,7 @@ function refreshView(view) {
     return;
   }
   ({ scanner: renderScanner, scores: renderScores, risk: renderRisk, portfolio: renderPortfolio,
-    onchain: renderOnchain, news: renderNews, assistant: renderAssistant, journal: renderJournal, performance: renderPerformance, whales: renderWhales, smartmoney: renderSmartMoney, audit: renderAudit, agents: renderAgents, control: renderAgentControl, trace: renderDecisionTrace, points: renderPoints, aitt: renderAITT, wallet: renderWallet })[view]();
+    onchain: renderOnchain, news: renderNews, assistant: renderAssistant, journal: renderJournal, performance: renderPerformance, evaluation: renderEvaluationLab, whales: renderWhales, smartmoney: renderSmartMoney, audit: renderAudit, agents: renderAgents, control: renderAgentControl, trace: renderDecisionTrace, points: renderPoints, aitt: renderAITT, wallet: renderWallet })[view]();
 }
 
 // ---------------- Owner Agent Control Center ----------------
@@ -2164,6 +2164,121 @@ async function askAssistant(q) {
   log.scrollTop = log.scrollHeight;
 }
 
+// ---------------- Agent Evaluation Lab ----------------
+// Read-only historical evidence. A passing gate means paper review only.
+async function renderEvaluationLab() {
+  const el = $('#view-evaluation');
+  el.innerHTML = `
+    <div class="section-title">Agent Evaluation Lab <span class="sub">walk-forward evidence · realistic execution costs · fail-closed paper review</span></div>
+    <div class="eval-boundary" role="status"><strong>PAPER EVIDENCE · FAIL-CLOSED</strong><span>This lab never enables live trading, token actions or public-chain writes.</span></div>
+    <ol class="eval-pipeline" aria-label="Evaluation methodology">
+      <li><span>01</span><strong>Freeze</strong><small>strategy parameters</small></li>
+      <li><span>02</span><strong>Walk forward</strong><small>train → unseen test</small></li>
+      <li><span>03</span><strong>Execute</strong><small>next-bar-open</small></li>
+      <li><span>04</span><strong>Charge costs</strong><small>fee + spread + slip</small></li>
+      <li><span>05</span><strong>Challenge</strong><small>baselines + calibration</small></li>
+      <li><span>06</span><strong>Hold or review</strong><small>paper candidate only</small></li>
+    </ol>
+    <div class="eval-layout">
+      <form class="card eval-form" id="evalForm">
+        <div class="section-title">Strategy specimen <span class="sub">minimum out-of-sample evidence is enforced by the server</span></div>
+        <div class="eval-fields">
+          <div class="field"><label for="evSymbol">Symbol</label><input id="evSymbol" value="BTC" maxlength="12" autocomplete="off"></div>
+          <div class="field"><label for="evTimeframe">Timeframe</label><select id="evTimeframe"><option value="1d">1 day</option><option value="4h">4 hours</option><option value="1h">1 hour</option><option value="15m">15 minutes</option></select></div>
+          <div class="field"><label for="evRule">Entry rule</label><select id="evRule"><option value="ma-cross">MA cross</option><option value="rsi">RSI reversion</option><option value="breakout">Breakout</option><option value="ai-score">AI proxy score</option></select></div>
+          <div class="field"><label for="evSide">Side</label><select id="evSide"><option value="long">Long</option><option value="short">Short</option></select></div>
+          <div class="field"><label for="evP1" id="evP1Label">Fast MA</label><input id="evP1" type="number" value="20" min="1"></div>
+          <div class="field" id="evP2Field"><label for="evP2" id="evP2Label">Slow MA</label><input id="evP2" type="number" value="50" min="2"></div>
+          <div class="field"><label for="evStop">Stop (%)</label><input id="evStop" type="number" value="5" min="0.1" max="100" step="0.1"></div>
+          <div class="field"><label for="evTarget">Target (%)</label><input id="evTarget" type="number" value="10" min="0.1" max="100" step="0.1"></div>
+          <div class="field"><label for="evFee">Fee (bps/side)</label><input id="evFee" type="number" value="10" min="0" max="500"></div>
+          <div class="field"><label for="evSpread">Spread (bps)</label><input id="evSpread" type="number" value="8" min="0" max="500"></div>
+          <div class="field"><label for="evSlippage">Slippage (bps/side)</label><input id="evSlippage" type="number" value="5" min="0" max="500"></div>
+          <div class="field"><label for="evTrades">Minimum trades</label><input id="evTrades" type="number" value="30" min="30" max="5000"></div>
+        </div>
+        <button class="btn eval-run" id="evRun" type="submit">Run walk-forward evaluation <span>→</span></button>
+        <p class="eval-note">Signals see bars through index <b>i</b>; simulated fills occur at <b>i+1 open</b>. If stop and target touch in one bar, the stop wins.</p>
+      </form>
+      <section class="eval-result" id="evalResult" aria-live="polite">
+        <div class="eval-await">
+          <span class="eval-orbit" aria-hidden="true">⌬</span>
+          <strong>Awaiting strategy evidence</strong>
+          <p>The lab will expose out-of-sample performance, costs, calibration, baselines and every reason the promotion gate holds.</p>
+        </div>
+      </section>
+    </div>`;
+
+  const setRuleFields = () => {
+    const rule = $('#evRule').value; const p1 = $('#evP1'); const p2 = $('#evP2'); const field2 = $('#evP2Field');
+    if (rule === 'ma-cross') { $('#evP1Label').textContent = 'Fast MA'; p1.value = 20; $('#evP2Label').textContent = 'Slow MA'; p2.value = 50; field2.hidden = false; }
+    else if (rule === 'rsi') { $('#evP1Label').textContent = 'Oversold'; p1.value = 30; $('#evP2Label').textContent = 'Overbought'; p2.value = 70; field2.hidden = false; }
+    else if (rule === 'breakout') { $('#evP1Label').textContent = 'Lookback bars'; p1.value = 20; field2.hidden = true; }
+    else { $('#evP1Label').textContent = 'Score threshold'; p1.value = 65; field2.hidden = true; }
+  };
+  $('#evRule').addEventListener('change', setRuleFields);
+  $('#evalForm').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const rule = $('#evRule').value; const p1 = +$('#evP1').value; const p2 = +$('#evP2').value;
+    const params = rule === 'ma-cross' ? { fast: p1, slow: p2 }
+      : rule === 'rsi' ? { oversold: p1, overbought: p2 }
+      : rule === 'breakout' ? { lookback: p1 } : { threshold: p1, side: $('#evSide').value };
+    const body = {
+      symbol: $('#evSymbol').value.trim().toUpperCase() || 'BTC', timeframe: $('#evTimeframe').value,
+      strategy: { name: `${rule} · ${$('#evSide').value}`, side: $('#evSide').value, sizePct: 0.5,
+        entry: { rule, params }, exit: { stopPct: +$('#evStop').value / 100, targetPct: +$('#evTarget').value / 100, maxBars: 20 } },
+      config: { trainBars: 120, testBars: 40, stepBars: 40, minimumTrades: +$('#evTrades').value,
+        costs: { feeBps: +$('#evFee').value, spreadBps: +$('#evSpread').value, slippageBps: +$('#evSlippage').value } },
+    };
+    const button = $('#evRun'); const out = $('#evalResult');
+    button.disabled = true; button.textContent = 'Evaluating unseen windows…';
+    out.innerHTML = `<div class="eval-await is-running"><span class="eval-orbit" aria-hidden="true">⌬</span><strong>Walking forward</strong><p>Freezing parameters, replaying unseen windows and challenging the result against baselines.</p></div>`;
+    try { renderEvaluationResult(out, await post('/api/evaluation-lab', body)); }
+    catch (error) { out.innerHTML = `<div class="card eval-error"><strong>Evaluation held closed</strong><p>${esc(error.message)}</p><span>No strategy was promoted.</span></div>`; }
+    finally { button.disabled = false; button.innerHTML = 'Run walk-forward evaluation <span>→</span>'; }
+  });
+}
+
+function renderEvaluationResult(out, data) {
+  const m = data.metrics || {}; const gate = data.promotion || {}; const cal = data.calibration || {};
+  const pass = gate.allowed === true;
+  const metric = (label, value, sub, cls = '') => `<div class="card kpi"><span class="k-label">${label}</span><span class="k-value ${cls}">${value}</span><span class="k-sub">${sub}</span></div>`;
+  const baselineRows = Object.entries(data.baselines || {}).map(([key, row]) => {
+    const value = Number(row.returnPct || 0); const width = Math.min(100, Math.max(3, Math.abs(value) * 3));
+    return `<div class="eval-baseline"><span>${esc(key.replace(/([A-Z])/g, ' $1'))}</span><i><b class="${value >= 0 ? 'positive' : 'negative'}" style="width:${width}%"></b></i><strong class="${value >= 0 ? 'up' : 'down'}">${value > 0 ? '+' : ''}${fmtNum(value)}%</strong></div>`;
+  }).join('');
+  const failures = (gate.failures || []).map(x => `<li>${esc(x.replaceAll('-', ' '))}</li>`).join('');
+  const warnings = (data.warnings || []).map(x => `<li>${esc(x)}</li>`).join('');
+  const folds = (data.folds || []).map(f => `<tr><td>${f.id}</td><td class="mono">${f.train.fromIndex}–${f.train.toIndex}</td><td class="mono">${f.test.fromIndex}–${f.test.toIndex}</td><td>${f.result?.trades ?? 0}</td><td class="${(f.result?.returnPct || 0) >= 0 ? 'up' : 'down'}">${(f.result?.returnPct || 0) > 0 ? '+' : ''}${fmtNum(f.result?.returnPct)}%</td></tr>`).join('');
+  out.innerHTML = `
+    <article class="eval-verdict ${pass ? 'is-pass' : 'is-hold'}">
+      <span class="eval-verdict-label">PROMOTION GATE · PAPER REVIEW ONLY</span>
+      <strong>${pass ? 'ELIGIBLE_FOR_PAPER_REVIEW' : 'HOLD'}</strong>
+      <p>${pass ? 'Evidence cleared every paper-review threshold. Human review is still required.' : 'The gate failed closed. No strategy state or execution permission changed.'}</p>
+    </article>
+    <div class="grid g-3 eval-kpis">
+      ${metric('OOS trades', m.trades ?? '—', `${m.wins ?? 0} wins · ${m.losses ?? 0} losses`)}
+      ${metric('Win rate', m.winRatePct != null ? `${m.winRatePct}%` : '—', 'out-of-sample only')}
+      ${metric('Profit factor', m.profitFactor ?? '—', 'gross wins ÷ gross losses', (m.profitFactor ?? 0) >= 1 ? 'up' : 'down')}
+      ${metric('Expectancy', m.expectancy != null ? `$${fmtNum(m.expectancy)}` : '—', `${fmtNum(m.expectancyPct, 3)}% per trade`, (m.expectancy ?? 0) >= 0 ? 'up' : 'down')}
+      ${metric('Max drawdown', m.maxDrawdownPct != null ? `${m.maxDrawdownPct}%` : '—', 'mark-to-market peak → trough', 'down')}
+      ${metric('Sharpe-like', m.sharpeLike ?? '—', 'trade-return risk adjustment')}
+      ${metric('Net return', m.cumulativeReturnPct != null ? `${m.cumulativeReturnPct > 0 ? '+' : ''}${m.cumulativeReturnPct}%` : '—', `$${fmtNum(m.finalEquity)} final paper equity`, (m.cumulativeReturnPct ?? 0) >= 0 ? 'up' : 'down')}
+      ${metric('Modeled costs', m.totalCosts != null ? `$${fmtNum(m.totalCosts)}` : '—', 'fees + spread + slippage')}
+      ${metric('Calibration', cal.expectedCalibrationError != null ? fmtNum(cal.expectedCalibrationError, 4) : '—', `Brier ${fmtNum(cal.brierScore, 4)} · ${cal.observations ?? 0} observations`)}
+    </div>
+    <div class="grid g-2 eval-detail-grid">
+      <section class="card"><div class="section-title">Baseline challenge</div><div class="eval-baselines">${baselineRows}</div></section>
+      <section class="card"><div class="section-title">Gate evidence</div>
+        ${failures ? `<ul class="eval-findings is-failure">${failures}</ul>` : '<p class="eval-clear">All configured paper-review checks passed.</p>'}
+        ${warnings ? `<ul class="eval-findings">${warnings}</ul>` : ''}
+      </section>
+    </div>
+    <section class="card eval-folds"><div class="section-title">Walk-forward ledger <span class="sub">non-overlapping train/test boundary · ${data.folds?.length || 0} folds</span></div>
+      <div class="table-wrap"><table><thead><tr><th>Fold</th><th>Train bars</th><th>Unseen test bars</th><th>Trades</th><th>Return</th></tr></thead><tbody>${folds}</tbody></table></div>
+      <div class="eval-hash mono">RESULT HASH · ${esc(data.evidence?.resultHash || 'unavailable')}</div>
+    </section>`;
+}
+
 // ---------------- Journal ----------------
 let journalView = { filter: 'all' };
 async function renderJournal() {
@@ -2644,7 +2759,7 @@ function applyAuthGate() {
     const el = $('#' + id);
     if (el) { el.disabled = !ok; el.title = ok ? '' : 'Sign in required'; }
   });
-  if (['portfolio', 'journal', 'performance', 'control', 'trace', 'points', 'wallet'].includes(state.activeView) && !ok) refreshView(state.activeView);
+  if (['portfolio', 'journal', 'performance', 'evaluation', 'control', 'trace', 'points', 'wallet'].includes(state.activeView) && !ok) refreshView(state.activeView);
   // topbar balance follows the signed-in user's account
   const bal = $('#tbBalance');
   if (!ok && bal) bal.textContent = '--';
@@ -2654,7 +2769,7 @@ function applyAuthGate() {
 window.addEventListener('authchange', (e) => {
   applyAuthGate();
   if (e.detail?.loggedIn) renderCommandRail(); // show the user's balance immediately on sign-in
-  if (e.detail?.loggedIn && ['portfolio', 'journal', 'performance', 'control', 'trace', 'points', 'wallet'].includes(state.activeView)) refreshView(state.activeView);
+  if (e.detail?.loggedIn && ['portfolio', 'journal', 'performance', 'evaluation', 'control', 'trace', 'points', 'wallet'].includes(state.activeView)) refreshView(state.activeView);
 });
 setTimeout(applyAuthGate, 2500); // safety re-run once auth.js has settled
 
