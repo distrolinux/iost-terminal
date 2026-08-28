@@ -52,9 +52,12 @@ layer. Full spec + Coinbase CDP research folded in: repo `docs/PHASE2_WALLET.md`
 
 ## MCP
 
-Read-only tools over `POST /mcp` (streamable HTTP): `market_snapshot`, `asset_scores`,
-`analyze_symbol`, `news_sentiment`, `chain_status`, `proposals`, `platform_help`, `health`.
-Execution stays on the REST API with scoped keys.
+Modern MCP 2026-07-28 tools are available over `POST /mcp` with bounded
+2025-06-18 compatibility. Public tools are read-only. A user-bound key with `read`
+adds private account and causal evaluation tools; `trade-paper` additionally exposes
+paper open/close tools, which still require an owned agent wallet and active Pact.
+Long evaluations can use the owner-bound MCP Tasks extension. No MCP tool can place a
+live order, move real money, convert a token, or write to a public chain.
 
 ## Rules
 
