@@ -16,7 +16,7 @@ import { calculateRisk, portfolioExposure } from './lib/risk.js';
 import { analyzePortfolio } from './lib/portfolio.js';
 import { getState, closeTrade, resetAccount, setAccountSize, markToMarket, journalStats, ensureAccount, listAccounts, persistAccounts } from './lib/paper.js';
 import { getBroker } from './lib/broker/index.js';
-import { enableLive, disableLive, getLiveState, logLiveEvent, anyLiveEnabled, isLiveAllowed, liveTradingAvailable } from './lib/live.js';
+import { enableLive, disableLive, getLiveState, logLiveEvent, anyLiveEnabled, isLiveAllowed, isOwnerIdentity, liveTradingAvailable } from './lib/live.js';
 import { checkLiveOrder } from './lib/rails.js';
 import { getFeeConfig, setFeeConfig, canTrade, burnCredits, grantCredits, walletSummary } from './lib/fees.js';
 import { setUserKrakenKey, getUserKrakenKeys, clearUserKrakenKey, userKrakenStatus } from './lib/keys.js';
@@ -718,7 +718,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.18.0';
+const DISCOVERY_VERSION = '1.19.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -773,6 +773,8 @@ const OPENAPI_PATHS = {
   '/api/paper/close': { post: { summary: 'Close paper trade', tags: ['execution'] } },
   '/api/signals': { post: { summary: 'Publish a signal as the authenticated principal; SHA-256 pinned on IOST mainnet', tags: ['agents'] } },
   '/api/agent-keys': { get: { summary: 'My AI-agent API keys (scopes, prefixes)', tags: ['auth'] }, post: { summary: 'Mint a scoped AI-agent API key', tags: ['auth'] } },
+  '/api/agent-control': { get: { summary: 'Owner-only agent operations snapshot: activity, permissions, budgets and safety state', tags: ['autonomy'] } },
+  '/api/agent-control/emergency-stop': { post: { summary: 'Owner-only fail-safe: stop autopilot, suspend owned agent wallets and disable live execution', tags: ['autonomy'] } },
 };
 app.get('/openapi.json', (req, res) => {
   res.set('Access-Control-Allow-Origin', '*');
@@ -2046,7 +2048,7 @@ app.post('/api/account/live/disable', requireUser, async (req, res) => {
 // Owner session helper: only allowlisted emails are the owner.
 function isOwnerSession(req) {
   const u = req.session?.userId ? auth.findById(req.session.userId) : null;
-  return u && isLiveAllowed(u.email);
+  return !!(u && isOwnerIdentity(u.email));
 }
 
 // Per-user broker: the user's OWN Kraken keys (encrypted). null when not set.
@@ -2641,6 +2643,8 @@ const API_INDEX = {
     { path: '/api/autopilot/proposals', method: 'GET', purpose: 'pending human-in-the-loop proposals with full reasoning (symbol, size, stop, target, confidence, reason)' },
     { path: '/api/autopilot/proposals/:id/approve', method: 'POST', purpose: 'human override — execute a pending proposal now' },
     { path: '/api/autopilot/proposals/:id/reject', method: 'POST', purpose: 'human override — block a pending proposal' },
+    { path: '/api/agent-control', method: 'GET', purpose: 'OWNER ONLY: aggregate agent activity, permissions, budgets and safety state' },
+    { path: '/api/agent-control/emergency-stop', method: 'POST', purpose: 'OWNER ONLY: stop autopilot, suspend owned agent wallets and disable live execution' },
   ],
   meta: [
     { path: '/api/meta', method: 'GET', purpose: 'platform state for agents: watchlist, account, engine status, freshness' },
@@ -2763,6 +2767,74 @@ app.get('/api/audit', requireUser, (req, res) => {
   } catch { /* no log yet */ }
   if (agent) entries = entries.filter((e) => e.agentId === agent);
   res.json({ agent, count: entries.length, entries: entries.slice(-limit).reverse() });
+});
+
+// Owner operations cockpit. This composes existing server-enforced controls;
+// it never returns key material, hashes, venue credentials or raw audit files.
+app.get('/api/agent-control', requireUser, (req, res) => {
+  if (!isOwnerSession(req) || !req.session?.userId) return res.status(403).json({ error: 'owner only' });
+  const ident = signalIdentity(req);
+  const ap = getAutopilot();
+  const keys = agentKeys.listKeys(req.session.userId);
+  const tree = wallets.walletTree(ident.agentId);
+  const agentWallets = tree.agents.map((w) => ({
+    walletId: w.walletId,
+    name: w.name,
+    status: w.status,
+    balanceMinor: wallets.balanceOf(w.walletId),
+    limits: w.limits,
+    capabilities: w.capabilities,
+    regions: w.regions,
+    approvalRequired: w.approvalRequired,
+    usage: limits.usageSnapshot(w.walletId),
+  }));
+  const pendingLive = liveProposals.listProposals({ userId: req.session.userId, status: 'pending', limit: 100 });
+  const pendingPaper = getProposals();
+  const lastAction = ap.actions[0] || null;
+  res.json({
+    ok: true,
+    mode: 'paper',
+    executionBoundary: 'PAPER_ONLY',
+    autopilot: {
+      enabled: ap.enabled,
+      running: ap.running,
+      startedAt: ap.startedAt,
+      ticks: ap.ticks,
+      lastTick: ap.lastTick,
+      dayTrades: ap.dayTrades,
+      currentTask: ap.running ? 'Evaluating the paper strategy' : ap.enabled ? 'Waiting for the next paper scan' : 'Paused by operator',
+      lastAction,
+      config: ap.config,
+    },
+    approvals: { paper: pendingPaper.length, live: pendingLive.length },
+    keys,
+    keyStats: { active: keys.filter((k) => !k.revokedAt).length, revoked: keys.filter((k) => !!k.revokedAt).length },
+    wallets: agentWallets,
+    walletStats: { active: agentWallets.filter((w) => w.status === 'active').length, suspended: agentWallets.filter((w) => w.status === 'suspended').length },
+    safety: { liveEnabled: anyLiveEnabled(), globalFreeze: freeze.freezeState() },
+  });
+});
+
+app.post('/api/agent-control/emergency-stop', requireUser, async (req, res) => {
+  if (!isOwnerSession(req) || !req.session?.userId) return res.status(403).json({ error: 'owner only' });
+  try {
+    const ident = signalIdentity(req);
+    stopAutopilot();
+    const suspendedWallets = [];
+    for (const w of wallets.walletTree(ident.agentId).agents) {
+      if (w.status === 'active') {
+        wallets.setWalletStatus(w.walletId, 'suspended');
+        suspendedWallets.push(w.walletId);
+      }
+    }
+    const u = auth.findById(req.session.userId);
+    const live = await disableLive(accountFor(req), u ? brokerForUser(u) : null);
+    logLiveEvent(req.session.userId, 'agent.emergency-stop', { suspendedWallets, cancelledOrders: live.cancelled?.length || 0 });
+    res.json({ ok: true, autopilotStopped: true, suspendedWallets, cancelledOrders: live.cancelled || [], liveWasEnabled: live.wasEnabled });
+  } catch (e) {
+    console.error(`[agent-control] emergency stop failed: ${e.message}`);
+    res.status(500).json({ ok: false, error: 'emergency stop could not complete' });
+  }
 });
 
 app.get('/api/autopilot', requireUser, (req, res) => {

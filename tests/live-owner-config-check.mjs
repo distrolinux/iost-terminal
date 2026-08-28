@@ -8,11 +8,11 @@ const ok = (name, cond, extra = '') => {
   if (!cond) failures++;
 };
 
-function probe(allowlist, email) {
-  const code = `import('./lib/live.js').then(m => console.log(JSON.stringify({cfg:m.liveOwnerConfig(), allowed:m.isLiveAllowed(${JSON.stringify(email)})})))`;
+function probe(allowlist, email, liveEnabled = '1') {
+  const code = `import('./lib/live.js').then(m => console.log(JSON.stringify({cfg:m.liveOwnerConfig(), owner:m.isOwnerIdentity(${JSON.stringify(email)}), allowed:m.isLiveAllowed(${JSON.stringify(email)})})))`;
   const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], {
     cwd: process.cwd(),
-    env: { ...process.env, LIVE_TRADING_ENABLED: '1', LIVE_EMAIL_ALLOWLIST: allowlist },
+    env: { ...process.env, LIVE_TRADING_ENABLED: liveEnabled, LIVE_EMAIL_ALLOWLIST: allowlist },
     encoding: 'utf8',
   });
   if (r.status !== 0) return { error: r.stderr || `exit ${r.status}` };
@@ -24,7 +24,10 @@ const none = probe('', 'owner@example.com');
 ok('empty live owner config fails closed', none.cfg?.ok === false && none.allowed === false, none.error);
 
 const one = probe('Owner@Example.com', 'owner@example.com');
-ok('exactly one configured owner is allowed', one.cfg?.ok === true && one.cfg.owner === 'owner@example.com' && one.allowed === true, one.error);
+ok('exactly one configured owner is allowed', one.cfg?.ok === true && one.cfg.owner === 'owner@example.com' && one.owner === true && one.allowed === true, one.error);
+
+const paperOwner = probe('owner@example.com', 'owner@example.com', '0');
+ok('paper-only mode preserves owner controls but blocks live eligibility', paperOwner.owner === true && paperOwner.allowed === false && paperOwner.cfg?.ok === false, paperOwner.error);
 
 const wrong = probe('owner@example.com', 'other@example.com');
 ok('non-owner identity is rejected', wrong.cfg?.ok === true && wrong.allowed === false, wrong.error);

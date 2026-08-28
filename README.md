@@ -136,6 +136,10 @@ and the autopilot executes trades with zero human intervention.
 
 - `POST /api/autopilot/start` (+ optional `{config}`), `POST /api/autopilot/stop`,
   `POST /api/autopilot/config`, `GET /api/autopilot` (status + action audit trail)
+- Owner Agent Control Center (`/app#control`) combines current/last activity,
+  scoped-key revocation, wallet budgets and pause/reactivate controls. Its
+  confirmed emergency stop pauses autopilot, suspends owned agent wallets and
+  invokes the existing live kill switch; the launch boundary remains paper-first.
 - The loop ticks every 60s: scan → score → risk-size → paper execute → journal.
   Entries require composite score ≥ `openMinScore` and risk subscore ≥ `openMaxRisk`; size is
   risk-engine-derived (`accountRiskPct` per trade); exits trigger on score decay / RSI exhaustion.
