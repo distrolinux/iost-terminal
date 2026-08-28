@@ -36,7 +36,7 @@ assert.equal(offline.headBlock, 0);
 const chainSource = readFileSync(join(process.cwd(), 'lib/chain.js'), 'utf8');
 const appSource = readFileSync(join(process.cwd(), 'public/js/app.js'), 'utf8');
 assert.doesNotMatch(chainSource, /rpc:\s*RPC/, 'chain status must not expose a private RPC URL');
-assert.match(appSource, /mainnet · \$\{nodeStatus\}/, 'on-chain UI must use derived node health');
+assert.match(appSource, /IOST Layer 1[\s\S]*\$\{nodeStatus\}/, 'on-chain UI must use derived Layer 1 node health');
 assert.doesNotMatch(appSource, /c\.live \? '<span class="up">● live/, 'on-chain UI must not read live from the wrong object');
 assert.match(appSource, /\$\{c\.sampleTransactions\} txs[\s\S]*sampled blocks/, 'sampled activity must not be labeled as 24h');
 

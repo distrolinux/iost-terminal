@@ -11,6 +11,7 @@ import { scanAll, analyzeSymbol } from './lib/scanner.js';
 import { computeScores } from './lib/score.js';
 import { getNews, getAssetSentiment } from './lib/news.js';
 import { getChainSnapshot } from './lib/onchain.js';
+import { iostChainIdentity } from './lib/iost-node.js';
 import { calculateRisk, portfolioExposure } from './lib/risk.js';
 import { analyzePortfolio } from './lib/portfolio.js';
 import { getState, closeTrade, resetAccount, setAccountSize, markToMarket, journalStats, ensureAccount, listAccounts, persistAccounts } from './lib/paper.js';
@@ -717,7 +718,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.17.0';
+const DISCOVERY_VERSION = '1.18.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -758,6 +759,7 @@ const OPENAPI_PATHS = {
   '/api/orderbook/{symbol}': { get: { summary: 'L3 order book depth (OKX, crypto only)', tags: ['market'], security: [], parameters: [{ name: 'symbol', in: 'path', required: true, schema: { type: 'string' } }] } },
   '/api/news': { get: { summary: 'Headlines + per-asset sentiment classification', tags: ['intelligence'], security: [] } },
   '/api/onchain': { get: { summary: 'IOST mainnet dashboard (TPS, head block, large transfers, gas/RAM)', tags: ['intelligence'], security: [] } },
+  '/api/chain/identity': { get: { summary: 'Public IOSTCallister operator identity and explicitly separated IOST L1/L2 roles', tags: ['meta'], security: [] } },
   '/api/assistant': { post: { summary: 'Natural-language market Q&A synthesized from live data', tags: ['intelligence'], security: [], requestBody: { content: { 'application/json': { schema: { type: 'object', properties: { question: { type: 'string' } }, required: ['question'] } } } } } },
   '/api/risk': { post: { summary: 'Position size, $ risk, R:R, potential P/L, exposure', tags: ['risk'], security: [], requestBody: { content: { 'application/json': { schema: { type: 'object' } } } } } },
   '/api/leaderboard': { get: { summary: 'Top paper traders by closed P&L (masked identities)', tags: ['social'], security: [] } },
@@ -1386,6 +1388,13 @@ app.get('/api/agents', (req, res) => {
 // chain trust-layer status for the UI badge
 app.get('/api/chain/status', async (req, res) => {
   res.json(await chain.chainStatus());
+});
+
+// Stable public identity; dynamic producer rank remains linked to IOSTScan
+// instead of being copied into source where it would become stale.
+app.get('/api/chain/identity', (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.json({ ok: true, ...iostChainIdentity() });
 });
 
 // follow an agent (session user only — agents publish, humans follow)
@@ -2575,7 +2584,8 @@ const API_INDEX = {
     { path: '/api/signals/:id/follow', method: 'POST', body: '{agentId?}', purpose: 'paper copy-follow an agent (session user; mirrors positions, 5-position cap)' },
     { path: '/api/signals/:id/follow', method: 'DELETE', body: '{agentId?}', purpose: 'unfollow an agent' },
     { path: '/api/signals/following', method: 'GET', purpose: 'agents I follow + my copied positions' },
-    { path: '/api/chain/status', method: 'GET', purpose: 'IOST mainnet trust-layer status (RPC reachability, pin key configured?)' },
+    { path: '/api/chain/status', method: 'GET', purpose: 'IOST Layer 1 trust status: RPC health, finality and signal-pin readiness' },
+    { path: '/api/chain/identity', method: 'GET', purpose: 'verified IOSTCallister producer identity plus explicitly separated Layer 1 and Layer 2 roles' },
   ],
   arena: [
     { path: '/api/arena', method: 'GET', purpose: 'public paper-only Agent Trust Arena: verified performance, drawdown, risk/evidence/trust scores, formulas and audit head' },
@@ -2652,6 +2662,7 @@ app.get('/.well-known/agent.json', (req, res) => {
     mcp: { card: '/.well-known/mcp/server-card.json', endpoint: '/mcp', tools: ['market_snapshot', 'asset_scores', 'analyze_symbol', 'news_sentiment', 'chain_status', 'proposals', 'platform_help', 'health'] },
     skills: '/.well-known/agent-skills/index.json', llms: '/llms.txt',
     points: '/api/points', aitt: '/api/aitt/info', arena: '/api/arena', agentWallet: '/api/wallets', wallet: '/api/account/iost',
+    chains: '/api/chain/identity',
     contracts: API_INDEX,
   });
 });
@@ -2700,8 +2711,9 @@ app.get('/api/meta', async (req, res) => {
     ]);
     res.json({
       ts: Date.now(),
-      version: '1.6.0',
+      version: DISCOVERY_VERSION,
       mode: 'paper',
+      chains: iostChainIdentity(),
       watchlist: WATCHLIST,
       account: { initialCash: getState('default').account.initialCash, cash: getState('default').account.cash, openPositions: getState('default').positions.length },
       engines: {
