@@ -16,9 +16,22 @@ const auth = await import('../lib/auth.js');
 const agentKeys = await import('../lib/agent-keys.js');
 const wallets = await import('../lib/wallets.js');
 const pacts = await import('../lib/pacts.js');
+const { evaluateAgentStrategy } = await import('../lib/evaluation.js');
+const evaluationHistory = await import('../lib/evaluation-history.js');
 
 const registered = await auth.registerUser('mcp-test@example.com', 'correct-horse-battery-staple');
 assert.equal(registered.ok, true);
+const fixtureCandles = Array.from({ length: 260 }, (_, i) => {
+  const base = 100 + i * 0.08; return { ts: 1_700_000_000_000 + i * 86_400_000, o: base, h: base + 1, l: base - 1, c: base + 0.4, v: 1000 + i };
+});
+const fixtureEvaluation = evaluateAgentStrategy({
+  symbol: 'AAPL', timeframe: '1d', candles: fixtureCandles,
+  strategy: { name: 'MCP app fixture', side: 'long', sizePct: 0.2, entry: { rule: 'breakout', params: { lookback: 8 } }, exit: { maxBars: 12 } },
+  config: { trainBars: 80, testBars: 40, stepBars: 40, minimumTrades: 1 },
+});
+assert.equal(fixtureEvaluation.ok, true);
+const fixtureRunA = evaluationHistory.saveEvaluation(registered.user.id, fixtureEvaluation, Date.now() - 2);
+const fixtureRunB = evaluationHistory.saveEvaluation(registered.user.id, fixtureEvaluation, Date.now() - 1);
 const keyA = agentKeys.createKey({ userId: registered.user.id, name: 'MCP test agent', scopes: ['read', 'trade-paper'] });
 const keyB = agentKeys.createKey({ userId: 'different-user', name: 'Other agent', scopes: ['read'] });
 const agentOwner = `agent:key:${keyA.entry.id}`;
@@ -63,13 +76,16 @@ async function waitForServer() {
   throw new Error(`scratch server did not become ready\n${logs}`);
 }
 
-const protocolMeta = (tasks = false) => ({
+const protocolMeta = (tasks = false, apps = false) => ({
   'io.modelcontextprotocol/protocolVersion': '2026-07-28',
-  'io.modelcontextprotocol/clientCapabilities': tasks ? { extensions: { 'io.modelcontextprotocol/tasks': {} } } : {},
+  'io.modelcontextprotocol/clientCapabilities': { extensions: {
+    ...(tasks ? { 'io.modelcontextprotocol/tasks': {} } : {}),
+    ...(apps ? { 'io.modelcontextprotocol/ui': { mimeTypes: ['text/html;profile=mcp-app'] } } : {}),
+  } },
   'io.modelcontextprotocol/clientInfo': { name: 'iost-regression', version: '1.0.0' },
 });
 
-async function mcp(method, params = {}, { key = null, bearer = null, name = null, tasks = false, methodHeader = method } = {}) {
+async function mcp(method, params = {}, { key = null, bearer = null, name = null, tasks = false, apps = false, methodHeader = method } = {}) {
   const response = await fetch(`${BASE}/mcp`, {
     method: 'POST',
     headers: {
@@ -80,7 +96,7 @@ async function mcp(method, params = {}, { key = null, bearer = null, name = null
       ...(key ? { 'X-API-Key': key } : {}),
       ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
     },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params: { ...params, _meta: protocolMeta(tasks) } }),
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params: { ...params, _meta: protocolMeta(tasks, apps) } }),
   });
   return { status: response.status, body: await response.json() };
 }
@@ -92,6 +108,13 @@ try {
   assert.equal(discover.status, 200);
   assert.equal(discover.body.result.resultType, 'complete');
   assert(discover.body.result.supportedVersions.includes('2026-07-28'));
+
+  const resources = await mcp('resources/list', {}, { apps: true });
+  assert.equal(resources.status, 200);
+  assert.equal(resources.body.result.resources[0].mimeType, 'text/html;profile=mcp-app');
+  const resource = await mcp('resources/read', { uri: resources.body.result.resources[0].uri }, { name: resources.body.result.resources[0].uri, apps: true });
+  assert.equal(resource.body.result.contents[0].mimeType, 'text/html;profile=mcp-app');
+  assert(resource.body.result.contents[0]._meta.ui.csp);
 
   const mismatch = await mcp('tools/list', {}, { methodHeader: 'tools/call' });
   assert.equal(mismatch.status, 400);
@@ -105,6 +128,9 @@ try {
   assert.equal(privateTools.body.result.cacheScope, 'private');
   assert(privateTools.body.result.tools.some((tool) => tool.name === 'paper_trade_open'));
   assert(!privateTools.body.result.tools.some((tool) => /live|swap|convert/i.test(tool.name)));
+  const appTools = await mcp('tools/list', {}, { key: keyA.key, apps: true });
+  const reviewTool = appTools.body.result.tools.find((tool) => tool.name === 'evaluation_review');
+  assert.equal(reviewTool._meta.ui.resourceUri, resources.body.result.resources[0].uri);
 
   const tokenResponse = await fetch(`${BASE}/oauth/token`, {
     method: 'POST',
@@ -138,6 +164,21 @@ try {
   });
   assert.equal(authStatus.body.result.structuredContent.canOpenPaperTrade, true);
   assert.equal(authStatus.body.result.structuredContent.wallet.walletId, wallet.walletId);
+
+  const review = await mcp('tools/call', {
+    name: 'evaluation_review', arguments: { runIds: [fixtureRunA.id, fixtureRunB.id] },
+  }, { key: keyA.key, name: 'evaluation_review', apps: true });
+  assert.equal(review.body.result.structuredContent.selected.length, 2);
+  assert.equal(review.body.result.structuredContent.comparison.runs.length, 2);
+  const privateEvidenceMiss = await mcp('tools/call', {
+    name: 'evaluation_get', arguments: { runId: fixtureRunA.id },
+  }, { key: keyB.key, name: 'evaluation_get' });
+  assert.equal(privateEvidenceMiss.body.error.code, -32602);
+  const exported = await mcp('tools/call', {
+    name: 'evaluation_export', arguments: { runId: fixtureRunA.id, format: 'json' },
+  }, { key: keyA.key, name: 'evaluation_export', apps: true });
+  assert.equal(exported.body.result.structuredContent.ok, true);
+  assert.match(exported.body.result.structuredContent.data, /iost-terminal-agent-evaluation/);
 
   const opened = await mcp('tools/call', {
     name: 'paper_trade_open',

@@ -164,6 +164,9 @@ adds the user's private paper account, statistics and causal evaluation history.
 agent wallet and active wallet-bound Pact. Long evaluations support owner-bound MCP
 Tasks. MCP never exposes live orders, money movement, token conversion or public-chain
 mutation. Bounded 2025-06-18 compatibility remains available during migration.
+MCP Apps clients can render the private `evaluation_review` panel with evaluation
+history, two-run comparison charts and deterministic JSON/CSV evidence exports.
+Owner testing instructions: `/docs/OWNER_MCP_APP_TESTING.md`.
 
 ## AITT — Agent Intelligence Trading Token
 

@@ -9,6 +9,8 @@ money moves without exchange keys + explicit enablement.
 
 | Doc | What it covers |
 |---|---|
+| [`docs/PR32_MCP_APPS_EVALUATION_PLAN.md`](docs/PR32_MCP_APPS_EVALUATION_PLAN.md) | Planned sandboxed MCP Apps evaluation-review UI, private evidence adapters, accessibility, security and performance acceptance criteria |
+| [`docs/OWNER_MCP_APP_TESTING.md`](docs/OWNER_MCP_APP_TESTING.md) | Safe owner workflow for testing the MCP Apps UI and scoped paper-only agent execution |
 | [`docs/PR31_MCP_2026_PAPER_AGENTS.md`](docs/PR31_MCP_2026_PAPER_AGENTS.md) | MCP 2026-07-28 stateless agent interface, resource-bound authorization, private tasks and wallet/Pact-gated paper execution |
 | [`docs/PHASE2_WALLET.md`](docs/PHASE2_WALLET.md) | **Phase 2 non-custodial wallet design** (2026-08-20): Safe 2-of-3 + AllowanceModule + Zodiac scoping, agent session keys, TEE/MPC custody, trust-stake ceilings, recovery, funding layer (deposits/bridge/gas/on-ramp), and 7 sections of Coinbase CDP research folded in (§9.20–9.26: security policies, policy engine, agentic wallet CLI/skills, x402 seller side + MCP) |
 | [`docs/PHASE2_SPEC.md`](docs/PHASE2_SPEC.md) | Phase 2 agent-wallet engine (off-chain): trust staking, spend limits, approvals, AP2 mandate chain (Phase 3) — engine built + tested |
