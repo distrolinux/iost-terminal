@@ -1023,9 +1023,8 @@ function mcpToolAllowed(req, name) {
 
 function mcpAuthorizationStatus(req) {
   const access = mcpAccess(req);
-  const ident = signalIdentity(req);
-  const wallet = ident ? wallets.findWallet(ident.agentId, 'agent') : null;
-  const ownerPacts = ident ? pacts.listPacts(ident.agentId) : [];
+  const wallet = findAgentWalletForRequest(req);
+  const ownerPacts = wallet ? pacts.listPacts(wallet.ownerId) : [];
   return {
     ok: true, mode: 'paper-only', scopes: access.scopes,
     emergencyFreeze: freeze.freezeState(),
@@ -2276,9 +2275,8 @@ function agentSpendGate(req, notionalMinor, { walletId = null, pactId = null, re
   if (!notionalMinor || notionalMinor <= 0) {
     return { ok: false, reason: 'trusted-entry-required', message: 'Agent orders require a positive entry and size for server-side spend authorization.' };
   }
-  const ident = signalIdentity(req);
-  const w = ident && (walletId ? wallets.getWallet(walletId) : wallets.findWallet(ident.agentId, 'agent'));
-  if (!w || w.kind !== 'agent' || w.ownerId !== ident.agentId) {
+  const w = findAgentWalletForRequest(req, walletId);
+  if (!w) {
     return { ok: false, reason: 'agent-wallet-required', message: 'An owned agent wallet is required for agent execution.' };
   }
   if (!pactId) return { ok: false, reason: 'pact-required', message: 'An active wallet-bound Pact is required for agent execution.' };
@@ -2292,6 +2290,32 @@ function agentSpendGate(req, notionalMinor, { walletId = null, pactId = null, re
     return pactReservation;
   }
   return { ok: true, reserveId: reservation.reserveId, walletId: w.walletId, pactId };
+}
+
+// A per-user agent key may use a paper wallet created by that same signed-in
+// user in Agent Control Center. Older key-specific wallets remain supported.
+// The fallback is limited to user keys; platform keys never inherit a user
+// wallet, and callers still must name the exact active wallet-bound Pact.
+function agentWalletOwnerIds(req) {
+  const ids = [];
+  const ident = signalIdentity(req);
+  if (ident?.agentId) ids.push(ident.agentId);
+  if (req.userAgent?.userId) ids.push(`user:${req.userAgent.userId}`);
+  return [...new Set(ids)];
+}
+
+function findAgentWalletForRequest(req, walletId = null) {
+  const owners = agentWalletOwnerIds(req);
+  if (!owners.length) return null;
+  if (walletId) {
+    const wallet = wallets.getWallet(walletId);
+    return wallet?.kind === 'agent' && owners.includes(wallet.ownerId) ? wallet : null;
+  }
+  for (const ownerId of owners) {
+    const wallet = wallets.findWallet(ownerId, 'agent');
+    if (wallet) return wallet;
+  }
+  return null;
 }
 
 function settleAgentSpend(gate, commit) {

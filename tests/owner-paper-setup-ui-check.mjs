@@ -13,6 +13,12 @@ assert.match(server, /parentWallet[\s\S]{0,180}balanceMinor/,
   'control snapshot must expose only the owner paper-wallet balance');
 assert.match(server, /ownerPacts[\s\S]{0,1200}pactId[\s\S]{0,1200}intent/,
   'control snapshot must expose Pact status without raw credentials');
+assert.match(server, /function agentWalletOwnerIds\(req\)[\s\S]{0,500}req\.userAgent\?\.userId/,
+  'scoped user keys may use a wallet created by their signed-in owner');
+assert.match(server, /function findAgentWalletForRequest[\s\S]{0,700}owners\.includes\(wallet\.ownerId\)/,
+  'wallet lookup must reject another user or agent owner');
+assert.match(server, /agentSpendGate[\s\S]{0,1100}findAgentWalletForRequest\(req, walletId\)/,
+  'paper agent execution must use the owner-bound wallet lookup');
 const controlRoute = server.slice(server.indexOf("app.get('/api/agent-control'"), server.indexOf("app.post('/api/agent-control/emergency-stop'"));
 assert.doesNotMatch(controlRoute, /\b(hash|secret|apiKey)\s*:/,
   'control snapshot must not expose secrets or key hashes');

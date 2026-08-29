@@ -46,6 +46,16 @@ const pact = pacts.proposePact({
   completion: { type: 'time', deadlineTs: Date.now() + 10 * 60_000 },
 });
 pacts.approvePact(pact.pactId, 'test-owner');
+const accountWallet = wallets.createAgentWallet({
+  ownerId: `user:${registered.user.id}`, name: 'Owner control paper wallet', capabilities: ['trade.paper'],
+  limits: { USD: { maxPerTxMinor: 100_000, dailyCapMinor: 500_000, weeklyCapMinor: 1_000_000 } },
+});
+const accountPact = pacts.proposePact({
+  ownerId: `user:${registered.user.id}`, agentWalletId: accountWallet.walletId, intent: 'Owner-control MCP paper trade',
+  policies: { approvalRequired: true, limits: { maxPerTxMinor: 100_000 } },
+  completion: { type: 'time', deadlineTs: Date.now() + 10 * 60_000 },
+});
+pacts.approvePact(accountPact.pactId, 'test-owner');
 
 let logs = '';
 const child = spawn(process.execPath, ['server.js'], {
@@ -188,6 +198,16 @@ try {
   assert.equal(opened.body.result.isError, false);
   assert.equal(opened.body.result.structuredContent.ok, true);
   const positionId = opened.body.result.structuredContent.position.id;
+
+  // Agent Control Center creates wallets under the signed-in account rather
+  // than an individual key id. That account-owned wallet must remain usable
+  // only by the same user's scoped key and an exact wallet-bound Pact.
+  const accountWalletOpened = await mcp('tools/call', {
+    name: 'paper_trade_open',
+    arguments: { symbol: 'AAPL', side: 'long', size: 1, entry: 10, walletId: accountWallet.walletId, pactId: accountPact.pactId, reason: 'Owner-control wallet integration test' },
+  }, { key: keyA.key, name: 'paper_trade_open' });
+  assert.equal(accountWalletOpened.status, 200);
+  assert.equal(accountWalletOpened.body.result.structuredContent.ok, true, JSON.stringify(accountWalletOpened.body));
 
   const closed = await mcp('tools/call', {
     name: 'paper_trade_close', arguments: { positionId, exitPrice: 11 },
