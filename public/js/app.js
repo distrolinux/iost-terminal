@@ -1036,6 +1036,11 @@ async function renderAgentControl() {
   const money = (minor) => `$${(Number(minor || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const keys = s.keys || [];
   const agentWallets = s.wallets || [];
+  const pacts = s.pacts || [];
+  const parentWallet = s.parentWallet || null;
+  const paperWallets = agentWallets.filter((w) => w.status === 'active' && (w.capabilities || []).includes('trade.paper'));
+  const activePacts = pacts.filter((p) => p.status === 'active');
+  const moneyInput = (minor) => ((Number(minor || 0) / 100).toFixed(2));
   el.innerHTML = `
     <div class="section-title">Agent Control Center <span class="sub">owner-only operations · server-enforced limits</span></div>
     <div class="control-boundary" role="status">Execution boundary · <strong>PAPER</strong> · live and on-chain execution remain separately gated</div>
@@ -1080,6 +1085,40 @@ async function renderAgentControl() {
       }).join('')}</div>` : '<div class="empty">No agent wallets configured.</div>'}
     </section>`;
 
+  el.insertAdjacentHTML('beforeend', `
+    <section class="card control-paper-setup" aria-labelledby="paperSetupTitle">
+      <div class="section-title" id="paperSetupTitle">Paper trade setup <span class="sub">internal paper credits only · no token, bank, exchange, or on-chain transfer</span></div>
+      <p class="muted control-setup-note">Create a narrowly funded agent wallet, then propose and explicitly approve a time-limited Pact. The agent cannot use this for live trading or public-chain actions.</p>
+      ${paperWallets.length ? `<div class="control-setup-status"><span class="chip bull">paper wallet ready</span> ${paperWallets.length} active wallet${paperWallets.length === 1 ? '' : 's'} · ${activePacts.length} active Pact${activePacts.length === 1 ? '' : 's'}</div>` : ''}
+      <form id="controlWalletSetup" class="control-setup-form">
+        <label>Wallet name<input id="controlWalletName" maxlength="80" value="MCP Inspector Paper Wallet" required></label>
+        <label>Paper credits to fund (USD)<input id="controlWalletFund" type="number" min="1" max="10000" step="0.01" value="100.00" required></label>
+        <label>Maximum per paper order (USD)<input id="controlWalletPerOrder" type="number" min="1" max="10000" step="0.01" value="25.00" required></label>
+        <label>Daily paper limit (USD)<input id="controlWalletDaily" type="number" min="1" max="10000" step="0.01" value="100.00" required></label>
+        <div class="control-setup-actions"><button class="btn sm green" type="submit">${paperWallets.length ? 'Create another bounded wallet' : 'Create paper wallet'}</button><span class="muted">Creates a separate internal ledger with <code>trade.paper</code> only.</span></div>
+      </form>
+      ${paperWallets.length ? `<form id="controlWalletFundForm" class="control-inline-form">
+        <label>Fund wallet<select id="controlFundWallet">${paperWallets.map((w) => `<option value="${esc(w.walletId)}">${esc(w.name)} · ${esc(w.walletId)} · ${moneyInput(w.balanceMinor)} USD</option>`).join('')}</select></label>
+        <label>Paper credits (USD)<input id="controlFundAmount" type="number" min="1" max="10000" step="0.01" value="25.00" required></label>
+        <button class="btn sm ghost" type="submit">Fund wallet</button>
+      </form>` : ''}
+    </section>
+    <section class="card control-pacts" aria-labelledby="controlPactsTitle">
+      <div class="section-title" id="controlPactsTitle">Paper Pacts <span class="sub">a human-approved, wallet-bound authorization with automatic expiry</span></div>
+      ${paperWallets.length ? `<form id="controlPactForm" class="control-setup-form">
+        <label>Paper wallet<select id="controlPactWallet">${paperWallets.map((w) => `<option value="${esc(w.walletId)}">${esc(w.name)} · ${esc(w.walletId)}</option>`).join('')}</select></label>
+        <label>Pact budget (USD)<input id="controlPactBudget" type="number" min="1" max="10000" step="0.01" value="25.00" required></label>
+        <label>Expires in hours<input id="controlPactHours" type="number" min="1" max="168" step="1" value="24" required></label>
+        <label class="control-wide">Purpose<input id="controlPactIntent" maxlength="500" value="MCP Inspector paper-trade test" required></label>
+        <div class="control-setup-actions"><button class="btn sm" type="submit">Propose paper Pact</button><span class="muted">Proposing does not enable trading. Approval is a separate owner action.</span></div>
+      </form>` : '<div class="empty">Create an active paper wallet before proposing a Pact.</div>'}
+      ${pacts.length ? `<div class="control-pact-list">${pacts.map((p) => {
+        const cap = p.policies?.limits?.maxPerTxMinor;
+        const expiry = p.expiresAt ? new Date(p.expiresAt).toLocaleString() : p.completion?.type === 'budget' ? 'when budget is used' : 'not set';
+        return `<article class="control-pact"><div><strong>${esc(p.intent)}</strong><span class="mono muted">${esc(p.pactId)}</span></div><span class="chip ${p.status === 'active' ? 'bull' : p.status === 'proposed' ? 'warn' : 'neut'}">${esc(p.status)}</span><dl><div><dt>Wallet</dt><dd>${esc(p.agentWalletId || 'none')}</dd></div><div><dt>Budget</dt><dd>${p.completion?.type === 'budget' ? money(p.completion.budgetMinor) : '—'}</dd></div><div><dt>Per order</dt><dd>${cap ? money(cap) : 'Unlimited'}</dd></div><div><dt>Expires</dt><dd>${esc(expiry)}</dd></div></dl><div class="control-pact-actions">${p.status === 'proposed' ? `<button class="btn sm green" data-pact-approve="${esc(p.pactId)}">Approve paper Pact</button>` : ''}${p.status === 'active' ? `<button class="btn sm ghost" data-pact-terminate="${esc(p.pactId)}">End Pact</button>` : ''}</div></article>`;
+      }).join('')}</div>` : '<div class="empty">No paper Pacts proposed.</div>'}
+    </section>`);
+
   $('#controlAutopilot')?.addEventListener('click', async () => {
     await post(ap.enabled ? '/api/autopilot/stop' : '/api/autopilot/start', {});
     toast(ap.enabled ? '⏸ Paper agent paused' : '▶ Paper agent started');
@@ -1105,6 +1144,63 @@ async function renderAgentControl() {
     await post(`/api/wallets/${b.dataset.walletId}/${b.dataset.walletState}`, {});
     toast(b.dataset.walletState === 'suspend' ? '⏸ Agent wallet paused' : '✓ Agent wallet reactivated');
     renderAgentControl();
+  }));
+  $('#controlWalletSetup', el)?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const fundMinor = Math.round(Number($('#controlWalletFund', el).value) * 100);
+    const perOrderMinor = Math.round(Number($('#controlWalletPerOrder', el).value) * 100);
+    const dailyMinor = Math.round(Number($('#controlWalletDaily', el).value) * 100);
+    const name = $('#controlWalletName', el).value.trim();
+    if (!name || !Number.isSafeInteger(fundMinor) || !Number.isSafeInteger(perOrderMinor) || !Number.isSafeInteger(dailyMinor) || fundMinor <= 0 || perOrderMinor <= 0 || dailyMinor < perOrderMinor || fundMinor < perOrderMinor) {
+      return toast('Paper wallet needs positive amounts; daily and funded amounts must cover one order.');
+    }
+    if (!confirm(`Create a paper-only wallet funded with ${money(fundMinor)} internal credits? It cannot access real funds, tokens, or a blockchain.`)) return;
+    try {
+      const created = await post('/api/wallets', { name, limits: { USD: { maxPerTxMinor: perOrderMinor, dailyCapMinor: dailyMinor, weeklyCapMinor: dailyMinor * 7 } }, capabilities: ['trade.paper'], approvalRequired: true });
+      const available = Number(parentWallet?.balanceMinor || 0);
+      if (available < fundMinor) await post('/api/wallets/credit', { amountMinor: fundMinor - available });
+      await post(`/api/wallets/${created.wallet.walletId}/fund`, { amountMinor: fundMinor });
+      toast('✓ Paper wallet created and funded', 'Only internal paper credits were added.');
+      renderAgentControl();
+    } catch (e) { toast(`Paper wallet setup failed: ${esc(e.message)}`); }
+  });
+  $('#controlWalletFundForm', el)?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const walletId = $('#controlFundWallet', el).value;
+    const amountMinor = Math.round(Number($('#controlFundAmount', el).value) * 100);
+    if (!walletId || !Number.isSafeInteger(amountMinor) || amountMinor <= 0) return toast('Enter a positive paper-credit amount.');
+    if (!confirm(`Fund this paper wallet with ${money(amountMinor)} internal credits?`)) return;
+    try {
+      const available = Number(parentWallet?.balanceMinor || 0);
+      if (available < amountMinor) await post('/api/wallets/credit', { amountMinor: amountMinor - available });
+      await post(`/api/wallets/${walletId}/fund`, { amountMinor });
+      toast('✓ Paper wallet funded', 'No real-money or token transfer occurred.');
+      renderAgentControl();
+    } catch (e) { toast(`Funding failed: ${esc(e.message)}`); }
+  });
+  $('#controlPactForm', el)?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const agentWalletId = $('#controlPactWallet', el).value;
+    const budgetMinor = Math.round(Number($('#controlPactBudget', el).value) * 100);
+    const hours = Math.round(Number($('#controlPactHours', el).value));
+    const intent = $('#controlPactIntent', el).value.trim();
+    if (!agentWalletId || !intent || !Number.isSafeInteger(budgetMinor) || budgetMinor <= 0 || !Number.isSafeInteger(hours) || hours < 1 || hours > 168) return toast('Enter a valid paper Pact budget, purpose, and expiry.');
+    if (!confirm(`Propose a ${money(budgetMinor)} paper-only Pact that expires in ${hours} hour(s)? It will still require separate owner approval.`)) return;
+    try {
+      await post('/api/pacts', { agentWalletId, intent, plan: [{ step: 'Open a user-requested paper position through the paper broker only.' }], policies: { approvalRequired: true, limits: { maxPerTxMinor: budgetMinor }, whitelist: { recipients: [], protocols: [] } }, completion: { type: 'time', deadlineTs: Date.now() + hours * 3600_000 } });
+      toast('✓ Paper Pact proposed', 'Approve it below before an agent can open a paper position.');
+      renderAgentControl();
+    } catch (e) { toast(`Pact proposal failed: ${esc(e.message)}`); }
+  });
+  el.querySelectorAll('[data-pact-approve]').forEach(b => b.addEventListener('click', async () => {
+    if (!confirm('Approve this wallet-bound Pact for paper trading only? It does not enable live, token, or on-chain execution.')) return;
+    try { await post(`/api/pacts/${b.dataset.pactApprove}/approve`, {}); toast('✓ Paper Pact approved'); renderAgentControl(); }
+    catch (e) { toast(`Pact approval failed: ${esc(e.message)}`); }
+  }));
+  el.querySelectorAll('[data-pact-terminate]').forEach(b => b.addEventListener('click', async () => {
+    if (!confirm('End this paper Pact now? Future agent paper orders using it will be blocked.')) return;
+    try { await post(`/api/pacts/${b.dataset.pactTerminate}/terminate`, {}); toast('Paper Pact ended'); renderAgentControl(); }
+    catch (e) { toast(`Could not end Pact: ${esc(e.message)}`); }
   }));
 }
 
