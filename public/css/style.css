@@ -506,11 +506,11 @@ body.cmd .ticker-wrap { background: rgba(6, 10, 17, .9); border-color: rgba(0, 2
   body.cmd .tb-find { display: inline-flex; align-items: center; gap: 5px; }
   body.cmd { overflow: auto; }
   .cmd-body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; height: auto; }
-  .sidebar { display: block; position: sticky; top: 0; z-index: 55; padding: 6px 8px; overflow-x: auto; overflow-y: hidden; border-right: 0; border-bottom: 1px solid rgba(0, 229, 255, .12); }
-  .side-nav { flex-direction: row; min-width: max-content; gap: 4px; }
+  .sidebar { display: block; position: sticky; top: 0; z-index: 55; padding: 6px 8px; overflow-x: hidden; overflow-y: hidden; border-right: 0; border-bottom: 1px solid rgba(0, 229, 255, .12); }
+  .side-nav { flex-direction: row; flex-wrap: wrap; min-width: 0; gap: 4px; }
   .nav-group { display: contents; }
   .nav-group-label { display: none; }
-  .sidebar .nav-btn { min-width: 56px; padding: 7px 6px; }
+  .sidebar .nav-btn { flex: 1 1 56px; min-width: 56px; padding: 7px 6px; }
   .side-foot { display: none; }
   .cmd-main { min-width: 0; padding: 14px 12px 40px; }
   body.cmd .foot { position: static; }
