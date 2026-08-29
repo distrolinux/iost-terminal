@@ -8,8 +8,8 @@ const home = readFileSync(new URL('../public/index.html', import.meta.url), 'utf
 
 assert.match(html, /data-view="evaluation"[^>]+View Agent Evaluation Lab/);
 assert.match(html, /id="view-evaluation"[^>]+Agent Evaluation Lab view/);
-assert.match(html, /\/css\/style\.css\?v=2\.19/);
-assert.match(html, /\/js\/app\.js\?v=2\.23\.2/);
+assert.match(html, /\/css\/style\.css\?v=2\.20/);
+assert.match(html, /\/js\/app\.js\?v=2\.24\.0/);
 assert.match(app, /VALID_VIEWS = \[[^\]]*'evaluation'/);
 assert.match(app, /async function renderEvaluationLab\(\)/);
 assert.match(app, /post\('\/api\/evaluation-lab'/);

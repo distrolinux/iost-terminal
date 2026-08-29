@@ -2038,6 +2038,138 @@ app.post('/api/admin/aitt/claims/:id/release', requireUser, (req, res) => {
 
 const h = (fn) => (req, res) => { try { fn(req, res); } catch (e) { res.status(400).json({ ok: false, error: e.message }); } };
 
+function launchpadSnapshot(req) {
+  const ident = signalIdentity(req);
+  const ownerId = ident?.agentId;
+  const parent = wallets.ensureUserWallet(ownerId);
+  const tree = wallets.walletTree(ownerId);
+  const launchpadWallets = tree.agents.filter((wallet) => wallet.origin === 'self-service-launchpad');
+  const ownerPacts = pacts.listPacts(ownerId);
+  const keys = agentKeys.listKeys(req.session.userId);
+  const lifetimeGrantedMinor = Math.max(0, Math.trunc(Number(parent.paperOnboardingGrantedMinor) || 0));
+  const remainingGrantMinor = Math.max(0, wallets.PAPER_ONBOARDING_CREDIT_CAP_MINOR - lifetimeGrantedMinor);
+  return {
+    ok: true,
+    mode: 'paper-only',
+    executionBoundary: 'PAPER_ONLY',
+    mcpEndpoint: `${SITE_URL}/mcp`,
+    credit: {
+      lifetimeCapMinor: wallets.PAPER_ONBOARDING_CREDIT_CAP_MINOR,
+      lifetimeGrantedMinor,
+      remainingGrantMinor,
+      parentBalanceMinor: wallets.balanceOf(parent.walletId),
+      cashValue: false,
+      withdrawable: false,
+    },
+    keys,
+    wallets: launchpadWallets.map((wallet) => ({
+      walletId: wallet.walletId,
+      name: wallet.name,
+      status: wallet.status,
+      balanceMinor: wallets.balanceOf(wallet.walletId),
+      limits: wallet.limits,
+      capabilities: wallet.capabilities,
+      approvalRequired: wallet.approvalRequired,
+      usage: limits.usageSnapshot(wallet.walletId),
+    })),
+    pacts: ownerPacts.filter((pact) => launchpadWallets.some((wallet) => wallet.walletId === pact.agentWalletId)).map((pact) => ({
+      pactId: pact.pactId,
+      agentWalletId: pact.agentWalletId,
+      intent: pact.intent,
+      status: pact.status,
+      expiresAt: pact.expiresAt,
+      completion: pact.completion,
+      spentMinor: pact.spentMinor,
+      policies: { approvalRequired: pact.policies?.approvalRequired ?? true, limits: pact.policies?.limits || null },
+    })),
+    status: {
+      keyReady: keys.some((key) => !key.revokedAt && key.scopes.includes('trade-paper')),
+      walletReady: launchpadWallets.some((wallet) => wallet.status === 'active' && wallet.capabilities.includes('trade.paper')),
+      pactReady: ownerPacts.some((pact) => pact.status === 'active' && launchpadWallets.some((wallet) => wallet.walletId === pact.agentWalletId)),
+    },
+  };
+}
+
+// Self-service Agent Launchpad. Only a signed-in human session may bootstrap
+// authority. Agent keys cannot create/fund their own wallet or approve a Pact.
+app.get('/api/agent-launchpad', requireUser, h((req, res) => {
+  if (!req.session?.userId || req.userAgent || req.agentKey) return res.status(403).json({ ok: false, error: 'agent keys cannot set up or approve a Launchpad' });
+  res.json(launchpadSnapshot(req));
+}));
+
+function proposeLaunchpadPact({ ownerId, wallet, name, perOrderMinor, expiryHours }) {
+  return pacts.proposePact({
+    ownerId,
+    agentWalletId: wallet.walletId,
+    intent: `Allow ${name} to place bounded paper trades for evaluation`,
+    plan: [{ step: 'Read market evidence.' }, { step: 'Open or close a simulated position within the approved limits.' }, { step: 'Write the result to the paper journal and decision trace.' }],
+    policies: { approvalRequired: true, limits: { maxPerTxMinor: perOrderMinor }, whitelist: { recipients: [], protocols: [] } },
+    completion: { type: 'time', deadlineTs: Date.now() + expiryHours * 3600_000 },
+  });
+}
+
+app.post('/api/agent-launchpad/setup', requireUser, h((req, res) => {
+  if (!req.session?.userId || req.userAgent || req.agentKey) return res.status(403).json({ ok: false, error: 'agent keys cannot set up or approve a Launchpad' });
+  const ident = signalIdentity(req);
+  const ownerId = ident.agentId;
+  const name = String(req.body?.name || 'My Paper Agent').trim().slice(0, 60);
+  const fundMinor = Math.trunc(Number(req.body?.fundMinor ?? 10_000));
+  const perOrderMinor = Math.trunc(Number(req.body?.perOrderMinor ?? 2_500));
+  const dailyMinor = Math.trunc(Number(req.body?.dailyMinor ?? 5_000));
+  const expiryHours = Math.trunc(Number(req.body?.expiryHours ?? 24));
+  if (!name) return res.status(400).json({ ok: false, error: 'agent name required' });
+  if (!Number.isSafeInteger(fundMinor) || fundMinor < 100 || fundMinor > wallets.PAPER_ONBOARDING_CREDIT_CAP_MINOR) return res.status(400).json({ ok: false, error: 'paper funding must be between $1 and $100' });
+  if (!Number.isSafeInteger(perOrderMinor) || perOrderMinor < 100 || perOrderMinor > fundMinor) return res.status(400).json({ ok: false, error: 'per-order limit must be between $1 and the funded amount' });
+  if (!Number.isSafeInteger(dailyMinor) || dailyMinor < perOrderMinor || dailyMinor > fundMinor) return res.status(400).json({ ok: false, error: 'daily limit must cover one order and cannot exceed funded paper credits' });
+  if (!Number.isSafeInteger(expiryHours) || expiryHours < 1 || expiryHours > 168) return res.status(400).json({ ok: false, error: 'Pact expiry must be between 1 and 168 hours' });
+
+  const parent = wallets.ensureUserWallet(ownerId);
+  let wallet = wallets.walletTree(ownerId).agents.find((candidate) => candidate.origin === 'self-service-launchpad') || null;
+  const existing = !!wallet;
+  if (!wallet) {
+    const neededParentCredit = Math.max(0, fundMinor - wallets.balanceOf(parent.walletId));
+    if (neededParentCredit) wallets.grantPaperOnboardingCredits(ownerId, neededParentCredit);
+    wallet = wallets.createAgentWallet({
+      ownerId,
+      name,
+      origin: 'self-service-launchpad',
+      limits: { USD: { maxPerTxMinor: perOrderMinor, dailyCapMinor: dailyMinor, weeklyCapMinor: fundMinor } },
+      capabilities: ['trade.paper'],
+      approvalRequired: true,
+    });
+  }
+  const walletFundingNeeded = Math.max(0, fundMinor - wallets.balanceOf(wallet.walletId));
+  if (walletFundingNeeded) {
+    const parentShortfall = Math.max(0, walletFundingNeeded - wallets.balanceOf(parent.walletId));
+    if (parentShortfall) wallets.grantPaperOnboardingCredits(ownerId, parentShortfall);
+    wallets.fundAgentWallet({ walletId: wallet.walletId, amountMinor: walletFundingNeeded });
+  }
+  let pact = pacts.listPacts(ownerId).find((candidate) => candidate.agentWalletId === wallet.walletId && ['proposed', 'active'].includes(candidate.status)) || null;
+  if (!pact) {
+    pact = proposeLaunchpadPact({ ownerId, wallet, name, perOrderMinor, expiryHours });
+  }
+  logLiveEvent(req.session.userId, 'agent.launchpad.setup', { walletId: wallet.walletId, pactId: pact.pactId, existing, mode: 'paper-only' });
+  res.status(existing ? 200 : 201).json({ ...launchpadSnapshot(req), setup: { existing, walletId: wallet.walletId, pactId: pact.pactId } });
+}));
+
+// Re-authorize an existing Launchpad wallet after its prior Pact ended. This
+// does not mint credits or change wallet policy; it only proposes a fresh,
+// time-limited agreement for the human owner to review separately.
+app.post('/api/agent-launchpad/pact', requireUser, h((req, res) => {
+  if (!req.session?.userId || req.userAgent || req.agentKey) return res.status(403).json({ ok: false, error: 'agent keys cannot set up or approve a Launchpad' });
+  const ownerId = signalIdentity(req).agentId;
+  const wallet = wallets.walletTree(ownerId).agents.find((candidate) => candidate.origin === 'self-service-launchpad');
+  if (!wallet) return res.status(404).json({ ok: false, error: 'Launchpad wallet not found' });
+  const openPact = pacts.listPacts(ownerId).find((candidate) => candidate.agentWalletId === wallet.walletId && ['proposed', 'active'].includes(candidate.status));
+  if (openPact) return res.status(409).json({ ok: false, error: 'this Launchpad wallet already has an open Pact' });
+  const expiryHours = Math.trunc(Number(req.body?.expiryHours ?? 24));
+  if (!Number.isSafeInteger(expiryHours) || expiryHours < 1 || expiryHours > 168) return res.status(400).json({ ok: false, error: 'Pact expiry must be between 1 and 168 hours' });
+  const perOrderMinor = Math.max(1, Math.trunc(Number(wallet.limits?.USD?.maxPerTxMinor) || 1));
+  const pact = proposeLaunchpadPact({ ownerId, wallet, name: wallet.name, perOrderMinor, expiryHours });
+  logLiveEvent(req.session.userId, 'agent.launchpad.pact.proposed', { walletId: wallet.walletId, pactId: pact.pactId, mode: 'paper-only' });
+  res.status(201).json({ ...launchpadSnapshot(req), setup: { existing: true, walletId: wallet.walletId, pactId: pact.pactId } });
+}));
+
 // POST /api/wallets — create an agent wallet (child of the caller's user wallet)
 app.post('/api/wallets', requireUser, h((req, res) => {
   const ident = signalIdentity(req);
@@ -2178,18 +2310,35 @@ app.post('/api/pacts', requireUser, h((req, res) => {
   });
   res.json({ ok: true, pact: p });
 }));
-// POST /api/pacts/:id/approve | /reject | /terminate — human control (owner)
+function sessionOwnsPact(req, pact) {
+  return !!(pact && req.session?.userId && !req.userAgent && !req.agentKey
+    && pact.ownerId === `user:${req.session.userId}`);
+}
+
+function canManagePact(req, pact) {
+  return isOwnerSession(req) || sessionOwnsPact(req, pact);
+}
+
+// POST /api/pacts/:id/approve | /reject | /terminate — human control.
+// A normal signed-in user may manage only a Pact stored under that user's
+// account identity. Agent credentials can never approve their own authority.
 app.post('/api/pacts/:id/approve', requireUser, h((req, res) => {
-  if (!isOwnerSession(req)) return res.status(403).json({ ok: false, error: 'owner only' });
-  res.json({ ok: true, pact: pacts.approvePact(req.params.id, 'owner') });
+  if (req.userAgent || req.agentKey) return res.status(403).json({ ok: false, error: 'agent keys cannot set up or approve a Launchpad' });
+  const pact = pacts.getPact(req.params.id);
+  if (!pact || !canManagePact(req, pact)) return res.status(404).json({ ok: false, error: 'pact not found' });
+  res.json({ ok: true, pact: pacts.approvePact(req.params.id, isOwnerSession(req) ? 'platform-owner' : 'account-owner') });
 }));
 app.post('/api/pacts/:id/reject', requireUser, h((req, res) => {
-  if (!isOwnerSession(req)) return res.status(403).json({ ok: false, error: 'owner only' });
-  res.json({ ok: true, pact: pacts.rejectPact(req.params.id, 'owner') });
+  if (req.userAgent || req.agentKey) return res.status(403).json({ ok: false, error: 'agent keys cannot set up or approve a Launchpad' });
+  const pact = pacts.getPact(req.params.id);
+  if (!pact || !canManagePact(req, pact)) return res.status(404).json({ ok: false, error: 'pact not found' });
+  res.json({ ok: true, pact: pacts.rejectPact(req.params.id, isOwnerSession(req) ? 'platform-owner' : 'account-owner') });
 }));
 app.post('/api/pacts/:id/terminate', requireUser, h((req, res) => {
-  if (!isOwnerSession(req)) return res.status(403).json({ ok: false, error: 'owner only' });
-  res.json({ ok: true, pact: pacts.terminatePact(req.params.id, 'owner') });
+  if (req.userAgent || req.agentKey) return res.status(403).json({ ok: false, error: 'agent keys cannot set up or approve a Launchpad' });
+  const pact = pacts.getPact(req.params.id);
+  if (!pact || !canManagePact(req, pact)) return res.status(404).json({ ok: false, error: 'pact not found' });
+  res.json({ ok: true, pact: pacts.terminatePact(req.params.id, isOwnerSession(req) ? 'platform-owner' : 'account-owner') });
 }));
 // GET /api/pacts — my pacts
 app.get('/api/pacts', requireUser, h((req, res) => {
@@ -2285,6 +2434,9 @@ function agentSpendGate(req, notionalMinor, { walletId = null, pactId = null, re
   const w = findAgentWalletForRequest(req, walletId);
   if (!w) {
     return { ok: false, reason: 'agent-wallet-required', message: 'An owned agent wallet is required for agent execution.' };
+  }
+  if (!(w.capabilities || []).includes('trade.paper')) {
+    return { ok: false, reason: 'wallet-capability-required', message: 'The selected wallet is not authorized for paper trading.' };
   }
   if (!pactId) return { ok: false, reason: 'pact-required', message: 'An active wallet-bound Pact is required for agent execution.' };
   const pactGate = pacts.checkPactSpend({ pactId, walletId: w.walletId, ownerId: w.ownerId, amountMinor: notionalMinor, recipient, protocol });
@@ -2912,6 +3064,7 @@ const API_INDEX = {
   points: `Off-chain points ledger: no token issued. signal +10 · follower +5 · referral +50/+10 · feedback +5 (author) · weekly top paper trader +500. Points→AITT 1:1 plumbing is built but planned/not guaranteed. Phase 1 utility counsel framing was cleared on 2026-08-24; independent-audit, hash-bound approval evidence, deployment and owner gates keep conversion closed under v${AITT_DOC_VERSION}.`,
   aitt: 'AITT — Agent Intelligence Trading Token (pre-launch remediation, NOT issued): 1B fixed supply, unified 800M-floor burn routing, contract-locked allocations, EIP-191 conversion binding and receipt reconciliation are built. Counsel cleared the Phase 1 utility framing on 2026-08-24; independent audit, hash-bound approval evidence, deployment and owner gates remain closed. Staking revenue/APY, external transferability and Phase 4 liquidity remain inactive future proposals requiring separate counsel/owner/audit approval; Phase 4 is disabled.',
   agentWallet: 'Phase 2 agent wallet engine (off-chain first): parent-child wallets with spend limits (per-tx/daily/weekly, integer minor units), trust staking + slashing + appeals, derived Trust Score + credit line, task-scoped Pacts with auto-expiry, emergency freeze. Design: docs/PHASE2_SPEC.md (engine) + docs/PHASE2_WALLET.md (on-chain wallet + Coinbase CDP research §9.20-9.26). Agent-key paper opens fail closed without positive entry/size, an owned agent wallet, and an active wallet-bound Pact. Capabilities: finance.* / wallet.* / trade.* / mandate.sign.',
+  agentLaunchpad: 'Self-service, human-authorized paper-agent setup: a signed-in user creates one bounded paper wallet, separately approves a time-limited Pact, creates a revocable trade-paper key, and copies the MCP connection template. Lifetime launch credits are capped at $100 internal simulation value with no withdrawal, conversion, token, live-order, or public-chain path.',
   freeIostWallet: 'Every registered user gets a real IOST mainnet account — opening an IOST account is FREE (no creation fee; official signup at iostaccount.io). Keys are generated IN THE BROWSER — the server never sees private keys, only the base64 public key + account name; it broadcasts auth.iost/signUp (VERIFIED ABI: createAccount does not exist on mainnet) with the platform account. No IOST_PIN_KEY → requests queue (status "pending") and flush when the key appears. Store data/iost_accounts.json.',
   discover: [{ path: '/.well-known/agent.json', method: 'GET', purpose: 'agent discovery manifest' }],
   market: [
@@ -2982,6 +3135,9 @@ const API_INDEX = {
     { path: '/whitepaper', method: 'GET', purpose: `AITT public whitepaper draft v${AITT_DOC_VERSION} (markdown — served from docs/AITT-Whitepaper-v1.0.md)` },
   ],
   agentWallet: [
+    { path: '/api/agent-launchpad', method: 'GET', purpose: 'signed-in human Launchpad status: bounded paper wallet, Pact, scoped keys and MCP readiness (never returns key secrets)' },
+    { path: '/api/agent-launchpad/setup', method: 'POST', body: '{name,fundMinor,perOrderMinor,dailyMinor,expiryHours}', purpose: 'idempotently create one paper-only wallet and propose a time-limited Pact; lifetime internal simulation-credit grant capped at $100' },
+    { path: '/api/agent-launchpad/pact', method: 'POST', body: '{expiryHours}', purpose: 'propose a new time-limited Pact for an existing Launchpad wallet without minting credits or changing policy' },
     { path: '/api/wallets', method: 'GET', purpose: 'my wallet tree: parent (user) wallet + agent child wallets with balances, limits, capabilities, status' },
     { path: '/api/wallets', method: 'POST', body: '{name, limits:{USD:{maxPerTxMinor,dailyCapMinor,weeklyCapMinor}}, capabilities[], regions[], approvalRequired}', purpose: 'create an agent wallet as a child of my wallet (limits enforced server-side; 0 = unlimited)' },
     { path: '/api/wallets/:id/policies', method: 'PATCH', body: '{limits?, capabilities?, regions?, approvalRequired?}', purpose: 'update wallet limits/capabilities/regions (owner)' },
@@ -2996,7 +3152,7 @@ const API_INDEX = {
     { path: '/api/slashes', method: 'POST', body: '{ownerId, reason: unauthorized-spend|failed-settlement}', purpose: 'owner only — slash (unauthorized −10% + score reset · failed settlement −5%)' },
     { path: '/api/slashes/:id/appeal | /decide', method: 'POST', purpose: '14-day appeal window; decide = owner review (future DAO policy)' },
     { path: '/api/pacts', method: 'GET|POST', purpose: 'task-scoped Pacts: intent + plan + policies + completion (time/budget/goal) with auto-expiry' },
-    { path: '/api/pacts/:id/approve | /reject | /terminate', method: 'POST', purpose: 'human control over pacts (owner)' },
+    { path: '/api/pacts/:id/approve | /reject | /terminate', method: 'POST', purpose: 'human control over Pacts: platform owner or the signed-in account that owns that Pact; agent keys are denied' },
     { path: '/api/freeze', method: 'POST', body: '{on:true, reason?} | {on:false}', purpose: 'owner only — emergency freeze: stops ALL agent operations instantly' },
   ],
   wallets: [

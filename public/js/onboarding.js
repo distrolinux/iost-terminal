@@ -1,6 +1,6 @@
 // First-run paper-trading guide. This module only switches dashboard views and
 // highlights existing controls; it never calls an API or activates a control.
-const STORAGE_KEY = 'iost.onboarding.paper.v2';
+const STORAGE_KEY = 'iost.onboarding.paper.v3';
 const $ = (selector) => document.querySelector(selector);
 
 const steps = [
@@ -51,6 +51,12 @@ const steps = [
     title: '7. Challenge the strategy',
     text: 'Evaluation runs walk-forward tests with realistic costs, baselines and confidence calibration. Even a passing result is eligible for paper review only.',
     target: '[data-view="evaluation"]', view: 'evaluation',
+  },
+  {
+    label: 'Launch',
+    title: '8. Give an agent a bounded sandbox',
+    text: 'Launch creates a paper-only wallet, a time-limited permission agreement and a revocable key. The agent cannot fund itself, approve itself or expand into live trading.',
+    target: '[data-view="launchpad"]', view: 'launchpad',
   },
 ];
 

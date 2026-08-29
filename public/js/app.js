@@ -960,7 +960,7 @@ function setupNavPalette() {
 setupNavPalette();
 
 // ARD: deterministic paths — every view has a stable deep link (/app#scanner, /app#risk, …)
-const VALID_VIEWS = ['scanner', 'scores', 'risk', 'portfolio', 'onchain', 'news', 'assistant', 'journal', 'performance', 'evaluation', 'whales', 'smartmoney', 'audit', 'agents', 'control', 'trace', 'points', 'aitt', 'wallet'];
+const VALID_VIEWS = ['scanner', 'scores', 'risk', 'portfolio', 'onchain', 'news', 'assistant', 'journal', 'performance', 'evaluation', 'whales', 'smartmoney', 'audit', 'launchpad', 'agents', 'control', 'trace', 'points', 'aitt', 'wallet'];
 function switchView(view) {
   if (!VALID_VIEWS.includes(view)) view = 'scanner';
   state.activeView = view;
@@ -1004,7 +1004,7 @@ function gotoApiKeyInput() {
 }
 function refreshView(view) {
   // auth-gated views: paper account data (portfolio, journal, performance) + points + wallet
-  if (['portfolio', 'journal', 'performance', 'evaluation', 'control', 'trace', 'points', 'wallet'].includes(view) && !window.Auth?.state?.loggedIn) {
+  if (['portfolio', 'journal', 'performance', 'evaluation', 'launchpad', 'control', 'trace', 'points', 'wallet'].includes(view) && !window.Auth?.state?.loggedIn) {
     const el = $(`#view-${view}`);
     if (el) el.innerHTML = `<div class="card empty">Sign in required — <button class="btn sm" id="authGateBtn">open sign in</button></div>`;
     $('#authGateBtn')?.addEventListener('click', () => window.Auth?.open('login'));
@@ -1016,7 +1016,125 @@ function refreshView(view) {
     return;
   }
   ({ scanner: renderScanner, scores: renderScores, risk: renderRisk, portfolio: renderPortfolio,
-    onchain: renderOnchain, news: renderNews, assistant: renderAssistant, journal: renderJournal, performance: renderPerformance, evaluation: renderEvaluationLab, whales: renderWhales, smartmoney: renderSmartMoney, audit: renderAudit, agents: renderAgents, control: renderAgentControl, trace: renderDecisionTrace, points: renderPoints, aitt: renderAITT, wallet: renderWallet })[view]();
+    onchain: renderOnchain, news: renderNews, assistant: renderAssistant, journal: renderJournal, performance: renderPerformance, evaluation: renderEvaluationLab, whales: renderWhales, smartmoney: renderSmartMoney, audit: renderAudit, launchpad: renderAgentLaunchpad, agents: renderAgents, control: renderAgentControl, trace: renderDecisionTrace, points: renderPoints, aitt: renderAITT, wallet: renderWallet })[view]();
+}
+
+// ---------------- Self-service Agent Launchpad ----------------
+// A signed-in human creates the bounded paper wallet and separately approves
+// its Pact. The user's eventual agent key can use that authority but can never
+// create, expand, or approve it.
+async function renderAgentLaunchpad() {
+  const el = $('#view-launchpad');
+  el.innerHTML = skeleton();
+  let s;
+  try { s = await api('/api/agent-launchpad'); }
+  catch (e) { el.innerHTML = `<div class="card empty">Agent Launchpad unavailable: ${esc(e.message)}</div>`; return; }
+  const money = (minor) => `$${(Number(minor || 0) / 100).toFixed(2)}`;
+  const wallet = s.wallets?.[0] || null;
+  const pacts = s.pacts || [];
+  const proposedPact = pacts.find((pact) => pact.status === 'proposed');
+  const activePact = pacts.find((pact) => pact.status === 'active');
+  const liveKeys = (s.keys || []).filter((key) => !key.revokedAt);
+  const paperKeys = liveKeys.filter((key) => key.scopes?.includes('trade-paper'));
+  const step = (ready, label, detail) => `<li class="${ready ? 'is-ready' : ''}"><span>${ready ? '✓' : '○'}</span><div><strong>${label}</strong><small>${detail}</small></div></li>`;
+  const connectionTemplate = JSON.stringify({ url: s.mcpEndpoint, headers: { 'X-API-Key': '<PASTE_YOUR_ONE_TIME_KEY>' }, mode: 'paper-only' }, null, 2);
+
+  el.innerHTML = `
+    <div class="section-title">Self-service Agent Launchpad <span class="sub">authorize → connect → observe · paper-only</span></div>
+    <div class="control-boundary" role="status">Execution boundary · <strong>PAPER ONLY</strong> · simulation credits have no cash or token value</div>
+    <ol class="launchpad-steps" aria-label="Agent launch progress">
+      ${step(!!wallet, 'Budget', wallet ? `${money(wallet.balanceMinor)} bounded simulation balance` : 'Create a capped paper wallet')}
+      ${step(!!activePact, 'Permission', activePact ? 'Human-approved Pact is active' : proposedPact ? 'Review and approve the proposed Pact' : 'Create a time-limited Pact')}
+      ${step(!!paperKeys.length, 'Access', paperKeys.length ? `${paperKeys.length} scoped paper key${paperKeys.length === 1 ? '' : 's'}` : 'Create a revocable agent key')}
+      ${step(!!(wallet && activePact && paperKeys.length), 'Connect', 'Use the MCP endpoint in Hermes, Codex, or another compatible client')}
+    </ol>
+
+    ${!wallet ? `<section class="card launchpad-card" aria-labelledby="launchpadSetupTitle">
+      <div class="section-title" id="launchpadSetupTitle">1. Create the safety envelope</div>
+      <p class="muted">This grants at most ${money(s.credit?.lifetimeCapMinor)} in lifetime internal paper credits. It cannot be withdrawn, converted, sent, or used for live execution.</p>
+      <form id="launchpadSetup" class="launchpad-form">
+        <label>Agent name<input id="launchpadName" maxlength="60" value="My Paper Agent" required></label>
+        <label>Paper credits<input id="launchpadFund" type="number" min="1" max="100" step="1" value="100" required></label>
+        <label>Maximum per order<input id="launchpadPerOrder" type="number" min="1" max="100" step="1" value="25" required></label>
+        <label>Daily maximum<input id="launchpadDaily" type="number" min="1" max="100" step="1" value="50" required></label>
+        <label>Pact expires in hours<input id="launchpadHours" type="number" min="1" max="168" step="1" value="24" required></label>
+        <div class="launchpad-wide"><button class="btn sm green" type="submit">Create paper wallet and propose Pact</button></div>
+      </form>
+    </section>` : `<section class="card launchpad-card" aria-labelledby="launchpadWalletTitle">
+      <div class="section-title" id="launchpadWalletTitle">1. Paper wallet <span class="chip ${wallet.status === 'active' ? 'bull' : 'warn'}">${esc(wallet.status)}</span></div>
+      <div class="launchpad-wallet-grid"><div><span>Wallet</span><strong>${esc(wallet.name)}</strong><small class="mono">${esc(wallet.walletId)}</small></div><div><span>Balance</span><strong>${money(wallet.balanceMinor)}</strong><small>simulation only</small></div><div><span>Per order</span><strong>${money(wallet.limits?.USD?.maxPerTxMinor)}</strong><small>server enforced</small></div><div><span>Daily</span><strong>${money(wallet.limits?.USD?.dailyCapMinor)}</strong><small>${money(wallet.usage?.dailyUsedMinor)} used</small></div></div>
+      <button class="btn sm ${wallet.status === 'active' ? 'danger' : 'ghost'}" id="launchpadWalletPause">${wallet.status === 'active' ? 'Emergency pause wallet' : 'Reactivate paper wallet'}</button>
+    </section>`}
+
+    ${wallet ? `<section class="card launchpad-card" aria-labelledby="launchpadPactTitle">
+      <div class="section-title" id="launchpadPactTitle">2. Human permission</div>
+      ${proposedPact ? `<div class="launchpad-pact"><div><span class="chip warn">review required</span><strong>${esc(proposedPact.intent)}</strong><small>Expires after approval: ${new Date(proposedPact.completion?.deadlineTs || 0).toLocaleString()}</small></div><button class="btn sm green" id="launchpadApprovePact">Approve paper-only Pact</button></div>` : activePact ? `<div class="launchpad-pact"><div><span class="chip bull">active</span><strong>${esc(activePact.intent)}</strong><small>Expires: ${new Date(activePact.expiresAt || activePact.completion?.deadlineTs || 0).toLocaleString()}</small></div><button class="btn sm ghost" id="launchpadEndPact">End Pact</button></div>` : '<div class="launchpad-pact"><div><span class="chip warn">permission ended</span><small>The wallet and its remaining paper balance are unchanged.</small></div><button class="btn sm" id="launchpadRenewPact">Propose a new 24-hour Pact</button></div>'}
+    </section>` : ''}
+
+    <section class="card launchpad-card" aria-labelledby="launchpadKeyTitle">
+      <div class="section-title" id="launchpadKeyTitle">3. Scoped agent key <span class="sub">read + trade-paper only · shown once</span></div>
+      <form id="launchpadKeyForm" class="launchpad-key-form"><label class="sr-only" for="launchpadKeyName">Agent key name</label><input id="launchpadKeyName" maxlength="60" value="My Paper Agent" aria-label="Agent key name"><button class="btn sm" type="submit">Create paper-agent key</button></form>
+      <div id="launchpadSecret" class="launchpad-secret hidden" role="status"><strong>Copy this key now—it is shown only once.</strong><code id="launchpadSecretValue"></code><button class="btn sm ghost" id="launchpadCopyKey" type="button">Copy key</button></div>
+      ${liveKeys.length ? `<div class="launchpad-key-list">${liveKeys.map((key) => `<div><span><strong>${esc(key.name)}</strong><small class="mono">${esc(key.prefix)}… · ${key.scopes.map(esc).join(' · ')}</small></span><button class="btn sm ghost" data-launchpad-revoke="${esc(key.id)}">Revoke</button></div>`).join('')}</div>` : '<p class="muted">No active agent keys. Keys are revocable and remain bound to this account.</p>'}
+    </section>
+
+    <section class="card launchpad-card" aria-labelledby="launchpadConnectTitle">
+      <div class="section-title" id="launchpadConnectTitle">4. Connect the agent</div>
+      <p class="muted">Add this MCP endpoint to your agent client, then provide the one-time key through its secret manager—not a URL, screenshot, or shared prompt.</p>
+      <div class="launchpad-endpoint"><code>${esc(s.mcpEndpoint)}</code><button class="btn sm ghost" id="launchpadCopyEndpoint" type="button">Copy MCP endpoint</button><button class="btn sm ghost" id="launchpadCopyTemplate" type="button">Copy connection template</button></div>
+      <pre class="launchpad-template">${esc(connectionTemplate)}</pre>
+      <p class="launchpad-ready ${wallet && activePact && paperKeys.length ? 'is-ready' : ''}">${wallet && activePact && paperKeys.length ? 'Ready: connect the client and watch activity in Decision Trace.' : 'Complete Budget, Permission, and Access before the agent can open a paper position.'}</p>
+    </section>`;
+
+  $('#launchpadSetup', el)?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const name = $('#launchpadName', el).value.trim();
+    const fundMinor = Math.round(Number($('#launchpadFund', el).value) * 100);
+    const perOrderMinor = Math.round(Number($('#launchpadPerOrder', el).value) * 100);
+    const dailyMinor = Math.round(Number($('#launchpadDaily', el).value) * 100);
+    const expiryHours = Math.round(Number($('#launchpadHours', el).value));
+    if (!confirm(`Create a paper-only agent wallet with ${money(fundMinor)} simulation credits and propose a ${expiryHours}-hour Pact?`)) return;
+    try { await post('/api/agent-launchpad/setup', { name, fundMinor, perOrderMinor, dailyMinor, expiryHours, capabilities: ['trade.paper'] }); toast('✓ Paper wallet created · review the Pact next'); renderAgentLaunchpad(); }
+    catch (e) { toast('Launchpad setup failed', e.message); }
+  });
+  $('#launchpadApprovePact', el)?.addEventListener('click', async () => {
+    if (!confirm('Approve this wallet-bound Pact for paper trading only? Your agent cannot expand the budget or approve itself.')) return;
+    try { await post(`/api/pacts/${proposedPact.pactId}/approve`, {}); toast('✓ Paper Pact approved'); renderAgentLaunchpad(); }
+    catch (e) { toast('Pact approval failed', e.message); }
+  });
+  $('#launchpadEndPact', el)?.addEventListener('click', async () => {
+    if (!confirm('End this Pact now? Future paper orders using it will be blocked.')) return;
+    try { await post(`/api/pacts/${activePact.pactId}/terminate`, {}); toast('Paper Pact ended'); renderAgentLaunchpad(); }
+    catch (e) { toast('Could not end Pact', e.message); }
+  });
+  $('#launchpadRenewPact', el)?.addEventListener('click', async () => {
+    try { await post('/api/agent-launchpad/pact', { expiryHours: 24 }); toast('✓ New Pact proposed · review it next'); renderAgentLaunchpad(); }
+    catch (e) { toast('Could not propose Pact', e.message); }
+  });
+  $('#launchpadWalletPause', el)?.addEventListener('click', async () => {
+    const action = wallet.status === 'active' ? 'suspend' : 'reactivate';
+    if (action === 'suspend' && !confirm('Pause this agent wallet immediately? Future agent paper orders will fail closed.')) return;
+    try { await post(`/api/wallets/${wallet.walletId}/${action}`, {}); toast(action === 'suspend' ? '⏸ Agent wallet paused' : '✓ Agent wallet reactivated'); renderAgentLaunchpad(); }
+    catch (e) { toast('Wallet update failed', e.message); }
+  });
+  $('#launchpadKeyForm', el)?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const name = $('#launchpadKeyName', el).value.trim();
+    try {
+      const created = await post('/api/agent-keys', { name, scopes: ['read', 'trade-paper'] });
+      $('#launchpadSecretValue', el).textContent = created.key;
+      $('#launchpadSecret', el).classList.remove('hidden');
+      $('#launchpadCopyKey', el).onclick = () => navigator.clipboard?.writeText(created.key).then(() => toast('✓ Agent key copied'));
+      toast('✓ Agent key created · copy it now');
+    } catch (e) { toast('Key creation failed', e.message); }
+  });
+  el.querySelectorAll('[data-launchpad-revoke]').forEach((button) => button.addEventListener('click', async () => {
+    if (!confirm('Revoke this agent key immediately?')) return;
+    try { await api(`/api/agent-keys/${button.dataset.launchpadRevoke}`, { method: 'DELETE' }); toast('Agent key revoked'); renderAgentLaunchpad(); }
+    catch (e) { toast('Key revocation failed', e.message); }
+  }));
+  $('#launchpadCopyEndpoint', el)?.addEventListener('click', () => navigator.clipboard?.writeText(s.mcpEndpoint).then(() => toast('✓ MCP endpoint copied')));
+  $('#launchpadCopyTemplate', el)?.addEventListener('click', () => navigator.clipboard?.writeText(connectionTemplate).then(() => toast('✓ Connection template copied')));
 }
 
 // ---------------- Owner Agent Control Center ----------------
@@ -3060,7 +3178,7 @@ function applyAuthGate() {
     const el = $('#' + id);
     if (el) { el.disabled = !ok; el.title = ok ? '' : 'Sign in required'; }
   });
-  if (['portfolio', 'journal', 'performance', 'evaluation', 'control', 'trace', 'points', 'wallet'].includes(state.activeView) && !ok) refreshView(state.activeView);
+  if (['portfolio', 'journal', 'performance', 'evaluation', 'launchpad', 'control', 'trace', 'points', 'wallet'].includes(state.activeView) && !ok) refreshView(state.activeView);
   // topbar balance follows the signed-in user's account
   const bal = $('#tbBalance');
   if (!ok && bal) bal.textContent = '--';
@@ -3070,7 +3188,7 @@ function applyAuthGate() {
 window.addEventListener('authchange', (e) => {
   applyAuthGate();
   if (e.detail?.loggedIn) renderCommandRail(); // show the user's balance immediately on sign-in
-  if (e.detail?.loggedIn && ['portfolio', 'journal', 'performance', 'evaluation', 'control', 'trace', 'points', 'wallet'].includes(state.activeView)) refreshView(state.activeView);
+  if (e.detail?.loggedIn && ['portfolio', 'journal', 'performance', 'evaluation', 'launchpad', 'control', 'trace', 'points', 'wallet'].includes(state.activeView)) refreshView(state.activeView);
 });
 setTimeout(applyAuthGate, 2500); // safety re-run once auth.js has settled
 

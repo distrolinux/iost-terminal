@@ -835,3 +835,32 @@ body.onboarding-open #authReset { display: none !important; }
 .control-pact dd { margin: 0; overflow-wrap: anywhere; font: 600 11px/1.4 var(--mono); }
 .control-pact-actions { grid-column: 1 / -1; display: flex; gap: 7px; }
 @media (max-width: 640px) { .control-activity-grid,.control-setup-form,.control-inline-form { grid-template-columns: 1fr; }.control-wide,.control-setup-actions { grid-column: auto; } }
+
+/* ---------- self-service Agent Launchpad ---------- */
+.launchpad-steps { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 9px; margin: 0 0 14px; padding: 0; list-style: none; }
+.launchpad-steps li { display: flex; gap: 9px; min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: 11px; background: rgba(255,255,255,.018); }
+.launchpad-steps li>span { display: grid; place-items: center; flex: 0 0 25px; width: 25px; height: 25px; border: 1px solid var(--line); border-radius: 50%; color: var(--dim); font: 700 12px var(--mono); }
+.launchpad-steps li.is-ready { border-color: rgba(47,255,208,.25); background: rgba(47,255,208,.035); }
+.launchpad-steps li.is-ready>span { color: var(--mint); border-color: rgba(47,255,208,.45); }
+.launchpad-steps li div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.launchpad-steps strong { font-size: 12px; }.launchpad-steps small { color: var(--dim); font-size: 10px; line-height: 1.4; }
+.launchpad-card { margin-top: 12px; }
+.launchpad-form { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 10px; align-items: end; margin-top: 12px; }
+.launchpad-form label { display: flex; flex-direction: column; gap: 5px; color: var(--muted); font-size: 11px; }
+.launchpad-form input,.launchpad-key-form input { min-width: 0; }
+.launchpad-wide { grid-column: 1 / -1; }
+.launchpad-wallet-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 10px; margin: 11px 0; }
+.launchpad-wallet-grid>div { display: flex; flex-direction: column; gap: 3px; padding: 10px; border: 1px solid var(--border); border-radius: 9px; background: rgba(255,255,255,.018); }
+.launchpad-wallet-grid span { color: var(--dim); font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
+.launchpad-wallet-grid strong { font: 600 12px/1.45 var(--mono); }.launchpad-wallet-grid small { color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
+.launchpad-pact { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.launchpad-pact>div { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; }.launchpad-pact small { color: var(--muted); }
+.launchpad-key-form,.launchpad-endpoint { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }.launchpad-key-form input { flex: 1; min-width: 180px; }
+.launchpad-secret { display: grid; gap: 8px; margin-top: 11px; padding: 12px; border: 1px solid rgba(255,208,106,.38); border-radius: 9px; background: rgba(255,208,106,.055); }
+.launchpad-secret code { overflow-wrap: anywhere; color: var(--warn); }.launchpad-secret .btn { justify-self: start; }
+.launchpad-key-list { display: grid; gap: 7px; margin-top: 12px; }.launchpad-key-list>div { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 8px; }.launchpad-key-list span { display: flex; flex-direction: column; gap: 3px; }.launchpad-key-list small { color: var(--dim); }
+.launchpad-endpoint code { flex: 1; min-width: 220px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--cyan); background: rgba(0,229,255,.035); overflow-wrap: anywhere; }
+.launchpad-template { margin: 10px 0 0; padding: 12px; border: 1px solid var(--border); border-radius: 9px; color: var(--muted); background: rgba(0,0,0,.18); font: 10px/1.55 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.launchpad-ready { margin: 11px 0 0; color: var(--warn); font-size: 12px; }.launchpad-ready.is-ready { color: var(--mint); }
+@media (max-width: 900px) { .launchpad-steps { grid-template-columns: repeat(2,minmax(0,1fr)); }.launchpad-form { grid-template-columns: repeat(2,minmax(0,1fr)); }.launchpad-wallet-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+@media (max-width: 560px) { .launchpad-steps,.launchpad-form,.launchpad-wallet-grid { grid-template-columns: 1fr; }.launchpad-wide { grid-column: auto; }.launchpad-pact { align-items: stretch; flex-direction: column; }.launchpad-endpoint code { min-width: 100%; } }
