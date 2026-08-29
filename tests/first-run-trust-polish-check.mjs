@@ -27,8 +27,10 @@ assert.match(html, /id="onboardingMission"[^>]+First session mission progress/);
 assert.match(onboarding, /FIRST SESSION MISSION/);
 assert.match(onboarding, /Challenge the strategy/);
 assert.match(onboarding, /data-view="evaluation"|view: 'evaluation'/);
+assert.match(onboarding, /bounded sandbox/);
+assert.match(onboarding, /data-view="launchpad"|view: 'launchpad'/);
 assert.match(onboarding, /SIMULATION ONLY|never calls an API/i);
-assert.match(onboarding, /iost\.onboarding\.paper\.v2/);
+assert.match(onboarding, /iost\.onboarding\.paper\.v3/);
 
 assert.match(server, /LEADERBOARD_PROMOTION_MIN_TRADES\s*=\s*5/);
 assert.match(server, /eligibleForPromotion:\s*trades\s*>=\s*LEADERBOARD_PROMOTION_MIN_TRADES\s*&&\s*pnl\s*>\s*0/);
@@ -41,8 +43,8 @@ assert.doesNotMatch(home, /Live social proof · paper competition/);
 assert.match(css, /\.nav-group-label/);
 assert.match(css, /\.nav-palette/);
 assert.match(css, /@media \(max-width: 860px\)[\s\S]*\.nav-group \{ display: contents; \}/);
-assert.match(html, /\/css\/style\.css\?v=2\.19/);
-assert.match(html, /\/js\/app\.js\?v=2\.23\.2/);
-assert.match(html, /\/js\/onboarding\.js\?v=1\.1\.0/);
+assert.match(html, /\/css\/style\.css\?v=2\.20/);
+assert.match(html, /\/js\/app\.js\?v=2\.24\.0/);
+assert.match(html, /\/js\/onboarding\.js\?v=1\.2\.0/);
 
 console.log('First-run experience and trust-polish checks passed');

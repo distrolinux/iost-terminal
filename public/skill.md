@@ -20,7 +20,8 @@ real money without explicit owner approval.**
    - `GET /api/scanner` — real-time analysis with signals and indicators
    - `GET /api/news` · `GET /api/onchain` · `GET /api/probability`
    - `GET /api/signals/feed` — public signal feed with on-chain pin status
-2. **Authenticate** — mint a scoped key in the app (Portfolio → AI Agents) and send
+2. **Authenticate** — use **Launch** in the app to create a bounded paper wallet,
+   review and approve its time-limited Pact, then mint a scoped key. Send
    `X-API-Key: <key>` on every authenticated request. Scopes: `read`, `trade-paper`,
    `trade-live` (owner-only). OAuth 2.0 `client_credentials` also works — see /auth.md.
 3. **Paper trade** (`trade-paper` scope): `POST /api/paper/open {symbol,side,size,entry,stop?,target?,reason?,walletId,pactId}`. Agent-key opens require an owned agent wallet and active wallet-bound Pact; human-session paper opens are unchanged.
@@ -35,6 +36,14 @@ real money without explicit owner approval.**
    its proposal status is `approved`.
 
 ## Phase 2 wallet (design)
+
+Signed-in users can use the self-service Agent Launchpad at `/app#launchpad`.
+`GET /api/agent-launchpad` returns readiness without secrets;
+`POST /api/agent-launchpad/setup` creates one `trade.paper` wallet and proposes a
+Pact for separate human approval. Launchpad credits are capped at $100 lifetime,
+are internal simulation value only, and cannot be withdrawn, converted, tokenized,
+used for live orders, or written to a public chain. Agent credentials cannot call
+the setup or approval paths.
 
 Non-custodial wallet design research is complete (2026-08-20): Safe 2-of-3 root +
 agent session keys (TEE/MPC custody), trust-stake ceilings, recovery module, funding

@@ -129,6 +129,10 @@
 - `GET /api/aitt/info` — public AITT token info (identity, supply, chain, contract/converter addresses, gate state, honesty notice)
 
 ### Agent wallet engine (Phase 2, off-chain)
+- `GET /api/agent-launchpad` — signed-in human setup/readiness view; never returns key secrets
+- `POST /api/agent-launchpad/setup {name,fundMinor,perOrderMinor,dailyMinor,expiryHours}` — idempotently creates one `trade.paper` wallet and proposes a separate, time-limited Pact
+- `POST /api/agent-launchpad/pact {expiryHours}` — proposes a replacement Pact without changing wallet policy or minting credits
+- Launchpad grants are capped at $100 lifetime in internal simulation value. They cannot be withdrawn, converted, tokenized, used for live orders or written to a public chain. Agent keys cannot bootstrap or approve their own authority.
 - `GET|POST /api/wallets` — wallet tree; create child agent wallets with per-tx/daily/weekly limits, capabilities, regions, approvalRequired
 - `PATCH /api/wallets/:id/policies` — update limits/capabilities/regions (owner)
 - `/api/spend/check|reserve|commit|release` — atomic spend rail (reserve→commit/release)
