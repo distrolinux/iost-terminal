@@ -42,7 +42,7 @@ assert.match(css, /\.nav-group-label/);
 assert.match(css, /\.nav-palette/);
 assert.match(css, /@media \(max-width: 860px\)[\s\S]*\.nav-group \{ display: contents; \}/);
 assert.match(html, /\/css\/style\.css\?v=2\.19/);
-assert.match(html, /\/js\/app\.js\?v=2\.23\.1/);
+assert.match(html, /\/js\/app\.js\?v=2\.23\.2/);
 assert.match(html, /\/js\/onboarding\.js\?v=1\.1\.0/);
 
 console.log('First-run experience and trust-polish checks passed');

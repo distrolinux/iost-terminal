@@ -817,4 +817,21 @@ body.onboarding-open #authReset { display: none !important; }
 .control-wallet dt { color: var(--dim); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
 .control-wallet dd { margin: 0; font: 600 12px/1.4 var(--mono); }
 .control-capabilities { display: flex; flex-wrap: wrap; gap: 5px; min-height: 25px; margin-bottom: 10px; }
-@media (max-width: 640px) { .control-activity-grid { grid-template-columns: 1fr; } }
+.control-paper-setup,.control-pacts { margin-top: 14px; }
+.control-setup-note { max-width: 780px; margin: 7px 0 12px; font-size: 12px; line-height: 1.5; }
+.control-setup-status { margin: 0 0 12px; color: var(--muted); font-size: 12px; }
+.control-setup-form,.control-inline-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; align-items: end; }
+.control-setup-form label,.control-inline-form label { display: flex; flex-direction: column; gap: 5px; color: var(--muted); font-size: 11px; }
+.control-setup-form input,.control-setup-form select,.control-inline-form input,.control-inline-form select { min-width: 0; }
+.control-wide { grid-column: span 2; }
+.control-setup-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 11px; }
+.control-inline-form { margin-top: 12px; grid-template-columns: minmax(220px, 2fr) minmax(140px, 1fr) auto; }
+.control-pact-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; margin-top: 13px; }
+.control-pact { display: grid; grid-template-columns: 1fr auto; gap: 9px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: rgba(255,255,255,.018); }
+.control-pact > div:first-child { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.control-pact dl { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0; }
+.control-pact dl div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.control-pact dt { color: var(--dim); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
+.control-pact dd { margin: 0; overflow-wrap: anywhere; font: 600 11px/1.4 var(--mono); }
+.control-pact-actions { grid-column: 1 / -1; display: flex; gap: 7px; }
+@media (max-width: 640px) { .control-activity-grid,.control-setup-form,.control-inline-form { grid-template-columns: 1fr; }.control-wide,.control-setup-actions { grid-column: auto; } }

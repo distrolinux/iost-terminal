@@ -3115,6 +3115,11 @@ app.get('/api/agent-control', requireUser, (req, res) => {
   const ap = getAutopilot();
   const keys = agentKeys.listKeys(req.session.userId);
   const tree = wallets.walletTree(ident.agentId);
+  const parentWallet = tree.parent ? {
+    walletId: tree.parent.walletId,
+    status: tree.parent.status,
+    balanceMinor: wallets.balanceOf(tree.parent.walletId),
+  } : null;
   const agentWallets = tree.agents.map((w) => ({
     walletId: w.walletId,
     name: w.name,
@@ -3125,6 +3130,19 @@ app.get('/api/agent-control', requireUser, (req, res) => {
     regions: w.regions,
     approvalRequired: w.approvalRequired,
     usage: limits.usageSnapshot(w.walletId),
+  }));
+  const ownerPacts = pacts.listPacts(ident.agentId).map((pact) => ({
+    pactId: pact.pactId,
+    agentWalletId: pact.agentWalletId,
+    intent: pact.intent,
+    status: pact.status,
+    completion: pact.completion,
+    expiresAt: pact.expiresAt,
+    spentMinor: pact.spentMinor,
+    policies: {
+      approvalRequired: pact.policies?.approvalRequired ?? true,
+      limits: pact.policies?.limits || null,
+    },
   }));
   const pendingLive = liveProposals.listProposals({ userId: req.session.userId, status: 'pending', limit: 100 });
   const pendingPaper = getProposals();
@@ -3147,7 +3165,9 @@ app.get('/api/agent-control', requireUser, (req, res) => {
     approvals: { paper: pendingPaper.length, live: pendingLive.length },
     keys,
     keyStats: { active: keys.filter((k) => !k.revokedAt).length, revoked: keys.filter((k) => !!k.revokedAt).length },
+    parentWallet,
     wallets: agentWallets,
+    pacts: ownerPacts,
     walletStats: { active: agentWallets.filter((w) => w.status === 'active').length, suspended: agentWallets.filter((w) => w.status === 'suspended').length },
     safety: { liveEnabled: anyLiveEnabled(), globalFreeze: freeze.freezeState() },
   });
