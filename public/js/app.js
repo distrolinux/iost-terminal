@@ -1929,7 +1929,10 @@ async function renderAgentKeysCard(container) {
     const v = $('#akSecretVal'); if (v) v.textContent = r.body.key;
     const copyBtn = $('#akCopy'); if (copyBtn) copyBtn.onclick = () => { navigator.clipboard?.writeText(r.body.key); toast('✅ Key copied — store it safely'); };
     toast('✅ Agent key created — shown once');
-    renderAgentKeysCard(container);
+    // Keep the one-time secret visible until the owner copies it. Re-rendering
+    // here would replace #akSecret immediately and erase the only recoverable
+    // copy of the newly minted key. The key list refreshes on the next view
+    // render or page reload, after the owner has had a chance to store it.
   });
   container.querySelectorAll('[data-revoke]').forEach(b => b.addEventListener('click', async () => {
     if (!confirm('Revoke this agent key? It stops working immediately.')) return;
