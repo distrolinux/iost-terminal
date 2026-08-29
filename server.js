@@ -55,9 +55,11 @@ import rateLimit from 'express-rate-limit';
 import * as auth from './lib/auth.js';
 import {
   MCP_LEGACY_VERSION, MCP_MODERN_VERSION, MCP_SUPPORTED_VERSIONS, MCP_TASKS_EXTENSION,
-  buildMcpTools, hasTasksCapability, modernResult, validateModernRequest, validateToolArguments, withModernMeta,
+  MCP_UI_EXTENSION, buildMcpTools, hasMcpAppsCapability, hasTasksCapability, modernResult,
+  validateModernRequest, validateToolArguments, withModernMeta,
 } from './lib/mcp-protocol.js';
 import { createMcpTaskStore } from './lib/mcp-tasks.js';
+import { MCP_APP_MIME_TYPE, listMcpAppResources, readMcpAppResource } from './lib/mcp-apps.js';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.IOST_DATA_DIR || join(ROOT, 'data');
@@ -1054,6 +1056,52 @@ async function runMcpEvaluation(req, args) {
   return result;
 }
 
+function mcpEvaluationOwner(req) {
+  const ownerId = evaluationOwner(req);
+  if (!ownerId) throw Object.assign(new Error('private evaluation evidence unavailable'), { protocolCode: -32602 });
+  return ownerId;
+}
+
+function mcpEvaluationGet(req, runId) {
+  const run = getEvaluation(mcpEvaluationOwner(req), runId);
+  if (!run) throw Object.assign(new Error('private evaluation evidence unavailable'), { protocolCode: -32602 });
+  return run;
+}
+
+function mcpEvaluationCompare(req, runIds) {
+  const result = compareEvaluations(mcpEvaluationOwner(req), runIds);
+  if (!result) throw Object.assign(new Error('private evaluation evidence unavailable'), { protocolCode: -32602 });
+  return result;
+}
+
+function mcpEvaluationTask(req, taskId) {
+  const task = mcpTaskStore.get(mcpEvaluationOwner(req), taskId);
+  if (!task) throw Object.assign(new Error('private evaluation task unavailable'), { protocolCode: -32602 });
+  return task;
+}
+
+function mcpEvaluationReview(req, args) {
+  const ownerId = mcpEvaluationOwner(req);
+  const runIds = Array.isArray(args?.runIds) ? args.runIds : [];
+  const selected = runIds.map((runId) => {
+    const run = getEvaluation(ownerId, runId);
+    if (!run) throw Object.assign(new Error('private evaluation evidence unavailable'), { protocolCode: -32602 });
+    return run;
+  });
+  return {
+    ok: true,
+    mode: 'paper-only',
+    appVersion: 1,
+    serverRevision: process.env.APP_REVISION || 'development',
+    history: listEvaluations(ownerId, 25),
+    selected,
+    comparison: runIds.length === 2 ? mcpEvaluationCompare(req, runIds) : null,
+    task: args?.taskId ? mcpEvaluationTask(req, args.taskId) : null,
+    authorization: mcpAuthorizationStatus(req),
+    boundary: 'Evidence review cannot authorize financial execution. MetaMask binding proves ownership only. Paper execution remains a separate wallet/Pact-gated tool.',
+  };
+}
+
 async function mcpToolCall(req, name, args) {
   if (!mcpToolAllowed(req, name)) throw Object.assign(new Error('unknown or unauthorized tool'), { protocolCode: -32602 });
   switch (name) {
@@ -1094,6 +1142,28 @@ async function mcpToolCall(req, name, args) {
       const ownerId = evaluationOwner(req);
       if (!ownerId) throw Object.assign(new Error('user-bound evaluation history required'), { status: 403 });
       return { ok: true, mode: 'paper-only', ...listEvaluations(ownerId, args?.limit) };
+    }
+    case 'evaluation_review': return mcpEvaluationReview(req, args);
+    case 'evaluation_get': return mcpEvaluationGet(req, args?.runId);
+    case 'evaluation_compare': return mcpEvaluationCompare(req, args?.runIds);
+    case 'evaluation_export': {
+      const ownerId = mcpEvaluationOwner(req);
+      const data = args?.format === 'csv' ? exportEvaluationCsv(ownerId, args?.runId) : exportEvaluationJson(ownerId, args?.runId);
+      if (data == null) throw Object.assign(new Error('private evaluation evidence unavailable'), { protocolCode: -32602 });
+      if (Buffer.byteLength(data) > 2_500_000) throw new Error('evaluation export exceeds MCP response limit');
+      return {
+        ok: true, mode: 'paper-only', format: args.format,
+        filename: `iost-evaluation-${args.runId}.${args.format}`,
+        mimeType: args.format === 'csv' ? 'text/csv;charset=utf-8' : 'application/json',
+        bytes: Buffer.byteLength(data), sha256: crypto.createHash('sha256').update(data).digest('hex'), data,
+      };
+    }
+    case 'evaluation_task_status': return mcpEvaluationTask(req, args?.taskId);
+    case 'evaluation_task_cancel': {
+      mcpEvaluationTask(req, args?.taskId);
+      const cancelled = mcpTaskStore.cancel(mcpEvaluationOwner(req), args?.taskId);
+      if (!cancelled) throw Object.assign(new Error('evaluation task is already terminal'), { protocolCode: -32602 });
+      return cancelled;
     }
     case 'evaluation_run': return await runMcpEvaluation(req, args);
     case 'paper_trade_open': {
@@ -1138,7 +1208,9 @@ app.get('/.well-known/mcp/server-card.json', (req, res) => {
     protocolVersion: MCP_MODERN_VERSION,
     supportedVersions: MCP_SUPPORTED_VERSIONS,
     transport: { type: 'streamable-http', endpoint: `${SITE_URL}/mcp` },
-    capabilities: { tools: { listChanged: false }, extensions: { [MCP_TASKS_EXTENSION]: {} } },
+    capabilities: { tools: { listChanged: false }, resources: { listChanged: false }, extensions: {
+      [MCP_TASKS_EXTENSION]: {}, [MCP_UI_EXTENSION]: { mimeTypes: [MCP_APP_MIME_TYPE] },
+    } },
     safety: { mode: 'paper-only', realMoney: false, tokenActions: false, publicChainActions: false },
   });
 });
@@ -1170,7 +1242,9 @@ app.post('/mcp', publicLimiter, async (req, res) => {
   if (modern && msg.method === 'server/discover') {
     return success({
       resultType: 'complete', supportedVersions: MCP_SUPPORTED_VERSIONS,
-      capabilities: { tools: { listChanged: false }, extensions: { [MCP_TASKS_EXTENSION]: {} } },
+      capabilities: { tools: { listChanged: false }, resources: { listChanged: false }, extensions: {
+        [MCP_TASKS_EXTENSION]: {}, [MCP_UI_EXTENSION]: { mimeTypes: [MCP_APP_MIME_TYPE] },
+      } },
       instructions: 'Public tools are read-only. Authenticate with a user-bound agent key for private evaluations and wallet/Pact-authorized paper trades. Real-money, token and public-chain actions are unavailable.',
       ttlMs: 300_000, cacheScope: 'public',
     });
@@ -1182,8 +1256,16 @@ app.post('/mcp', publicLimiter, async (req, res) => {
   if (msg.method === 'notifications/initialized' || msg.method === 'notifications/cancelled') {
     return res.status(202).end(); // JSON-RPC notification — no body
   }
+  if (modern && msg.method === 'resources/list') {
+    return success({ resultType: 'complete', resources: listMcpAppResources(), ttlMs: 300_000, cacheScope: 'public' });
+  }
+  if (modern && msg.method === 'resources/read') {
+    const resource = readMcpAppResource(String(msg.params?.uri || ''));
+    if (!resource) return reply({ jsonrpc: '2.0', id, error: { code: -32602, message: 'resource not found' } });
+    return success({ resultType: 'complete', ...resource });
+  }
   if (msg.method === 'tools/list') {
-    const tools = buildMcpTools(access);
+    const tools = buildMcpTools({ ...access, apps: modern && hasMcpAppsCapability(msg) });
     return success(modern
       ? { resultType: 'complete', tools, ttlMs: access.authenticated ? 0 : 60_000, cacheScope: access.authenticated ? 'private' : 'public' }
       : { tools });

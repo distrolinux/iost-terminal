@@ -148,7 +148,8 @@ all reported metrics and gate decisions come from verified server evidence.
 
 - automated semantic/focus/reduced-motion contracts plus keyboard interaction tests;
 - accessible table fallback for every chart;
-- compressed app bundle budget: 60 KiB maximum;
+- compressed app bundle budget: 128 KiB maximum (the official MCP Apps client bridge
+  is bundled rather than reimplementing its security-sensitive host protocol);
 - first render from supplied structured data: 100 ms budget on the local test fixture;
 - no request loop while hidden and no more than one in-flight task poll.
 
