@@ -2595,7 +2595,7 @@ async function renderJournal() {
       <td class="mono">${e.confidence ?? '—'}</td>
       <td><span class="chip ${e.status === 'open' ? 'acc' : e.result === 'win' ? 'bull' : e.result === 'loss' ? 'bear' : 'neut'}">${e.status === 'open' ? 'open' : e.result}</span></td>
       <td class="mono ${(e.pnl || 0) >= 0 ? 'up' : 'down'}">${e.pnl != null ? '$' + fmtNum(e.pnl) : '—'}</td>
-      <td>${e.status === 'open' ? `<button class="btn ghost sm" data-close="${e.id}">Close</button>` : `<span class="muted">${timeAgo(e.closedAt || e.openedAt)}</span>`}</td>
+      <td>${e.status === 'open' ? `<button class="btn ghost sm" data-close="${e.id}">Close</button>` : `<span class="muted" title="${esc(e.exitReason || e.exitAuthority || '')}">${esc(e.exitReason || timeAgo(e.closedAt || e.openedAt))}</span>`}</td>
     </tr>`).join('');
   const openPos = p.positions || [];
   el.innerHTML = `
@@ -2635,7 +2635,7 @@ async function renderJournal() {
     </div>`;
   $('#jNew').addEventListener('click', () => openTradeModal());
   $('#jCsv').addEventListener('click', () => {
-    const head = ['id', 'symbol', 'side', 'entry', 'stop', 'target', 'size', 'reason', 'confidence', 'status', 'openedAt', 'closedAt', 'exitPrice', 'pnl', 'pnlPct', 'result'];
+    const head = ['id', 'symbol', 'side', 'entry', 'stop', 'target', 'size', 'reason', 'confidence', 'status', 'openedAt', 'closedAt', 'exitPrice', 'exitReason', 'exitAuthority', 'pnl', 'pnlPct', 'result'];
     const csv = [head.join(','), ...j.map(e => head.map(h => `"${String(e[h] ?? '').replace(/"/g, '""')}"`).join(','))].join('\n');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
@@ -2643,7 +2643,10 @@ async function renderJournal() {
     a.click();
   });
   $$('#jFilters [data-f]').forEach(b => b.addEventListener('click', () => { journalView.filter = b.dataset.f; renderJournal(); }));
-  $$('[data-close]').forEach(b => b.addEventListener('click', async () => { await post('/api/paper/close', { positionId: b.dataset.close }); renderJournal(); }));
+  $$('[data-close]').forEach(b => b.addEventListener('click', async () => {
+    if (!confirm('Close this paper position at the server-observed market price? The journal will record that price and reason.')) return;
+    await post('/api/paper/close', { positionId: b.dataset.close }); renderJournal();
+  }));
   $$('[data-mgmt]').forEach(b => b.addEventListener('click', () => openPositionManagement(b.dataset.mgmt, openPos)));
   renderBacktestCard($('#backtestWrap'));
 }

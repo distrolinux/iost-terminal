@@ -213,7 +213,11 @@ try {
     name: 'paper_trade_close', arguments: { positionId, exitPrice: 11 },
   }, { key: keyA.key, name: 'paper_trade_close' });
   assert.equal(closed.body.result.structuredContent.ok, true);
-  assert.equal(closed.body.result.structuredContent.result, 'win');
+  // The MCP client may not choose a profitable exit price. With a fresh quote
+  // unavailable in this hermetic test, the broker falls back to its last
+  // server-observed price (the $10 entry), never the supplied $11.
+  assert.notEqual(closed.body.result.structuredContent.exitPrice, 11);
+  assert.match(closed.body.result.structuredContent.exitAuthority, /^server-(market|last-observed)$/);
 
   const taskCreated = await mcp('tools/call', {
     name: 'evaluation_run', arguments: {
