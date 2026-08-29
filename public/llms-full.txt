@@ -89,7 +89,7 @@
 - `GET /api/account` — cash, equity, open positions, last trades
 - `GET /api/paper` — account + open positions + journal (mark-to-market)
 - `POST /api/paper/open {symbol,side,size,entry,stop?,target?,reason?,confidence?,walletId,pactId,recipient?,protocol?}` — agent-key paper opens require `trade-paper`, an owned agent wallet, and an active wallet-bound Pact; human-session paper opens are unchanged
-- `POST /api/paper/close {positionId,exitPrice?}` — close paper trade
+- `POST /api/paper/close {positionId}` — close paper trade at a server-observed price; client exit prices are ignored
 - `GET /api/paper/stats` — journal statistics
 - `POST /api/paper/reset` — reset paper account
 - `POST /api/paper/:id/management` — trailing stop/TP and DCA config on an open position

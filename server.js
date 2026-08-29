@@ -980,6 +980,8 @@ an MCP-resource-bound bearer token adds private evaluation/account tools; the
 \`trade-paper\` scope adds \`paper_trade_open\` and \`paper_trade_close\`. Paper opens
 still require the wallet and Pact fields above. No MCP tool can execute a live,
 token, conversion, wallet-send, swap, or public-chain action.
+Paper closes use a server-observed market price (or the last server observation
+if a fresh quote is unavailable); a client cannot select the P&L exit price.
 
 ## Live trading — human-in-the-loop
 Agents never execute live trades directly. With a \`trade-live\` key an agent submits a
@@ -1194,7 +1196,9 @@ async function mcpToolCall(req, name, args) {
       if (!req.userAgent || !userAgentHas(req, 'trade-paper')) {
         throw Object.assign(new Error('trade-paper scoped user agent key required'), { status: 403 });
       }
-      return await closeTrade(args?.positionId, args?.exitPrice, accountFor(req).accountId, 'MCP agent paper close');
+      // Closing is risk-reducing, so it does not need an active Pact; the fill
+      // nevertheless comes from the server, never an MCP client supplied price.
+      return await closeTrade(args?.positionId, null, accountFor(req).accountId, 'MCP agent paper close');
     }
     default: throw new Error(`unknown tool: ${name}`);
   }
@@ -1620,7 +1624,10 @@ app.post('/api/paper/open', requireUser, async (req, res) => {
 app.post('/api/paper/close', requireUser, async (req, res) => {
   if (req.userAgent && !userAgentHas(req, 'trade-paper')) return res.status(403).json({ error: 'scope: this key cannot trade (missing trade-paper)' });
   try {
-    const r = await closeTrade(req.body?.positionId, req.body?.exitPrice, accountFor(req).accountId);
+    // P&L evidence must be priced by the server. Ignore any submitted
+    // exitPrice so a browser, script, or compromised agent cannot manufacture
+    // a winning paper record.
+    const r = await closeTrade(req.body?.positionId, null, accountFor(req).accountId, 'manual paper close');
     // decentralized agents: when a copy-followed position closes, pin the close
     // on-chain (provable agent track record) — the journal reason carries the source agentId
     if (r.ok) {
@@ -2934,7 +2941,7 @@ const API_INDEX = {
     { path: '/api/account', method: 'GET', purpose: 'light per-account snapshot for UI topbar: cash, equity, openPositions, lastTrades' },
     { path: '/api/paper', method: 'GET', purpose: 'account + open positions + journal (mark-to-market)' },
     { path: '/api/paper/open', method: 'POST', body: '{symbol,side,size,entry,stop?,target?,reason?,confidence?,walletId,pactId,recipient?,protocol?}', purpose: 'agent-key opens require trade-paper scope + owned wallet + active wallet-bound Pact; human-session paper opens are unchanged' },
-    { path: '/api/paper/close', method: 'POST', body: '{positionId,exitPrice?}', purpose: 'close paper trade' },
+    { path: '/api/paper/close', method: 'POST', body: '{positionId}', purpose: 'close paper trade at a server-observed price (client exit prices are ignored)' },
     { path: '/api/paper/stats', method: 'GET', purpose: 'journal statistics (win rate, P&L)' },
     { path: '/api/paper/reset', method: 'POST', purpose: 'reset paper account' },
   ],
@@ -3499,7 +3506,10 @@ app.get('/api/smart-money', publicLimiter, async (req, res) => {
 
 // update trailing/DCA config on an OPEN position
 app.post('/api/paper/:id/management', requireUser, (req, res) => {
-  if (req.userAgent && !userAgentHas(req, 'trade-paper')) return res.status(403).json({ error: 'scope: this key cannot trade (missing trade-paper)' });
+  // Agents may open/close only through their wallet-bound Pact. Changing
+  // trailing/DCA automation would create future actions outside that Pact, so
+  // only the signed-in account owner may alter management instructions.
+  if (req.userAgent) return res.status(403).json({ error: 'agent keys cannot change automated paper-position management' });
   const acc = accountFor(req);
   const r = management.updatePositionManagement(acc.accountId, req.params.id, req.body || {});
   if (!r.ok) return res.status(404).json({ error: r.error });
