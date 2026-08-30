@@ -15,6 +15,7 @@ Each receipt contains:
   deviation when an observation exists;
 - simulated fill price, fill authority, zero-fee paper model and close P&L;
 - paper scope, wallet/Pact gate and mission-gate results as booleans;
+- an opaque execution-intent reference and retry-protection flag;
 - policy decision and bounded reason code;
 - authorization, broker, settlement and total latency;
 - per-account sequence, previous hash, payload hash and receipt hash.

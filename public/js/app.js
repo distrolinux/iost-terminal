@@ -395,6 +395,27 @@ async function api(path, opts) {
   return res.json();
 }
 const post = (path, body) => api(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}) });
+async function postPaper(path, body, intentId) {
+  let res;
+  try {
+    res = await fetch(path, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'idempotency-key': intentId },
+      body: JSON.stringify({ ...(body || {}), intentId }),
+    });
+  } catch (error) {
+    error.reachedServer = false;
+    throw error;
+  }
+  const data = await res.json().catch(() => ({ error: `${res.status} ${path}` }));
+  if (!res.ok) {
+    const error = new Error(data.error || `${res.status} ${path}`);
+    error.reachedServer = true;
+    error.data = data;
+    throw error;
+  }
+  return data;
+}
 
 function htmlToNode(html) {
   const t = document.createElement('template');
@@ -2760,12 +2781,15 @@ async function renderJournal() {
   const el = $('#view-journal');
   let p;
   try { p = await api('/api/paper'); state.paper = p; } catch (e) { el.innerHTML = `<div class="card empty">Journal unavailable: ${esc(e.message)}</div>`; return; }
-  const [stats, receiptData] = await Promise.all([
+  const [stats, receiptData, intentData] = await Promise.all([
     api('/api/paper/stats').catch(() => null),
     api('/api/execution-receipts?limit=12').catch(() => null),
+    api('/api/execution-intents?limit=12').catch(() => null),
   ]);
   const j = p.journal || [];
   const receipts = receiptData?.receipts || [];
+  const intents = intentData?.intents || [];
+  const unknownIntents = intents.filter(intent => intent.status === 'outcome-unknown').length;
   const filtered = j.filter(e => journalView.filter === 'all' ? true : e.status === journalView.filter || e.result === journalView.filter);
   const rows = filtered.map(e => `
     <tr>
@@ -2810,6 +2834,7 @@ async function renderJournal() {
     <div class="card execution-receipts">
       <div class="section-title">Verified Execution Receipts <span class="sub">paper truth layer · quote age · authorization · cost · latency</span>
         <span class="receipt-chain ${receiptData?.verification?.ok ? 'is-valid' : 'is-invalid'}">${receiptData?.verification?.ok ? `chain verified · ${receiptData.verification.count}` : 'chain unavailable'}</span>
+        <span class="receipt-chain ${unknownIntents ? 'is-invalid' : 'is-valid'}">${intents.length} retry-safe intents${unknownIntents ? ` · ${unknownIntents} needs review` : ''}</span>
       </div>
       ${receipts.length ? `<div class="table-wrap"><table>
         <thead><tr><th>Result</th><th>Order</th><th>Fill evidence</th><th>Market observation</th><th>Authority</th><th>Latency</th><th>Receipt</th></tr></thead>
@@ -2828,7 +2853,7 @@ async function renderJournal() {
             <td>${quote}<small>${r.market?.entryDeviationBps == null ? 'entry deviation unavailable' : `entry deviation ${r.market.entryDeviationBps} bps`}</small></td>
             <td>${esc(authority)}<small>paper-only · live unused</small></td>
             <td class="mono">${fmtNum(r.latency?.totalMs, 0)} ms<small>auth ${fmtNum(r.latency?.authorizationMs, 0)} · broker ${fmtNum(r.latency?.brokerMs, 0)}</small></td>
-            <td class="mono"><span title="${esc(r.hash || '')}">${esc((r.hash || '').slice(0, 12))}…</span><small>seq ${r.sequence}</small></td>
+            <td class="mono"><span title="${esc(r.hash || '')}">${esc((r.hash || '').slice(0, 12))}…</span><small>seq ${r.sequence} · ${r.order?.intentProtected ? `retry protected ${esc((r.order.intentRef || '').slice(0, 8))}` : 'legacy execution'}</small></td>
           </tr>`;
         }).join('')}</tbody></table></div>` : '<div class="empty">No execution receipts yet. Accepted and policy-rejected paper orders will appear here.</div>'}
     </div>
@@ -2854,7 +2879,16 @@ async function renderJournal() {
   $$('#jFilters [data-f]').forEach(b => b.addEventListener('click', () => { journalView.filter = b.dataset.f; renderJournal(); }));
   $$('[data-close]').forEach(b => b.addEventListener('click', async () => {
     if (!confirm('Close this paper position at the server-observed market price? The journal will record that price and reason.')) return;
-    await post('/api/paper/close', { positionId: b.dataset.close }); renderJournal();
+    const intentId = b.dataset.intentId || crypto.randomUUID();
+    b.dataset.intentId = intentId;
+    try {
+      await postPaper('/api/paper/close', { positionId: b.dataset.close }, intentId);
+      delete b.dataset.intentId;
+      renderJournal();
+    } catch (error) {
+      if (error.reachedServer) delete b.dataset.intentId;
+      alert(error.reachedServer ? error.message : 'Network interrupted. Retry Close to safely check the same execution intent.');
+    }
   }));
   $$('[data-mgmt]').forEach(b => b.addEventListener('click', () => openPositionManagement(b.dataset.mgmt, openPos)));
   renderBacktestCard($('#backtestWrap'));
@@ -3020,6 +3054,7 @@ function openPositionManagement(positionId, positions) {
 // ---------------- Trade modal ----------------
 function openTradeModal(symbol = '', side = 'long', confidence = null) {
   const modal = $('#detailModal');
+  let executionIntentId = crypto.randomUUID();
   const syms = [...(state.scan || []).map(a => a.symbol)].join(',');
   $('#detailBody').innerHTML = `
     <button class="modal-close" aria-label="Close">✕</button>
@@ -3074,10 +3109,12 @@ function openTradeModal(symbol = '', side = 'long', confidence = null) {
         cooldownMin: +($('#tDcaCool').value || 60),
       } : null,
     };
-    const r = await post('/api/paper/open', body);
-    if (r.ok) { closeDetail(); switchView('journal'); }
-    else {
-      const errBox = $('#detailBody').insertAdjacentHTML('beforeend', `<div class="empty" style="color:var(--down);padding:12px 0">${esc(r.error || (r.errors || []).join(', '))}</div>`);
+    try {
+      const r = await postPaper('/api/paper/open', body, executionIntentId);
+      if (r.ok) { closeDetail(); switchView('journal'); }
+    } catch (error) {
+      if (error.reachedServer) executionIntentId = crypto.randomUUID();
+      $('#detailBody').insertAdjacentHTML('beforeend', `<div class="empty" style="color:var(--down);padding:12px 0">${esc(error.reachedServer ? error.message : 'Network interrupted. Retry to safely check the same execution intent.')}</div>`);
     }
   });
 }
