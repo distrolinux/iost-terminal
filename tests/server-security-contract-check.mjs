@@ -19,7 +19,11 @@ const route = (needle, nextNeedle) => {
 };
 
 const closeRoute = route("app.post('/api/paper/close'", "app.post('/api/paper/reset'");
-ok('paper close requires trade-paper scope', /userAgentHas\(req,\s*'trade-paper'\)/.test(closeRoute));
+const closeExecution = route('async function executePaperClose', '// queue flush:');
+ok('paper close requires trade-paper scope and returns receipt evidence',
+  /userAgentHas\(req,\s*'trade-paper'\)/.test(closeExecution)
+  && /trade-paper-scope-required/.test(closeExecution)
+  && /executePaperClose\(req/.test(closeRoute));
 
 const liveDisableRoute = route("app.post('/api/account/live/disable'", "// ---- live execution");
 ok('live disable requires an allowlisted owner browser session',
