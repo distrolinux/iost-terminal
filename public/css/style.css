@@ -840,6 +840,13 @@ body.onboarding-open #authReset { display: none !important; }
 .mission-latest { display: grid; gap: 3px; margin-top: 12px; padding: 10px; border-left: 2px solid var(--accent); background: rgba(77,214,255,.06); }
 .mission-latest strong { font-size: 11px; text-transform: uppercase; }
 .mission-latest span:last-child { color: var(--muted); font-size: 11px; }
+.execution-receipts { margin-bottom: 16px; border-color: rgba(49,230,255,.22); }
+.execution-receipts .section-title { align-items: center; gap: 8px; flex-wrap: wrap; }
+.execution-receipts td { min-width: 110px; vertical-align: top; }
+.execution-receipts td small { display: block; margin-top: 4px; color: var(--dim); font-size: 10px; line-height: 1.35; white-space: normal; }
+.receipt-chain { margin-left: auto; padding: 4px 8px; border: 1px solid var(--line); border-radius: 999px; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
+.receipt-chain.is-valid { border-color: rgba(72,239,177,.35); color: var(--up); }
+.receipt-chain.is-invalid { border-color: rgba(255,116,109,.4); color: var(--down); }
 @media (max-width: 900px) {
   .mission-pipeline { grid-template-columns: repeat(3,minmax(0,1fr)); }
   .mission-pipeline li:nth-child(3) { border-right: 0; }

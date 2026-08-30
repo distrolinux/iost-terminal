@@ -4,7 +4,7 @@ import compression from 'compression';
 import { createServer } from 'node:http';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getTicker, getKlines, WATCHLIST } from './lib/market.js';
+import { getTicker, getKlines, peekTicker, WATCHLIST } from './lib/market.js';
 import { getGlobalMetrics, getTopMovers, getMarketExtras, getCmcGlobal } from './lib/marketdata.js';
 import { applyGarchSizing, getGarchState, garchConfig } from './lib/garch.js';
 import { scanAll, analyzeSymbol } from './lib/scanner.js';
@@ -40,6 +40,7 @@ import * as trust from './lib/trust.js';
 import * as arena from './lib/arena.js';
 import * as pacts from './lib/pacts.js';
 import * as missions from './lib/missions.js';
+import * as executionReceipts from './lib/execution-receipts.js';
 import * as iostAccounts from './lib/iost-accounts.js';
 import * as agentKeys from './lib/agent-keys.js';
 import * as liveProposals from './lib/live-proposals.js';
@@ -115,7 +116,7 @@ try {
     'pacts.json', 'evm-wallets.json', 'aitt-claims-v2.json', 'aitt-points-snapshot.json',
     'iost_accounts.json', 'pending_pins.json', 'signals.json', 'follows.json', 'triggers.json',
     'payments.json', 'fee-config.json', 'live-proposals.json', 'agent-audit.jsonl',
-    'live-audit.jsonl', 'arena-audit.jsonl', 'mcp-tasks.json', 'missions.json',
+    'live-audit.jsonl', 'arena-audit.jsonl', 'mcp-tasks.json', 'missions.json', 'execution-receipts.jsonl',
   ]) {
     const p = join(DATA_DIR, f);
     if (existsSync(p)) {
@@ -125,6 +126,7 @@ try {
   }
   secureEvaluationHistoryPermissions();
   missions.secureMissionPermissions();
+  executionReceipts.secureReceiptPermissions();
 } catch (e) {
   console.error(`[security] refusing boot: sensitive store permissions could not be secured (${e.message})`);
   throw e;
@@ -767,7 +769,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.20.1';
+const DISCOVERY_VERSION = '1.21.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -825,6 +827,7 @@ const OPENAPI_PATHS = {
   '/api/paper': { get: { summary: 'Account + open positions + journal (mark-to-market)', tags: ['execution'] } },
   '/api/paper/open': { post: { summary: 'Open paper trade', tags: ['execution'] } },
   '/api/paper/close': { post: { summary: 'Close paper trade', tags: ['execution'] } },
+  '/api/execution-receipts': { get: { summary: 'Private tamper-evident paper execution receipts and chain verification', tags: ['execution'] } },
   '/api/signals': { post: { summary: 'Publish a signal as the authenticated principal; SHA-256 pinned on IOST mainnet', tags: ['agents'] } },
   '/api/agent-keys': { get: { summary: 'My AI-agent API keys (scopes, prefixes)', tags: ['auth'] }, post: { summary: 'Mint a scoped AI-agent API key', tags: ['auth'] } },
   '/api/agent-control': { get: { summary: 'Owner-only agent operations snapshot: activity, permissions, budgets and safety state', tags: ['autonomy'] } },
@@ -983,8 +986,10 @@ Human-session paper execution remains unchanged.
 
 ## MCP 2026-07-28
 Endpoint: \`POST ${SITE_URL}/mcp\`. Public tools are read-only. A user-bound key or
-an MCP-resource-bound bearer token adds private evaluation/account tools; the
-\`trade-paper\` scope adds \`paper_trade_open\` and \`paper_trade_close\`. Paper opens
+an MCP-resource-bound bearer token adds private evaluation/account tools,
+including \`paper_execution_receipts\` with tamper-evident authorization,
+pricing, cost and latency evidence. The \`trade-paper\` scope adds
+\`paper_trade_open\` and \`paper_trade_close\`. Paper opens
 still require the wallet and Pact fields above. No MCP tool can execute a live,
 token, conversion, wallet-send, swap, or public-chain action.
 Paper closes use a server-observed market price (or the last server observation
@@ -1146,6 +1151,7 @@ async function mcpToolCall(req, name, args) {
     case 'agent_authorization_status': return mcpAuthorizationStatus(req);
     case 'paper_account': return await markToMarket(accountFor(req).accountId);
     case 'paper_stats': return journalStats(accountFor(req).accountId);
+    case 'paper_execution_receipts': return executionReceipts.listExecutionReceipts(accountFor(req).accountId, args?.limit);
     case 'paper_missions': {
       const ownerId = missionOwnerId(req);
       if (!ownerId) throw Object.assign(new Error('user-bound mission access required'), { status: 403 });
@@ -1185,56 +1191,12 @@ async function mcpToolCall(req, name, args) {
     }
     case 'evaluation_run': return await runMcpEvaluation(req, args);
     case 'paper_trade_open': {
-      if (!req.userAgent || !userAgentHas(req, 'trade-paper')) {
-        throw Object.assign(new Error('trade-paper scoped user agent key required'), { status: 403 });
-      }
-      const entry = Number(args?.entry || 0);
-      const size = Number(args?.size || 0);
-      const notionalMinor = entry > 0 && size > 0 ? Math.trunc(entry * size * 100) : 0;
-      const missionId = String(args?.missionId || '').trim() || null;
-      const missionOwner = missionOwnerId(req);
-      let missionReservation = null;
-      if (missionId) {
-        missionReservation = missions.reserveMissionTrade({
-          missionId, ownerId: missionOwner, walletId: args?.walletId,
-          pactId: args?.pactId, symbol: args?.symbol, notionalMinor,
-        });
-        if (!missionReservation.ok) throw Object.assign(new Error(missionReservation.message), { status: 409 });
-      }
-      const gate = agentSpendGate(req, notionalMinor, {
-        walletId: args?.walletId, pactId: args?.pactId,
-        recipient: args?.recipient, protocol: args?.protocol,
-      });
-      if (!gate.ok) {
-        if (missionReservation?.ok) missions.releaseMissionTrade(missionId, missionOwner, missionReservation.reservationId);
-        throw Object.assign(new Error(gate.message || gate.reason || 'agent spend denied'), { status: 402 });
-      }
-      try {
-        const placed = await getBroker('paper').placeOrder({ ...(args || {}), accountId: accountFor(req).accountId });
-        const settled = settleAgentSpend(gate, !!placed.ok);
-        if (!settled.ok && placed.ok) {
-          await closeTrade(placed.position?.id, placed.position?.entry, accountFor(req).accountId, 'MCP authorization settlement failed');
-          if (missionReservation?.ok) missions.releaseMissionTrade(missionId, missionOwner, missionReservation.reservationId);
-          throw new Error('agent authorization settlement failed');
-        }
-        if (placed.ok && missionReservation?.ok) missions.commitMissionTrade(missionId, missionOwner, missionReservation.reservationId, { positionId: placed.position?.id, symbol: placed.position?.symbol });
-        else if (missionReservation?.ok) missions.releaseMissionTrade(missionId, missionOwner, missionReservation.reservationId);
-        return placed;
-      } catch (error) {
-        settleAgentSpend(gate, false);
-        if (missionReservation?.ok) missions.releaseMissionTrade(missionId, missionOwner, missionReservation.reservationId);
-        throw error;
-      }
+      return executePaperOpen(req, args || {}, 'mcp');
     }
     case 'paper_trade_close': {
-      if (!req.userAgent || !userAgentHas(req, 'trade-paper')) {
-        throw Object.assign(new Error('trade-paper scoped user agent key required'), { status: 403 });
-      }
       // Closing is risk-reducing, so it does not need an active Pact; the fill
       // nevertheless comes from the server, never an MCP client supplied price.
-      const closed = await closeTrade(args?.positionId, null, accountFor(req).accountId, 'MCP agent paper close');
-      if (closed.ok) missions.recordMissionClose(args?.positionId, missionOwnerId(req), Math.round(Number(closed.pnl || 0) * 100));
-      return closed;
+      return executePaperClose(req, args || {}, 'mcp');
     }
     default: throw new Error(`unknown tool: ${name}`);
   }
@@ -1345,7 +1307,7 @@ app.post('/mcp', publicLimiter, async (req, res) => {
       return reply({ jsonrpc: '2.0', id, result });
     } catch (e) {
       if (e.protocolCode) return reply({ jsonrpc: '2.0', id, error: { code: e.protocolCode, message: e.message } });
-      const errorData = { ok: false, error: e.message, mode: 'paper-only' };
+      const errorData = { ok: false, error: e.message, mode: 'paper-only', ...(e.receipt ? { receipt: e.receipt } : {}) };
       const result = modern ? modernResult(errorData, MCP_SERVER_INFO, { isError: true }) : { content: [{ type: 'text', text: `error: ${e.message}` }], isError: true };
       return reply({ jsonrpc: '2.0', id, result });
     }
@@ -1626,62 +1588,16 @@ app.get('/api/paper', requireUser, async (req, res) => {
 });
 
 app.post('/api/paper/open', requireUser, async (req, res) => {
-  if (req.userAgent && !userAgentHas(req, 'trade-paper')) return res.status(403).json({ error: 'scope: this key cannot trade (missing trade-paper)' });
-  // Agent credentials always pass the wallet, limit, and Pact authorization rail.
-  const entry = Number(req.body?.entry || 0);
-  const size = Number(req.body?.size || 0);
-  const notionalMinor = entry > 0 && size > 0 ? Math.trunc(entry * size * 100) : 0;
-  const missionId = String(req.body?.missionId || '').trim() || null;
-  const missionOwner = missionOwnerId(req);
-  let missionReservation = null;
-  if (missionId) {
-    missionReservation = missions.reserveMissionTrade({
-      missionId, ownerId: missionOwner, walletId: req.body?.walletId,
-      pactId: req.body?.pactId, symbol: req.body?.symbol, notionalMinor,
-    });
-    if (!missionReservation.ok) return res.status(409).json({ error: missionReservation.message, reason: missionReservation.reason });
-  }
-  const gate = agentSpendGate(req, notionalMinor, {
-    walletId: req.body?.walletId,
-    pactId: req.body?.pactId,
-    recipient: req.body?.recipient,
-    protocol: req.body?.protocol,
-  });
-  if (!gate.ok) {
-    if (missionReservation?.ok) missions.releaseMissionTrade(missionId, missionOwner, missionReservation.reservationId);
-    return res.status(402).json({ error: gate.message || gate.reason || 'agent spend denied', reason: gate.reason });
-  }
-  req.agentReserveId = gate.reserveId;
   try {
-    const r = await getBroker('paper').placeOrder({ ...(req.body || {}), accountId: accountFor(req).accountId });
-    if (req.agentReserveId) {
-      const settled = settleAgentSpend(gate, !!r.ok);
-      if (!settled.ok && r.ok) {
-        // Paper execution is reversible: close immediately at entry so a
-        // failed authorization settlement cannot leave an open position.
-        await closeTrade(r.position?.id, r.position?.entry, accountFor(req).accountId, 'agent authorization settlement failed');
-        if (missionReservation?.ok) missions.releaseMissionTrade(missionId, missionOwner, missionReservation.reservationId);
-        return res.status(500).json({ error: 'agent authorization settlement failed' });
-      }
-    }
-    if (r.ok && missionReservation?.ok) missions.commitMissionTrade(missionId, missionOwner, missionReservation.reservationId, { positionId: r.position?.id, symbol: r.position?.symbol });
-    else if (missionReservation?.ok) missions.releaseMissionTrade(missionId, missionOwner, missionReservation.reservationId);
-    res.json(r);
+    res.json(await executePaperOpen(req, req.body || {}, 'rest'));
   } catch (e) {
-    if (req.agentReserveId) settleAgentSpend(gate, false);
-    if (missionReservation?.ok) missions.releaseMissionTrade(missionId, missionOwner, missionReservation.reservationId);
-    res.status(502).json({ error: e.message });
+    res.status(e.status || 502).json({ error: e.message, ...(e.reason ? { reason: e.reason } : {}), ...(e.receipt ? { receipt: e.receipt } : {}) });
   }
 });
 
 app.post('/api/paper/close', requireUser, async (req, res) => {
-  if (req.userAgent && !userAgentHas(req, 'trade-paper')) return res.status(403).json({ error: 'scope: this key cannot trade (missing trade-paper)' });
   try {
-    // P&L evidence must be priced by the server. Ignore any submitted
-    // exitPrice so a browser, script, or compromised agent cannot manufacture
-    // a winning paper record.
-    const r = await closeTrade(req.body?.positionId, null, accountFor(req).accountId, 'manual paper close');
-    if (r.ok) missions.recordMissionClose(req.body?.positionId, missionOwnerId(req), Math.round(Number(r.pnl || 0) * 100));
+    const r = await executePaperClose(req, req.body || {}, 'rest');
     // decentralized agents: when a copy-followed position closes, pin the close
     // on-chain (provable agent track record) — the journal reason carries the source agentId
     if (r.ok) {
@@ -1692,7 +1608,9 @@ app.post('/api/paper/close', requireUser, async (req, res) => {
       }
     }
     res.json(r);
-  } catch (e) { res.status(502).json({ error: e.message }); }
+  } catch (e) {
+    res.status(e.status || 502).json({ error: e.message, ...(e.reason ? { reason: e.reason } : {}), ...(e.receipt ? { receipt: e.receipt } : {}) });
+  }
 });
 
 app.post('/api/paper/reset', requireUser, (req, res) => {
@@ -1708,6 +1626,10 @@ app.post('/api/paper/account', requireUser, (req, res) => {
   res.json(setAccountSize(size, accountFor(req).accountId));
 });
 app.get('/api/paper/stats', requireUser, (req, res) => res.json(journalStats(accountFor(req).accountId)));
+app.get('/api/execution-receipts', requireUser, (req, res) => {
+  if (req.userAgent && !userAgentHas(req, 'read')) return res.status(403).json({ error: 'read scope required' });
+  res.json(executionReceipts.listExecutionReceipts(accountFor(req).accountId, req.query.limit));
+});
 
 // ================= decentralized AI agents — Phase 1 =================
 // Trust layer: every published signal is SHA-256 hash-pinned on the IOST
@@ -2553,6 +2475,265 @@ function settleAgentSpend(gate, commit) {
   return { ok: pactCommit.ok };
 }
 
+function receiptPrincipal(req) {
+  if (req.userAgent) return 'user-agent';
+  if (req.agentKey) return 'platform-agent';
+  return 'human-session';
+}
+
+function beginPaperReceipt(req, order, action, source) {
+  const startedAt = Date.now();
+  const symbol = String(order?.symbol || '').trim().toUpperCase();
+  return {
+    accountId: accountFor(req).accountId,
+    action,
+    source,
+    startedAt,
+    authorizationMs: 0,
+    brokerMs: 0,
+    settlementMs: 0,
+    market: executionReceipts.marketEvidence({
+      ticker: peekTicker(symbol, startedAt),
+      requestedEntry: order?.entry,
+      side: order?.side,
+      size: order?.size,
+      now: startedAt,
+    }),
+    request: {
+      symbol,
+      side: order?.side,
+      size: order?.size,
+      requestedEntry: order?.entry,
+      requestedNotionalUsd: Number(order?.entry || 0) * Number(order?.size || 0),
+      confidence: order?.confidence,
+      reasoningSummary: order?.reason,
+      missionAttached: !!String(order?.missionId || '').trim(),
+      missionId: String(order?.missionId || '').trim() || null,
+      positionId: order?.positionId || null,
+    },
+  };
+}
+
+function writePaperReceipt(req, attempt, {
+  outcome, execution, gate = null, missionAuthorized = false,
+  reasonCode = null, detail = null, decision = null,
+} = {}) {
+  const agentCredential = !!(req.userAgent || req.agentKey);
+  return executionReceipts.recordExecutionReceipt({
+    accountId: attempt.accountId,
+    action: attempt.action,
+    outcome,
+    request: attempt.request,
+    market: attempt.market,
+    execution,
+    authorization: {
+      principal: receiptPrincipal(req),
+      tradePaperScope: req.userAgent ? userAgentHas(req, 'trade-paper') : true,
+      walletPactRequired: agentCredential && attempt.action === 'open',
+      walletPactAuthorized: attempt.action === 'close' || !agentCredential || gate?.ok === true,
+      missionRequired: attempt.request.missionAttached,
+      missionAuthorized: !attempt.request.missionAttached || missionAuthorized,
+    },
+    policy: {
+      decision: decision || (outcome === 'accepted' ? 'allow' : 'deny'),
+      reasonCode,
+      detail,
+    },
+    latency: {
+      totalMs: Date.now() - attempt.startedAt,
+      authorizationMs: attempt.authorizationMs,
+      brokerMs: attempt.brokerMs,
+      settlementMs: attempt.settlementMs,
+    },
+  });
+}
+
+function rejectedPaperError(message, status, reason, receipt = null) {
+  return Object.assign(new Error(message), { status, reason, ...(receipt ? { receipt } : {}) });
+}
+
+async function executePaperOpen(req, order, source = 'rest') {
+  const attempt = beginPaperReceipt(req, order, 'open', source);
+  const entry = Number(order?.entry || 0);
+  const size = Number(order?.size || 0);
+  const notionalMinor = entry > 0 && size > 0 ? Math.trunc(entry * size * 100) : 0;
+  const missionId = String(order?.missionId || '').trim() || null;
+  const missionOwner = missionOwnerId(req);
+  let missionReservation = null;
+  let gate = null;
+  const authorizationStartedAt = Date.now();
+
+  const missingPaperScope = source === 'mcp'
+    ? (!req.userAgent || !userAgentHas(req, 'trade-paper'))
+    : (req.userAgent && !userAgentHas(req, 'trade-paper'));
+  if (missingPaperScope) {
+    attempt.authorizationMs = Date.now() - authorizationStartedAt;
+    const receipt = writePaperReceipt(req, attempt, {
+      outcome: 'rejected', execution: { status: 'not-filled' },
+      reasonCode: 'trade-paper-scope-required', detail: 'Paper trading scope is required.',
+    });
+    throw rejectedPaperError('scope: this key cannot trade (missing trade-paper)', 403, 'trade-paper-scope-required', receipt);
+  }
+
+  if (missionId) {
+    missionReservation = missions.reserveMissionTrade({
+      missionId, ownerId: missionOwner, walletId: order?.walletId,
+      pactId: order?.pactId, symbol: order?.symbol, notionalMinor,
+    });
+    if (!missionReservation.ok) {
+      attempt.authorizationMs = Date.now() - authorizationStartedAt;
+      const receipt = writePaperReceipt(req, attempt, {
+        outcome: 'rejected', execution: { status: 'not-filled' },
+        missionAuthorized: false, reasonCode: missionReservation.reason,
+        detail: missionReservation.message,
+      });
+      throw rejectedPaperError(missionReservation.message, 409, missionReservation.reason, receipt);
+    }
+  }
+
+  gate = agentSpendGate(req, notionalMinor, {
+    walletId: order?.walletId,
+    pactId: order?.pactId,
+    recipient: order?.recipient,
+    protocol: order?.protocol,
+  });
+  attempt.authorizationMs = Date.now() - authorizationStartedAt;
+  if (!gate.ok) {
+    if (missionReservation?.ok) missions.releaseMissionTrade(missionId, missionOwner, missionReservation.reservationId);
+    const receipt = writePaperReceipt(req, attempt, {
+      outcome: 'rejected', execution: { status: 'not-filled' }, gate,
+      missionAuthorized: missionReservation?.ok === true,
+      reasonCode: gate.reason || 'agent-spend-denied', detail: gate.message,
+    });
+    throw rejectedPaperError(gate.message || gate.reason || 'agent spend denied', 402, gate.reason, receipt);
+  }
+
+  try {
+    const brokerStartedAt = Date.now();
+    const placed = await getBroker('paper').placeOrder({ ...(order || {}), accountId: attempt.accountId });
+    attempt.brokerMs = Date.now() - brokerStartedAt;
+    const settlementStartedAt = Date.now();
+    const settled = settleAgentSpend(gate, !!placed.ok);
+    attempt.settlementMs = Date.now() - settlementStartedAt;
+    if (!settled.ok && placed.ok) {
+      await closeTrade(placed.position?.id, placed.position?.entry, attempt.accountId, `${source.toUpperCase()} authorization settlement failed`);
+      if (missionReservation?.ok) missions.releaseMissionTrade(missionId, missionOwner, missionReservation.reservationId);
+      const receipt = writePaperReceipt(req, attempt, {
+        outcome: 'reversed', execution: {
+          status: 'reversed', fillPrice: placed.position?.entry,
+          fillAuthority: 'client-supplied-paper-entry', feeUsd: 0,
+        }, gate, missionAuthorized: missionReservation?.ok === true,
+        reasonCode: 'authorization-settlement-failed', detail: 'The simulated fill was reversed.',
+      });
+      throw rejectedPaperError('agent authorization settlement failed', 500, 'authorization-settlement-failed', receipt);
+    }
+    if (!placed.ok) {
+      if (missionReservation?.ok) missions.releaseMissionTrade(missionId, missionOwner, missionReservation.reservationId);
+      const receipt = writePaperReceipt(req, attempt, {
+        outcome: 'rejected', execution: { status: 'not-filled' }, gate,
+        missionAuthorized: missionReservation?.ok === true,
+        reasonCode: 'paper-broker-rejected', detail: placed.error || 'Paper broker rejected the order.',
+      });
+      return { ...placed, receipt };
+    }
+    if (missionReservation?.ok) {
+      try {
+        missions.commitMissionTrade(missionId, missionOwner, missionReservation.reservationId, {
+          positionId: placed.position?.id, symbol: placed.position?.symbol,
+        });
+      } catch (missionError) {
+        await closeTrade(placed.position?.id, placed.position?.entry, attempt.accountId, 'mission settlement failed');
+        const receipt = writePaperReceipt(req, attempt, {
+          outcome: 'reversed', execution: {
+            status: 'reversed', fillPrice: placed.position?.entry,
+            fillAuthority: order?.entry ? 'client-supplied-paper-entry' : 'server-market', feeUsd: 0,
+          }, gate, missionAuthorized: false,
+          reasonCode: 'mission-settlement-failed', detail: 'The simulated fill was reversed.',
+        });
+        throw rejectedPaperError('mission settlement failed', 500, 'mission-settlement-failed', receipt);
+      }
+    }
+    let receipt;
+    try {
+      receipt = writePaperReceipt(req, attempt, {
+        outcome: 'accepted', execution: {
+          status: 'filled', fillPrice: placed.position?.entry,
+          fillAuthority: order?.entry ? 'client-supplied-paper-entry' : 'server-market', feeUsd: 0,
+        }, gate, missionAuthorized: missionReservation?.ok === true,
+        decision: 'allow', reasonCode: 'paper-fill-verified', detail: 'Simulated paper fill completed inside authorization rails.',
+      });
+    } catch {
+      const reversed = await closeTrade(placed.position?.id, placed.position?.entry, attempt.accountId, 'execution receipt unavailable');
+      if (missionReservation?.ok && reversed.ok) missions.recordMissionClose(placed.position?.id, missionOwner, 0);
+      throw rejectedPaperError('execution receipt unavailable; simulated fill reversed', 500, 'execution-receipt-unavailable');
+    }
+    return { ...placed, receipt };
+  } catch (error) {
+    if (!error.receipt) {
+      settleAgentSpend(gate, false);
+      if (missionReservation?.ok) missions.releaseMissionTrade(missionId, missionOwner, missionReservation.reservationId);
+      try {
+        error.receipt = writePaperReceipt(req, attempt, {
+          outcome: 'rejected', execution: { status: 'not-filled' }, gate,
+          missionAuthorized: missionReservation?.ok === true,
+          reasonCode: 'paper-execution-error', detail: error.message,
+        });
+      } catch { /* the original execution error remains authoritative */ }
+    }
+    throw error;
+  }
+}
+
+async function executePaperClose(req, order, source = 'rest') {
+  const accountId = accountFor(req).accountId;
+  const position = getState(accountId).positions.find((item) => item.id === order?.positionId) || null;
+  const request = {
+    ...(order || {}), symbol: position?.symbol || '', side: position?.side || 'long',
+    size: position?.size, entry: position?.entry, reason: `${source.toUpperCase()} paper close`,
+  };
+  const attempt = beginPaperReceipt(req, request, 'close', source);
+  attempt.request.positionId = order?.positionId || null;
+  const authorizationStartedAt = Date.now();
+  const missingPaperScope = source === 'mcp'
+    ? (!req.userAgent || !userAgentHas(req, 'trade-paper'))
+    : (req.userAgent && !userAgentHas(req, 'trade-paper'));
+  attempt.authorizationMs = Date.now() - authorizationStartedAt;
+  if (missingPaperScope) {
+    const receipt = writePaperReceipt(req, attempt, {
+      outcome: 'rejected', execution: { status: 'not-filled' },
+      reasonCode: 'trade-paper-scope-required', detail: 'Paper trading scope is required.',
+    });
+    throw rejectedPaperError('scope: this key cannot trade (missing trade-paper)', 403, 'trade-paper-scope-required', receipt);
+  }
+  const brokerStartedAt = Date.now();
+  const closed = await closeTrade(order?.positionId, null, accountId, `${source.toUpperCase()} agent paper close`);
+  attempt.brokerMs = Date.now() - brokerStartedAt;
+  attempt.market = executionReceipts.marketEvidence({
+    ticker: peekTicker(position?.symbol, Date.now()),
+    requestedEntry: closed?.exitPrice,
+    side: position?.side,
+    size: position?.size,
+  });
+  if (closed.ok) missions.recordMissionClose(order?.positionId, missionOwnerId(req), Math.round(Number(closed.pnl || 0) * 100));
+  try {
+    const receipt = writePaperReceipt(req, attempt, {
+      outcome: closed.ok ? 'accepted' : 'rejected',
+      execution: closed.ok ? {
+        status: 'filled', fillPrice: closed.exitPrice, fillAuthority: closed.exitAuthority,
+        feeUsd: 0, pnlUsd: closed.pnl, result: closed.result,
+      } : { status: 'not-filled' },
+      gate: { ok: true }, missionAuthorized: true,
+      decision: closed.ok ? 'allow' : 'deny',
+      reasonCode: closed.ok ? 'risk-reducing-close-verified' : 'paper-close-rejected',
+      detail: closed.ok ? 'Paper position closed at a server-observed or last-observed price.' : closed.error,
+    });
+    return { ...closed, receipt };
+  } catch (error) {
+    if (!closed.ok) throw error;
+    return { ...closed, receipt: null, receiptError: 'execution receipt unavailable' };
+  }
+}
+
 // queue flush: boot + every 10 min — drains data/pending_pins.json when the key appears
 async function flushPinQueue() {
   try {
@@ -3167,6 +3348,7 @@ const API_INDEX = {
     { path: '/api/paper/open', method: 'POST', body: '{symbol,side,size,entry,stop?,target?,reason?,confidence?,walletId,pactId,missionId?,recipient?,protocol?}', purpose: 'agent-key opens require trade-paper scope + owned wallet + active wallet-bound Pact; mission orders add server-enforced symbol, size, count, expiry and loss limits' },
     { path: '/api/paper/close', method: 'POST', body: '{positionId}', purpose: 'close paper trade at a server-observed price (client exit prices are ignored)' },
     { path: '/api/paper/stats', method: 'GET', purpose: 'journal statistics (win rate, P&L)' },
+    { path: '/api/execution-receipts', method: 'GET', query: 'limit=1..200', purpose: 'private SHA-256-chained paper execution receipts with pricing, authorization, cost and latency evidence' },
     { path: '/api/paper/reset', method: 'POST', purpose: 'reset paper account' },
   ],
   agents: [

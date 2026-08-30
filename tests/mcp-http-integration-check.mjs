@@ -137,6 +137,7 @@ try {
   const privateTools = await mcp('tools/list', {}, { key: keyA.key });
   assert.equal(privateTools.body.result.cacheScope, 'private');
   assert(privateTools.body.result.tools.some((tool) => tool.name === 'paper_trade_open'));
+  assert(privateTools.body.result.tools.some((tool) => tool.name === 'paper_execution_receipts'));
   assert(!privateTools.body.result.tools.some((tool) => /live|swap|convert/i.test(tool.name)));
   const appTools = await mcp('tools/list', {}, { key: keyA.key, apps: true });
   const reviewTool = appTools.body.result.tools.find((tool) => tool.name === 'evaluation_review');
@@ -197,7 +198,17 @@ try {
   assert.equal(opened.status, 200);
   assert.equal(opened.body.result.isError, false);
   assert.equal(opened.body.result.structuredContent.ok, true);
+  assert.equal(opened.body.result.structuredContent.receipt.outcome, 'accepted');
+  assert.equal(opened.body.result.structuredContent.receipt.authorization.walletPactAuthorized, true);
   const positionId = opened.body.result.structuredContent.position.id;
+
+  const policyRejected = await mcp('tools/call', {
+    name: 'paper_trade_open',
+    arguments: { symbol: 'AAPL', side: 'long', size: 1, entry: 10, walletId: wallet.walletId, pactId: accountPact.pactId, reason: 'Receipt rejection integration test' },
+  }, { key: keyA.key, name: 'paper_trade_open' });
+  assert.equal(policyRejected.body.result.isError, true);
+  assert.equal(policyRejected.body.result.structuredContent.receipt.outcome, 'rejected');
+  assert.equal(policyRejected.body.result.structuredContent.receipt.authorization.walletPactAuthorized, false);
 
   // Agent Control Center creates wallets under the signed-in account rather
   // than an individual key id. That account-owned wallet must remain usable
@@ -218,6 +229,19 @@ try {
   // server-observed price (the $10 entry), never the supplied $11.
   assert.notEqual(closed.body.result.structuredContent.exitPrice, 11);
   assert.match(closed.body.result.structuredContent.exitAuthority, /^server-(market|last-observed)$/);
+  assert.equal(closed.body.result.structuredContent.receipt.action, 'close');
+  assert.equal(closed.body.result.structuredContent.receipt.outcome, 'accepted');
+
+  const receiptHistory = await mcp('tools/call', {
+    name: 'paper_execution_receipts', arguments: { limit: 20 },
+  }, { key: keyA.key, name: 'paper_execution_receipts' });
+  assert.equal(receiptHistory.body.result.structuredContent.ok, true);
+  assert.equal(receiptHistory.body.result.structuredContent.verification.ok, true);
+  assert(receiptHistory.body.result.structuredContent.receipts.length >= 4);
+  const serializedReceipts = JSON.stringify(receiptHistory.body.result.structuredContent.receipts);
+  assert.equal(serializedReceipts.includes(wallet.walletId), false);
+  assert.equal(serializedReceipts.includes(pact.pactId), false);
+  assert.equal(serializedReceipts.includes(positionId), false);
 
   const taskCreated = await mcp('tools/call', {
     name: 'evaluation_run', arguments: {

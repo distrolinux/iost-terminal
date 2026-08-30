@@ -2760,8 +2760,12 @@ async function renderJournal() {
   const el = $('#view-journal');
   let p;
   try { p = await api('/api/paper'); state.paper = p; } catch (e) { el.innerHTML = `<div class="card empty">Journal unavailable: ${esc(e.message)}</div>`; return; }
-  const stats = await api('/api/paper/stats').catch(() => null);
+  const [stats, receiptData] = await Promise.all([
+    api('/api/paper/stats').catch(() => null),
+    api('/api/execution-receipts?limit=12').catch(() => null),
+  ]);
   const j = p.journal || [];
+  const receipts = receiptData?.receipts || [];
   const filtered = j.filter(e => journalView.filter === 'all' ? true : e.status === journalView.filter || e.result === journalView.filter);
   const rows = filtered.map(e => `
     <tr>
@@ -2803,6 +2807,31 @@ async function renderJournal() {
         const dca = pos.dca?.enabled ? `<span class="chip live" title="Auto average-down: ${(pos.dca.triggerPct * 100).toFixed(0)}% dip · ${pos.dca.sizeFactor}× · cooldown ${pos.dca.cooldownMin}m">DCA ${pos.dcaCount}/${pos.dca.maxTrades}</span>` : '—';
         return `<tr><td><strong>${pos.symbol}</strong></td><td>${pos.side}</td><td class="mono">${fmtPrice(pos.entry, pos.type)}</td><td class="mono">${fmtNum(pos.size, 0)}</td><td class="mono">${fmtPrice(pos.lastPrice, pos.type)}</td><td class="mono ${u >= 0 ? 'up' : 'down'}">$${fmtNum(u)}</td><td>${trail.join(' ') || '—'}</td><td>${dca}</td><td style="white-space:nowrap"><button class="btn sm ghost" data-mgmt="${pos.id}">⚙ Manage</button> <button class="btn red sm" data-close="${pos.id}">Close</button></td></tr>`;
       }).join('')}</tbody></table></div></div>` : ''}
+    <div class="card execution-receipts">
+      <div class="section-title">Verified Execution Receipts <span class="sub">paper truth layer · quote age · authorization · cost · latency</span>
+        <span class="receipt-chain ${receiptData?.verification?.ok ? 'is-valid' : 'is-invalid'}">${receiptData?.verification?.ok ? `chain verified · ${receiptData.verification.count}` : 'chain unavailable'}</span>
+      </div>
+      ${receipts.length ? `<div class="table-wrap"><table>
+        <thead><tr><th>Result</th><th>Order</th><th>Fill evidence</th><th>Market observation</th><th>Authority</th><th>Latency</th><th>Receipt</th></tr></thead>
+        <tbody>${receipts.map(r => {
+          const outcomeClass = r.outcome === 'accepted' ? 'bull' : r.outcome === 'reversed' ? 'warn' : 'bear';
+          const quote = r.market?.available
+            ? `${esc(r.market.source || 'market')} · ${r.market.quoteAgeMs == null ? 'age unknown' : `${r.market.quoteAgeMs} ms`} · spread ${r.market.spreadBps == null ? '—' : `${r.market.spreadBps} bps`}`
+            : 'No cached server quote';
+          const authority = r.authorization?.walletPactRequired
+            ? `${r.authorization.walletPactAuthorized ? 'wallet/Pact verified' : 'wallet/Pact denied'}${r.order?.missionAttached ? ` · mission ${r.authorization.missionAuthorized ? 'verified' : 'denied'}` : ''}`
+            : 'human session';
+          return `<tr>
+            <td><span class="chip ${outcomeClass}">${esc(r.outcome)}</span><small>${esc(r.policy?.reasonCode || '')}</small></td>
+            <td><strong>${esc(r.order?.symbol || '—')}</strong> ${esc(r.action)} · ${esc(r.order?.side || '')}<small>${r.order?.requestedNotionalUsd == null ? '—' : `$${fmtNum(r.order.requestedNotionalUsd)}`}</small></td>
+            <td>${r.execution?.fillPrice == null ? 'not filled' : fmtPrice(r.execution.fillPrice, 'crypto')}<small>${esc(r.execution?.fillAuthority || '')} · fee $${fmtNum(r.execution?.feeUsd || 0)}</small></td>
+            <td>${quote}<small>${r.market?.entryDeviationBps == null ? 'entry deviation unavailable' : `entry deviation ${r.market.entryDeviationBps} bps`}</small></td>
+            <td>${esc(authority)}<small>paper-only · live unused</small></td>
+            <td class="mono">${fmtNum(r.latency?.totalMs, 0)} ms<small>auth ${fmtNum(r.latency?.authorizationMs, 0)} · broker ${fmtNum(r.latency?.brokerMs, 0)}</small></td>
+            <td class="mono"><span title="${esc(r.hash || '')}">${esc((r.hash || '').slice(0, 12))}…</span><small>seq ${r.sequence}</small></td>
+          </tr>`;
+        }).join('')}</tbody></table></div>` : '<div class="empty">No execution receipts yet. Accepted and policy-rejected paper orders will appear here.</div>'}
+    </div>
     <div class="card">
       <div class="section-title" style="margin-bottom:8px">All trades
         <span style="margin-left:auto;display:flex;gap:6px" id="jFilters">
