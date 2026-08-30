@@ -2470,11 +2470,20 @@ function findAgentWalletForRequest(req, walletId = null) {
     const wallet = wallets.getWallet(walletId);
     return wallet?.kind === 'agent' && owners.includes(wallet.ownerId) ? wallet : null;
   }
-  for (const ownerId of owners) {
-    const wallet = wallets.findWallet(ownerId, 'agent');
-    if (wallet) return wallet;
-  }
-  return null;
+  const candidates = owners.flatMap((ownerId) => wallets.walletTree(ownerId).agents
+    .map((wallet) => wallets.getWallet(wallet.walletId)).filter(Boolean));
+  // Discovery without an explicit wallet must return a usable authorization
+  // pair, not merely the oldest wallet. This matters when an account created a
+  // wallet before using Launchpad. Explicit execution requests remain bound to
+  // their caller-supplied walletId and Pact id through agentSpendGate.
+  const activePactWalletIds = new Set(owners.flatMap((ownerId) => pacts.listPacts(ownerId)
+    .filter((pact) => pact.status === 'active').map((pact) => pact.agentWalletId)));
+  return candidates.find((wallet) => wallet.status === 'active'
+      && wallet.capabilities?.includes('trade.paper') && activePactWalletIds.has(wallet.walletId))
+    || candidates.find((wallet) => wallet.status === 'active' && wallet.capabilities?.includes('trade.paper'))
+    || candidates.find((wallet) => wallet.status === 'active')
+    || candidates[0]
+    || null;
 }
 
 function settleAgentSpend(gate, commit) {
