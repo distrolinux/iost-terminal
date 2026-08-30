@@ -39,6 +39,7 @@ import * as slashes from './lib/slashes.js';
 import * as trust from './lib/trust.js';
 import * as arena from './lib/arena.js';
 import * as pacts from './lib/pacts.js';
+import * as missions from './lib/missions.js';
 import * as iostAccounts from './lib/iost-accounts.js';
 import * as agentKeys from './lib/agent-keys.js';
 import * as liveProposals from './lib/live-proposals.js';
@@ -114,7 +115,7 @@ try {
     'pacts.json', 'evm-wallets.json', 'aitt-claims-v2.json', 'aitt-points-snapshot.json',
     'iost_accounts.json', 'pending_pins.json', 'signals.json', 'follows.json', 'triggers.json',
     'payments.json', 'fee-config.json', 'live-proposals.json', 'agent-audit.jsonl',
-    'live-audit.jsonl', 'arena-audit.jsonl', 'mcp-tasks.json',
+    'live-audit.jsonl', 'arena-audit.jsonl', 'mcp-tasks.json', 'missions.json',
   ]) {
     const p = join(DATA_DIR, f);
     if (existsSync(p)) {
@@ -123,6 +124,7 @@ try {
     }
   }
   secureEvaluationHistoryPermissions();
+  missions.secureMissionPermissions();
 } catch (e) {
   console.error(`[security] refusing boot: sensitive store permissions could not be secured (${e.message})`);
   throw e;
@@ -765,7 +767,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.19.0';
+const DISCOVERY_VERSION = '1.20.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -827,6 +829,11 @@ const OPENAPI_PATHS = {
   '/api/agent-keys': { get: { summary: 'My AI-agent API keys (scopes, prefixes)', tags: ['auth'] }, post: { summary: 'Mint a scoped AI-agent API key', tags: ['auth'] } },
   '/api/agent-control': { get: { summary: 'Owner-only agent operations snapshot: activity, permissions, budgets and safety state', tags: ['autonomy'] } },
   '/api/agent-control/emergency-stop': { post: { summary: 'Owner-only fail-safe: stop autopilot, suspend owned agent wallets and disable live execution', tags: ['autonomy'] } },
+  '/api/agent-missions': { get: { summary: 'Owner-only supervised paper missions and trace evidence', tags: ['autonomy'] }, post: { summary: 'Create a paused paper mission bound to an exact active wallet and Pact', tags: ['autonomy'] } },
+  '/api/agent-missions/{id}/start': { post: { summary: 'Start an owner paper mission after revalidating its wallet and Pact', tags: ['autonomy'] } },
+  '/api/agent-missions/{id}/pause': { post: { summary: 'Pause an owner paper mission', tags: ['autonomy'] } },
+  '/api/agent-missions/{id}/stop': { post: { summary: 'Permanently stop an owner paper mission', tags: ['autonomy'] } },
+  '/api/agent-missions/{id}/checkpoint': { post: { summary: 'Append a bounded user-agent mission checkpoint', tags: ['autonomy'] } },
 };
 app.get('/openapi.json', (req, res) => {
   res.set('Access-Control-Allow-Origin', '*');
@@ -1139,6 +1146,16 @@ async function mcpToolCall(req, name, args) {
     case 'agent_authorization_status': return mcpAuthorizationStatus(req);
     case 'paper_account': return await markToMarket(accountFor(req).accountId);
     case 'paper_stats': return journalStats(accountFor(req).accountId);
+    case 'paper_missions': {
+      const ownerId = missionOwnerId(req);
+      if (!ownerId) throw Object.assign(new Error('user-bound mission access required'), { status: 403 });
+      return { ok: true, mode: 'paper-only', missions: missions.listMissions(ownerId) };
+    }
+    case 'paper_mission_checkpoint': {
+      const ownerId = missionOwnerId(req);
+      if (!ownerId) throw Object.assign(new Error('user-bound mission access required'), { status: 403 });
+      return { ok: true, mode: 'paper-only', mission: missions.recordMissionCheckpoint(args?.missionId, ownerId, args || {}) };
+    }
     case 'evaluation_history': {
       const ownerId = evaluationOwner(req);
       if (!ownerId) throw Object.assign(new Error('user-bound evaluation history required'), { status: 403 });
@@ -1174,21 +1191,38 @@ async function mcpToolCall(req, name, args) {
       const entry = Number(args?.entry || 0);
       const size = Number(args?.size || 0);
       const notionalMinor = entry > 0 && size > 0 ? Math.trunc(entry * size * 100) : 0;
+      const missionId = String(args?.missionId || '').trim() || null;
+      const missionOwner = missionOwnerId(req);
+      let missionReservation = null;
+      if (missionId) {
+        missionReservation = missions.reserveMissionTrade({
+          missionId, ownerId: missionOwner, walletId: args?.walletId,
+          pactId: args?.pactId, symbol: args?.symbol, notionalMinor,
+        });
+        if (!missionReservation.ok) throw Object.assign(new Error(missionReservation.message), { status: 409 });
+      }
       const gate = agentSpendGate(req, notionalMinor, {
         walletId: args?.walletId, pactId: args?.pactId,
         recipient: args?.recipient, protocol: args?.protocol,
       });
-      if (!gate.ok) throw Object.assign(new Error(gate.message || gate.reason || 'agent spend denied'), { status: 402 });
+      if (!gate.ok) {
+        if (missionReservation?.ok) missions.releaseMissionTrade(missionId, missionOwner, missionReservation.reservationId);
+        throw Object.assign(new Error(gate.message || gate.reason || 'agent spend denied'), { status: 402 });
+      }
       try {
         const placed = await getBroker('paper').placeOrder({ ...(args || {}), accountId: accountFor(req).accountId });
         const settled = settleAgentSpend(gate, !!placed.ok);
         if (!settled.ok && placed.ok) {
           await closeTrade(placed.position?.id, placed.position?.entry, accountFor(req).accountId, 'MCP authorization settlement failed');
+          if (missionReservation?.ok) missions.releaseMissionTrade(missionId, missionOwner, missionReservation.reservationId);
           throw new Error('agent authorization settlement failed');
         }
+        if (placed.ok && missionReservation?.ok) missions.commitMissionTrade(missionId, missionOwner, missionReservation.reservationId, { positionId: placed.position?.id, symbol: placed.position?.symbol });
+        else if (missionReservation?.ok) missions.releaseMissionTrade(missionId, missionOwner, missionReservation.reservationId);
         return placed;
       } catch (error) {
         settleAgentSpend(gate, false);
+        if (missionReservation?.ok) missions.releaseMissionTrade(missionId, missionOwner, missionReservation.reservationId);
         throw error;
       }
     }
@@ -1198,7 +1232,9 @@ async function mcpToolCall(req, name, args) {
       }
       // Closing is risk-reducing, so it does not need an active Pact; the fill
       // nevertheless comes from the server, never an MCP client supplied price.
-      return await closeTrade(args?.positionId, null, accountFor(req).accountId, 'MCP agent paper close');
+      const closed = await closeTrade(args?.positionId, null, accountFor(req).accountId, 'MCP agent paper close');
+      if (closed.ok) missions.recordMissionClose(args?.positionId, missionOwnerId(req), Math.round(Number(closed.pnl || 0) * 100));
+      return closed;
     }
     default: throw new Error(`unknown tool: ${name}`);
   }
@@ -1595,13 +1631,26 @@ app.post('/api/paper/open', requireUser, async (req, res) => {
   const entry = Number(req.body?.entry || 0);
   const size = Number(req.body?.size || 0);
   const notionalMinor = entry > 0 && size > 0 ? Math.trunc(entry * size * 100) : 0;
+  const missionId = String(req.body?.missionId || '').trim() || null;
+  const missionOwner = missionOwnerId(req);
+  let missionReservation = null;
+  if (missionId) {
+    missionReservation = missions.reserveMissionTrade({
+      missionId, ownerId: missionOwner, walletId: req.body?.walletId,
+      pactId: req.body?.pactId, symbol: req.body?.symbol, notionalMinor,
+    });
+    if (!missionReservation.ok) return res.status(409).json({ error: missionReservation.message, reason: missionReservation.reason });
+  }
   const gate = agentSpendGate(req, notionalMinor, {
     walletId: req.body?.walletId,
     pactId: req.body?.pactId,
     recipient: req.body?.recipient,
     protocol: req.body?.protocol,
   });
-  if (!gate.ok) return res.status(402).json({ error: gate.message || gate.reason || 'agent spend denied', reason: gate.reason });
+  if (!gate.ok) {
+    if (missionReservation?.ok) missions.releaseMissionTrade(missionId, missionOwner, missionReservation.reservationId);
+    return res.status(402).json({ error: gate.message || gate.reason || 'agent spend denied', reason: gate.reason });
+  }
   req.agentReserveId = gate.reserveId;
   try {
     const r = await getBroker('paper').placeOrder({ ...(req.body || {}), accountId: accountFor(req).accountId });
@@ -1611,12 +1660,16 @@ app.post('/api/paper/open', requireUser, async (req, res) => {
         // Paper execution is reversible: close immediately at entry so a
         // failed authorization settlement cannot leave an open position.
         await closeTrade(r.position?.id, r.position?.entry, accountFor(req).accountId, 'agent authorization settlement failed');
+        if (missionReservation?.ok) missions.releaseMissionTrade(missionId, missionOwner, missionReservation.reservationId);
         return res.status(500).json({ error: 'agent authorization settlement failed' });
       }
     }
+    if (r.ok && missionReservation?.ok) missions.commitMissionTrade(missionId, missionOwner, missionReservation.reservationId, { positionId: r.position?.id, symbol: r.position?.symbol });
+    else if (missionReservation?.ok) missions.releaseMissionTrade(missionId, missionOwner, missionReservation.reservationId);
     res.json(r);
   } catch (e) {
     if (req.agentReserveId) settleAgentSpend(gate, false);
+    if (missionReservation?.ok) missions.releaseMissionTrade(missionId, missionOwner, missionReservation.reservationId);
     res.status(502).json({ error: e.message });
   }
 });
@@ -1628,6 +1681,7 @@ app.post('/api/paper/close', requireUser, async (req, res) => {
     // exitPrice so a browser, script, or compromised agent cannot manufacture
     // a winning paper record.
     const r = await closeTrade(req.body?.positionId, null, accountFor(req).accountId, 'manual paper close');
+    if (r.ok) missions.recordMissionClose(req.body?.positionId, missionOwnerId(req), Math.round(Number(r.pnl || 0) * 100));
     // decentralized agents: when a copy-followed position closes, pin the close
     // on-chain (provable agent track record) — the journal reason carries the source agentId
     if (r.ok) {
@@ -2998,6 +3052,14 @@ function accountFor(req) {
   return null;
 }
 
+// Mission authority belongs to the human account that created the scoped key,
+// so the browser and its agent see the same paper-only control envelope.
+function missionOwnerId(req) {
+  if (req.session?.userId && auth.findById(req.session.userId)) return `user:${req.session.userId}`;
+  if (req.userAgent?.userId) return `user:${req.userAgent.userId}`;
+  return null;
+}
+
 // mask an email for public display (t***@domain) — never leak the full address
 const maskEmail = (email) => {
   const s = String(email || '');
@@ -3102,7 +3164,7 @@ const API_INDEX = {
   execution: [
     { path: '/api/account', method: 'GET', purpose: 'light per-account snapshot for UI topbar: cash, equity, openPositions, lastTrades' },
     { path: '/api/paper', method: 'GET', purpose: 'account + open positions + journal (mark-to-market)' },
-    { path: '/api/paper/open', method: 'POST', body: '{symbol,side,size,entry,stop?,target?,reason?,confidence?,walletId,pactId,recipient?,protocol?}', purpose: 'agent-key opens require trade-paper scope + owned wallet + active wallet-bound Pact; human-session paper opens are unchanged' },
+    { path: '/api/paper/open', method: 'POST', body: '{symbol,side,size,entry,stop?,target?,reason?,confidence?,walletId,pactId,missionId?,recipient?,protocol?}', purpose: 'agent-key opens require trade-paper scope + owned wallet + active wallet-bound Pact; mission orders add server-enforced symbol, size, count, expiry and loss limits' },
     { path: '/api/paper/close', method: 'POST', body: '{positionId}', purpose: 'close paper trade at a server-observed price (client exit prices are ignored)' },
     { path: '/api/paper/stats', method: 'GET', purpose: 'journal statistics (win rate, P&L)' },
     { path: '/api/paper/reset', method: 'POST', purpose: 'reset paper account' },
@@ -3170,6 +3232,9 @@ const API_INDEX = {
     { path: '/api/account/iost', method: 'GET', purpose: 'my wallet status (session user): none/pending/created/failed + account name + creation tx + block' },
   ],
   autonomy: [
+    { path: '/api/agent-missions', method: 'GET|POST', purpose: 'owner-only Mission Control: list or create a paused supervised paper mission bound to an exact active wallet and Pact' },
+    { path: '/api/agent-missions/:id/start | /pause | /stop', method: 'POST', purpose: 'owner-only mission lifecycle controls; start revalidates the paper wallet and Pact' },
+    { path: '/api/agent-missions/:id/checkpoint', method: 'POST', body: '{stage,detail,latencyMs?}', purpose: 'user-bound agent trace checkpoint; cannot expand mission authority' },
     { path: '/api/autopilot', method: 'GET', purpose: 'autopilot status + config + action audit trail + pending proposals' },
     { path: '/api/autopilot/start', method: 'POST', body: '{config?}', purpose: 'enable autonomous trading loop' },
     { path: '/api/autopilot/stop', method: 'POST', purpose: 'disable autonomous loop' },
@@ -3303,6 +3368,45 @@ app.get('/api/audit', requireUser, (req, res) => {
   res.json({ agent, count: entries.length, entries: entries.slice(-limit).reverse() });
 });
 
+// Mission Control: owner-created, paper-only envelopes that a user-bound agent
+// may observe and checkpoint. Authority expansion remains human-only.
+app.get('/api/agent-missions', requireUser, (req, res) => {
+  if (!isOwnerSession(req)) return res.status(403).json({ error: 'owner only' });
+  res.json({ ok: true, mode: 'paper-only', missions: missions.listMissions(missionOwnerId(req)) });
+});
+
+app.post('/api/agent-missions', requireUser, (req, res) => {
+  if (!isOwnerSession(req)) return res.status(403).json({ error: 'owner only' });
+  try {
+    const mission = missions.createMission({ ...(req.body || {}), ownerId: missionOwnerId(req) });
+    logLiveEvent(req.session.userId, 'agent.mission.created', { missionId: mission.missionId, walletId: mission.walletId, pactId: mission.pactId, mode: 'paper-only' });
+    res.status(201).json({ ok: true, mission });
+  } catch (error) { res.status(400).json({ ok: false, error: error.message }); }
+});
+
+for (const [action, handler] of [
+  ['start', (id, ownerId) => missions.startMission(id, ownerId)],
+  ['pause', (id, ownerId) => missions.pauseMission(id, ownerId)],
+  ['stop', (id, ownerId) => missions.stopMission(id, ownerId)],
+]) {
+  app.post(`/api/agent-missions/:id/${action}`, requireUser, (req, res) => {
+    if (!isOwnerSession(req)) return res.status(403).json({ error: 'owner only' });
+    try {
+      const mission = handler(req.params.id, missionOwnerId(req));
+      logLiveEvent(req.session.userId, `agent.mission.${action}`, { missionId: mission.missionId, mode: 'paper-only' });
+      res.json({ ok: true, mission });
+    } catch (error) { res.status(400).json({ ok: false, error: error.message }); }
+  });
+}
+
+app.post('/api/agent-missions/:id/checkpoint', requireUser, (req, res) => {
+  if (req.userAgent && !userAgentHas(req, 'read')) return res.status(403).json({ error: 'read scope required' });
+  const ownerId = missionOwnerId(req);
+  if (!ownerId) return res.status(403).json({ error: 'user-bound mission access required' });
+  try { res.json({ ok: true, mission: missions.recordMissionCheckpoint(req.params.id, ownerId, req.body || {}) }); }
+  catch (error) { res.status(400).json({ ok: false, error: error.message }); }
+});
+
 // Owner operations cockpit. This composes existing server-enforced controls;
 // it never returns key material, hashes, venue credentials or raw audit files.
 app.get('/api/agent-control', requireUser, (req, res) => {
@@ -3342,6 +3446,7 @@ app.get('/api/agent-control', requireUser, (req, res) => {
   }));
   const pendingLive = liveProposals.listProposals({ userId: req.session.userId, status: 'pending', limit: 100 });
   const pendingPaper = getProposals();
+  const ownerMissions = missions.listMissions(`user:${req.session.userId}`);
   const lastAction = ap.actions[0] || null;
   res.json({
     ok: true,
@@ -3359,6 +3464,12 @@ app.get('/api/agent-control', requireUser, (req, res) => {
       config: ap.config,
     },
     approvals: { paper: pendingPaper.length, live: pendingLive.length },
+    missions: ownerMissions,
+    missionStats: {
+      running: ownerMissions.filter((mission) => mission.status === 'running').length,
+      paused: ownerMissions.filter((mission) => mission.status === 'paused').length,
+      stopped: ownerMissions.filter((mission) => ['stopped', 'expired'].includes(mission.status)).length,
+    },
     keys,
     keyStats: { active: keys.filter((k) => !k.revokedAt).length, revoked: keys.filter((k) => !!k.revokedAt).length },
     parentWallet,
@@ -3374,6 +3485,9 @@ app.post('/api/agent-control/emergency-stop', requireUser, async (req, res) => {
   try {
     const ident = signalIdentity(req);
     stopAutopilot();
+    for (const mission of missions.listMissions(`user:${req.session.userId}`)) {
+      if (['running', 'paused'].includes(mission.status)) missions.stopMission(mission.missionId, `user:${req.session.userId}`, 'Emergency stop.');
+    }
     const suspendedWallets = [];
     for (const w of wallets.walletTree(ident.agentId).agents) {
       if (w.status === 'active') {

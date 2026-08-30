@@ -1158,6 +1158,8 @@ async function renderAgentControl() {
   const parentWallet = s.parentWallet || null;
   const paperWallets = agentWallets.filter((w) => w.status === 'active' && (w.capabilities || []).includes('trade.paper'));
   const activePacts = pacts.filter((p) => p.status === 'active');
+  const missionPairs = activePacts.map((pact) => ({ pact, wallet: paperWallets.find((wallet) => wallet.walletId === pact.agentWalletId) })).filter((pair) => pair.wallet);
+  const missions = s.missions || [];
   const moneyInput = (minor) => ((Number(minor || 0) / 100).toFixed(2));
   el.innerHTML = `
     <div class="section-title">Agent Control Center <span class="sub">owner-only operations · server-enforced limits</span></div>
@@ -1204,6 +1206,37 @@ async function renderAgentControl() {
     </section>`;
 
   el.insertAdjacentHTML('beforeend', `
+    <section class="card mission-control" aria-labelledby="missionControlTitle">
+      <div class="section-title" id="missionControlTitle">Mission Control <span class="sub">supervised autonomy · paper-only execution envelopes</span></div>
+      <ol class="mission-pipeline" aria-label="Mission decision pipeline">
+        ${[['01', 'Observe'], ['02', 'Analyze'], ['03', 'Risk check'], ['04', 'Execute'], ['05', 'Verify'], ['06', 'Journal']].map(([n, label]) => `<li><span class="mono">${n}</span><strong>${label}</strong></li>`).join('')}
+      </ol>
+      ${missionPairs.length ? `<form id="missionCreateForm" class="mission-form">
+        <label class="mission-wide">Mission name<input id="missionName" maxlength="120" value="IOST supervised paper mission" required></label>
+        <label>Authority<select id="missionAuthority">${missionPairs.map(({ pact, wallet }) => `<option value="${esc(wallet.walletId)}|${esc(pact.pactId)}">${esc(wallet.name)} · ${esc(pact.pactId)}</option>`).join('')}</select></label>
+        <label>Symbols<input id="missionSymbols" maxlength="200" value="IOST,BTC" required></label>
+        <label>Maximum order (USD)<input id="missionMaxOrder" type="number" min="0.01" max="10000" step="0.01" value="10.00" required></label>
+        <label>Maximum realized loss (USD)<input id="missionMaxLoss" type="number" min="0.01" max="10000" step="0.01" value="5.00" required></label>
+        <label>Maximum trades<input id="missionMaxTrades" type="number" min="1" max="100" step="1" value="3" required></label>
+        <label>Expires in hours<input id="missionHours" type="number" min="1" max="168" step="1" value="24" required></label>
+        <label>Approval mode<select id="missionApproval"><option value="within-pact">Autonomous within Pact</option><option value="per-order" disabled>Every order · approval queue next</option><option value="exceptions" disabled>Only exceptions · policy queue next</option></select></label>
+        <label class="mission-wide">Objective<input id="missionObjective" maxlength="500" value="Find risk-adjusted paper entries and retain evidence for every decision." required></label>
+        <label class="mission-wide">Strategy<input id="missionStrategy" maxlength="500" value="Score and risk-gated momentum with server-enforced limits." required></label>
+        <div class="control-setup-actions mission-wide"><button class="btn sm green" type="submit">Create paused mission</button><span class="muted">Creating does not start it. Review the envelope, then start separately.</span></div>
+      </form>` : '<div class="empty">An active paper wallet and exact wallet-bound Pact are required before creating a mission.</div>'}
+      ${missions.length ? `<div class="mission-list">${missions.map((mission) => {
+        const latest = mission.events?.at(-1);
+        const statusClass = mission.status === 'running' ? 'bull' : mission.status === 'paused' ? 'warn' : 'neut';
+        return `<article class="mission-card">
+          <header><div><strong>${esc(mission.name)}</strong><span class="mono muted">${esc(mission.missionId)}</span></div><span class="chip ${statusClass}">${esc(mission.status)}</span></header>
+          <p>${esc(mission.objective || mission.strategy || 'Paper mission')}</p>
+          <div class="mission-symbols">${(mission.symbols || []).map((symbol) => `<span class="chip neut">${esc(symbol)}</span>`).join('')}</div>
+          <dl><div><dt>Order cap</dt><dd>${money(mission.maxOrderMinor)}</dd></div><div><dt>Loss halt</dt><dd>${money(mission.maxLossMinor)}</dd></div><div><dt>Trades</dt><dd>${mission.tradesOpened || 0} / ${mission.maxTrades}</dd></div><div><dt>Realized P&amp;L</dt><dd class="${mission.realizedPnlMinor < 0 ? 'down' : mission.realizedPnlMinor > 0 ? 'up' : ''}">${money(mission.realizedPnlMinor)}</dd></div><div><dt>Approval</dt><dd>${esc(mission.approvalMode)}</dd></div><div><dt>Expires</dt><dd>${new Date(mission.expiresAt).toLocaleString()}</dd></div></dl>
+          <div class="mission-latest"><span class="k-label">Latest checkpoint</span><strong>${esc(latest?.stage || 'system')} · ${esc(latest?.type || 'created')}</strong><span>${esc(latest?.detail || 'Waiting for mission activity.')}${latest?.latencyMs != null ? ` · ${latest.latencyMs} ms` : ''}</span></div>
+          <div class="control-actions">${mission.status === 'paused' ? `<button class="btn sm green" data-mission-action="start" data-mission-id="${esc(mission.missionId)}">Start mission</button>` : ''}${mission.status === 'running' ? `<button class="btn sm ghost" data-mission-action="pause" data-mission-id="${esc(mission.missionId)}">Pause</button>` : ''}${['running', 'paused'].includes(mission.status) ? `<button class="btn sm danger" data-mission-action="stop" data-mission-id="${esc(mission.missionId)}">Stop</button>` : ''}</div>
+        </article>`;
+      }).join('')}</div>` : '<div class="empty">No missions yet. Create the first supervised paper mission above.</div>'}
+    </section>
     <section class="card control-paper-setup" aria-labelledby="paperSetupTitle">
       <div class="section-title" id="paperSetupTitle">Paper trade setup <span class="sub">internal paper credits only · no token, bank, exchange, or on-chain transfer</span></div>
       <p class="muted control-setup-note">Create a narrowly funded agent wallet, then propose and explicitly approve a time-limited Pact. The agent cannot use this for live trading or public-chain actions.</p>
@@ -1242,6 +1275,35 @@ async function renderAgentControl() {
     toast(ap.enabled ? '⏸ Paper agent paused' : '▶ Paper agent started');
     renderAgentControl();
   });
+  $('#missionCreateForm', el)?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const [walletId, pactId] = $('#missionAuthority', el).value.split('|');
+    const symbols = $('#missionSymbols', el).value.split(',').map((symbol) => symbol.trim().toUpperCase()).filter(Boolean);
+    const maxOrderMinor = Math.round(Number($('#missionMaxOrder', el).value) * 100);
+    const maxLossMinor = Math.round(Number($('#missionMaxLoss', el).value) * 100);
+    const maxTrades = Math.round(Number($('#missionMaxTrades', el).value));
+    const hours = Math.round(Number($('#missionHours', el).value));
+    if (!walletId || !pactId || !symbols.length || !Number.isSafeInteger(maxOrderMinor) || maxOrderMinor <= 0 || !Number.isSafeInteger(maxLossMinor) || maxLossMinor <= 0 || !Number.isSafeInteger(maxTrades) || maxTrades <= 0 || !Number.isSafeInteger(hours) || hours < 1 || hours > 168) return toast('Enter a valid mission envelope.');
+    try {
+      await post('/api/agent-missions', {
+        walletId, pactId, symbols, maxOrderMinor, maxLossMinor, maxTrades,
+        name: $('#missionName', el).value.trim(), objective: $('#missionObjective', el).value.trim(),
+        strategy: $('#missionStrategy', el).value.trim(), approvalMode: $('#missionApproval', el).value,
+        expiresAt: Date.now() + hours * 3600_000,
+      });
+      toast('✓ Mission created in paused mode', 'Review it below, then start it separately.');
+      renderAgentControl();
+    } catch (e) { toast(`Mission creation failed: ${esc(e.message)}`); }
+  });
+  el.querySelectorAll('[data-mission-action]').forEach((button) => button.addEventListener('click', async () => {
+    const action = button.dataset.missionAction;
+    if (action === 'stop' && !confirm('Stop this paper mission permanently? Open paper positions are not force-closed, but no new mission orders will be accepted.')) return;
+    try {
+      await post(`/api/agent-missions/${button.dataset.missionId}/${action}`, {});
+      toast(action === 'start' ? '▶ Paper mission started' : action === 'pause' ? '⏸ Paper mission paused' : '⛔ Paper mission stopped');
+      renderAgentControl();
+    } catch (e) { toast(`Mission action failed: ${esc(e.message)}`); }
+  }));
   $('#controlApproval')?.addEventListener('click', async () => {
     await post('/api/autopilot/config', { requireApproval: !ap.config?.requireApproval });
     toast(!ap.config?.requireApproval ? '✓ Human approval is now required' : 'Approval mode disabled for paper execution');
