@@ -72,6 +72,17 @@ try {
   assert.equal(initial.json.mode, 'paper-only');
   assert.equal(initial.json.credit.lifetimeCapMinor, 10_000);
 
+  // A pre-existing account wallet without a Pact must not hide the later
+  // Launchpad wallet/Pact pair from agent authorization discovery.
+  const legacyWallet = await request('/api/wallets', {
+    method: 'POST', cookie: ownerCookie, body: {
+      name: 'Older unpaired wallet',
+      capabilities: ['trade.paper'],
+      limits: { USD: { maxPerTxMinor: 1_000, dailyCapMinor: 2_000, weeklyCapMinor: 5_000 } },
+    },
+  });
+  assert.equal(legacyWallet.response.status, 200, JSON.stringify(legacyWallet.json));
+
   const setupBody = { name: 'Bounded Paper Agent', fundMinor: 10_000, perOrderMinor: 2_500, dailyMinor: 5_000, expiryHours: 24 };
   const setup = await request('/api/agent-launchpad/setup', { method: 'POST', cookie: ownerCookie, body: setupBody });
   assert.equal(setup.response.status, 201, JSON.stringify(setup.json));
@@ -97,6 +108,31 @@ try {
   const ownerApproval = await request(`/api/pacts/${pactId}/approve`, { method: 'POST', cookie: ownerCookie, body: {} });
   assert.equal(ownerApproval.response.status, 200, JSON.stringify(ownerApproval.json));
   assert.equal(ownerApproval.json.pact.status, 'active');
+
+  const authorizationResponse = await fetch(`${BASE}/mcp`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-API-Key': keyResult.json.key,
+      'MCP-Protocol-Version': '2026-07-28',
+      'Mcp-Method': 'tools/call',
+      'Mcp-Name': 'agent_authorization_status',
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0', id: 1, method: 'tools/call',
+      params: { name: 'agent_authorization_status', arguments: {}, _meta: {
+        'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+        'io.modelcontextprotocol/clientCapabilities': { extensions: {} },
+        'io.modelcontextprotocol/clientInfo': { name: 'launchpad-regression', version: '1.0.0' },
+      } },
+    }),
+  });
+  const authorization = await authorizationResponse.json();
+  assert.equal(authorizationResponse.status, 200, JSON.stringify(authorization));
+  assert.equal(authorization.result.structuredContent.wallet.walletId, setup.json.setup.walletId,
+    'authorization must select the wallet that is actually bound to the active Pact');
+  assert.equal(authorization.result.structuredContent.canOpenPaperTrade, true,
+    'a valid Launchpad wallet/Pact pair must be reported ready even when an older wallet exists');
 
   const ownerTermination = await request(`/api/pacts/${pactId}/terminate`, { method: 'POST', cookie: ownerCookie, body: {} });
   assert.equal(ownerTermination.response.status, 200);
