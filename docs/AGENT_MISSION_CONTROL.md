@@ -40,6 +40,14 @@ with `paper_mission_checkpoint`. It cannot create, start, pause, stop, expand,
 or rebind a mission. A mission-aware `paper_trade_open` includes `missionId` in
 addition to its exact `walletId` and `pactId`.
 
+`paper_missions` returns a deliberately sanitized evidence view rather than the
+owner-control record. It includes the symbol allowlist, USD limits and usage,
+paper-only boundary, expiry, latest checkpoint, and current revalidated
+authority booleans such as `exactWalletPactBinding` and `canOpenPaperTrade`.
+Wallet IDs, Pact IDs, owner IDs, position IDs, reservation IDs and secret
+material are excluded. `paper_mission_checkpoint` returns the same sanitized
+view after accepting a bounded checkpoint.
+
 Only `within-pact` execution is active in v1. Per-order and exception approval
 queues remain visibly unavailable until their server-side proposal workflows
 are implemented; the backend rejects execution under those modes.

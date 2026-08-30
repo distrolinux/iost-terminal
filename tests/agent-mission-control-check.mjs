@@ -63,8 +63,27 @@ try {
   assert.equal(mission.executionBoundary, 'PAPER_ONLY');
   assert.equal(mission.liveTrading, false);
 
+  const pausedEvidence = missions.missionEvidence(mission);
+  assert.deepEqual(pausedEvidence.symbols, ['IOST', 'BTC']);
+  assert.deepEqual(pausedEvidence.limits, {
+    currency: 'USD', maximumOrderMinor: 2_000, maximumOrderUsd: '20.00',
+    realizedLossHaltMinor: 1_000, realizedLossHaltUsd: '10.00', maximumTrades: 2,
+  });
+  assert.equal(pausedEvidence.usage.tradesOpened, 0);
+  assert.equal(pausedEvidence.authority.exactWalletPactBinding, true);
+  assert.equal(pausedEvidence.authority.paperOnly, true);
+  assert.equal(pausedEvidence.authority.tradeLive, false);
+  assert.equal(pausedEvidence.authority.canOpenPaperTrade, false, 'paused mission cannot execute');
+  assert.equal('walletId' in pausedEvidence, false);
+  assert.equal('pactId' in pausedEvidence, false);
+  assert.equal('ownerId' in pausedEvidence, false);
+  const serializedEvidence = JSON.stringify(pausedEvidence);
+  assert.equal(serializedEvidence.includes(wallet.walletId), false);
+  assert.equal(serializedEvidence.includes(pact.pactId), false);
+
   const started = missions.startMission(mission.missionId, ownerId);
   assert.equal(started.status, 'running');
+  assert.equal(missions.missionEvidence(started).authority.canOpenPaperTrade, true);
 
   assert.equal(missions.checkMissionTrade({
     missionId: mission.missionId,
@@ -122,6 +141,11 @@ try {
   assert.equal(firstReservation.ok, true);
   assert.equal(missions.reserveMissionTrade({ missionId: reservedMission.missionId, ownerId, walletId: wallet.walletId, pactId: pact.pactId, symbol: 'IOST', notionalMinor: 500 }).reason, 'mission-trade-cap');
   assert.equal(missions.releaseMissionTrade(reservedMission.missionId, ownerId, firstReservation.reservationId).ok, true);
+  pacts.terminatePact(pact.pactId, ownerId);
+  const inactiveAuthority = missions.missionEvidence(missions.getMission(reservedMission.missionId, ownerId)).authority;
+  assert.equal(inactiveAuthority.exactWalletPactBinding, true, 'historical exact binding remains attestable');
+  assert.equal(inactiveAuthority.pactActive, false);
+  assert.equal(inactiveAuthority.canOpenPaperTrade, false, 'inactive Pact must fail closed');
 
   const server = readFileSync(new URL('../server.js', import.meta.url), 'utf8');
   const app = readFileSync(new URL('../public/js/app.js', import.meta.url), 'utf8');
@@ -131,6 +155,8 @@ try {
   assert.match(server, /agent-missions[\s\S]{0,1000}isOwnerSession\(req\)/);
   assert.match(server, /reserveMissionTrade\(/, 'mission trade envelope must be reserved before execution');
   assert.match(server, /commitMissionTrade\(/, 'accepted mission paper trades must be attached to their mission');
+  assert.match(server, /listMissionEvidence\(ownerId\)/, 'MCP mission reads must use sanitized evidence');
+  assert.match(server, /missionEvidence\(missions\.recordMissionCheckpoint/, 'MCP checkpoints must not return raw authority identifiers');
   const management = readFileSync(new URL('../lib/management.js', import.meta.url), 'utf8');
   assert.match(management, /recordMissionClose\(/, 'automatic paper exits must feed mission loss limits');
   assert.match(app, /Mission Control/);

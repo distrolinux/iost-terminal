@@ -767,7 +767,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.20.0';
+const DISCOVERY_VERSION = '1.20.1';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -1149,12 +1149,12 @@ async function mcpToolCall(req, name, args) {
     case 'paper_missions': {
       const ownerId = missionOwnerId(req);
       if (!ownerId) throw Object.assign(new Error('user-bound mission access required'), { status: 403 });
-      return { ok: true, mode: 'paper-only', missions: missions.listMissions(ownerId) };
+      return { ok: true, mode: 'paper-only', missions: missions.listMissionEvidence(ownerId) };
     }
     case 'paper_mission_checkpoint': {
       const ownerId = missionOwnerId(req);
       if (!ownerId) throw Object.assign(new Error('user-bound mission access required'), { status: 403 });
-      return { ok: true, mode: 'paper-only', mission: missions.recordMissionCheckpoint(args?.missionId, ownerId, args || {}) };
+      return { ok: true, mode: 'paper-only', mission: missions.missionEvidence(missions.recordMissionCheckpoint(args?.missionId, ownerId, args || {})) };
     }
     case 'evaluation_history': {
       const ownerId = evaluationOwner(req);
