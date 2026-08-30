@@ -33,7 +33,8 @@ Call `evaluation_review` to load your private history, select up to two runs, an
 inspect equity, drawdown, baseline and calibration charts. Use
 `evaluation_export` to download deterministic JSON or CSV evidence and verify
 the returned SHA-256 hash. For a paper trade test, call `paper_trade_open` with
-an explicit symbol, side, size, entry, owned `walletId`, and active `pactId`,
+a unique 8-128 character `intentId`, an explicit symbol, side, size, entry,
+owned `walletId`, and active `pactId`,
 then close it with `paper_trade_close`. Confirm the result in the Paper account
 and revoke the agent key when finished.
 

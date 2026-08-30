@@ -20,8 +20,10 @@ const route = (needle, nextNeedle) => {
 
 const closeRoute = route("app.post('/api/paper/close'", "app.post('/api/paper/reset'");
 const closeExecution = route('async function executePaperClose', '// queue flush:');
+const paperScopeGate = route('function missingPaperExecutionScope', 'async function executePaperOpen');
 ok('paper close requires trade-paper scope and returns receipt evidence',
-  /userAgentHas\(req,\s*'trade-paper'\)/.test(closeExecution)
+  /userAgentHas\(req,\s*'trade-paper'\)/.test(paperScopeGate)
+  && /missingPaperExecutionScope\(req, source\)/.test(closeExecution)
   && /trade-paper-scope-required/.test(closeExecution)
   && /executePaperClose\(req/.test(closeRoute));
 

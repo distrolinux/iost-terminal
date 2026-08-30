@@ -38,6 +38,6 @@ assert.match(app, /Layer 1 node health[\s\S]*not the L2 token RPC/);
 assert.match(app, /AITT status[\s\S]*NOT ISSUED/);
 assert.match(landing, /IOSTcallister[\s\S]*verified Layer 1 producer identity/);
 assert.match(landing, /AITT remains unissued[\s\S]*IOST Layer 2, EVM chain 182/);
-assert.match(appHtml, /\/js\/app\.js\?v=2\.26\.0/, 'dual-chain UI must use a fresh asset version');
+assert.match(appHtml, /\/js\/app\.js\?v=2\.27\.0/, 'dual-chain UI must use a fresh asset version');
 
 console.log('Dual-chain trust checks passed');

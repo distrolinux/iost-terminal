@@ -41,6 +41,7 @@ import * as arena from './lib/arena.js';
 import * as pacts from './lib/pacts.js';
 import * as missions from './lib/missions.js';
 import * as executionReceipts from './lib/execution-receipts.js';
+import * as executionIntents from './lib/execution-intents.js';
 import * as iostAccounts from './lib/iost-accounts.js';
 import * as agentKeys from './lib/agent-keys.js';
 import * as liveProposals from './lib/live-proposals.js';
@@ -117,6 +118,7 @@ try {
     'iost_accounts.json', 'pending_pins.json', 'signals.json', 'follows.json', 'triggers.json',
     'payments.json', 'fee-config.json', 'live-proposals.json', 'agent-audit.jsonl',
     'live-audit.jsonl', 'arena-audit.jsonl', 'mcp-tasks.json', 'missions.json', 'execution-receipts.jsonl',
+    'execution-intents.json',
   ]) {
     const p = join(DATA_DIR, f);
     if (existsSync(p)) {
@@ -127,6 +129,7 @@ try {
   secureEvaluationHistoryPermissions();
   missions.secureMissionPermissions();
   executionReceipts.secureReceiptPermissions();
+  executionIntents.secureExecutionIntentPermissions();
 } catch (e) {
   console.error(`[security] refusing boot: sensitive store permissions could not be secured (${e.message})`);
   throw e;
@@ -691,7 +694,7 @@ ${s?.autopilot?.enabled ? `enabled (${s.autopilot.ticks} ticks)${s.autopilot.con
 ### Agent access
 - **Read state (no auth):** [/api/ui-state](/api/ui-state) · [/api/scores](/api/scores) · [/api/scanner](/api/scanner) · [/api/news](/api/news) · [/api/onchain](/api/onchain) · [/api/probability](/api/probability)
 - **Authenticate:** mint an agent key in the app (Portfolio → AI Agents) → send as \`X-API-Key: itk_…\`, or OAuth 2.0 client_credentials → Bearer token ([/auth.md](/auth.md))
-- **Trade (paper):** POST /api/paper/open|close with a \`trade-paper\`-scoped key; opens require positive entry/size + owned walletId + active wallet-bound pactId
+- **Trade (paper):** POST /api/paper/open|close with a unique 8-128 character \`intentId\` and a \`trade-paper\`-scoped key; exact retries return the original outcome, conflicting reuse fails closed, and opens require positive entry/size + owned walletId + active wallet-bound pactId
 - **Live:** proposals only — owner approves before anything executes (option C, human-in-the-loop)
 `;
 }
@@ -769,7 +772,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.21.0';
+const DISCOVERY_VERSION = '1.22.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -828,6 +831,8 @@ const OPENAPI_PATHS = {
   '/api/paper/open': { post: { summary: 'Open paper trade', tags: ['execution'] } },
   '/api/paper/close': { post: { summary: 'Close paper trade', tags: ['execution'] } },
   '/api/execution-receipts': { get: { summary: 'Private tamper-evident paper execution receipts and chain verification', tags: ['execution'] } },
+  '/api/execution-intents': { get: { summary: 'Private paper execution idempotency and replay status', tags: ['execution'] } },
+  '/api/execution-intents/{intentId}': { get: { summary: 'Private status for one paper execution intent', tags: ['execution'] } },
   '/api/signals': { post: { summary: 'Publish a signal as the authenticated principal; SHA-256 pinned on IOST mainnet', tags: ['agents'] } },
   '/api/agent-keys': { get: { summary: 'My AI-agent API keys (scopes, prefixes)', tags: ['auth'] }, post: { summary: 'Mint a scoped AI-agent API key', tags: ['auth'] } },
   '/api/agent-control': { get: { summary: 'Owner-only agent operations snapshot: activity, permissions, budgets and safety state', tags: ['autonomy'] } },
@@ -987,10 +992,12 @@ Human-session paper execution remains unchanged.
 ## MCP 2026-07-28
 Endpoint: \`POST ${SITE_URL}/mcp\`. Public tools are read-only. A user-bound key or
 an MCP-resource-bound bearer token adds private evaluation/account tools,
-including \`paper_execution_receipts\` with tamper-evident authorization,
-pricing, cost and latency evidence. The \`trade-paper\` scope adds
-\`paper_trade_open\` and \`paper_trade_close\`. Paper opens
-still require the wallet and Pact fields above. No MCP tool can execute a live,
+including \`paper_execution_receipts\` and \`paper_execution_intents\` with
+tamper-evident execution evidence and replay-safe intent status. The
+\`trade-paper\` scope adds \`paper_trade_open\` and \`paper_trade_close\`.
+Both require a unique \`intentId\`; exact retries return the original terminal
+outcome and conflicting reuse fails closed. Paper opens still require the wallet
+and Pact fields above. No MCP tool can execute a live,
 token, conversion, wallet-send, swap, or public-chain action.
 Paper closes use a server-observed market price (or the last server observation
 if a fresh quote is unavailable); a client cannot select the P&L exit price.
@@ -1152,6 +1159,15 @@ async function mcpToolCall(req, name, args) {
     case 'paper_account': return await markToMarket(accountFor(req).accountId);
     case 'paper_stats': return journalStats(accountFor(req).accountId);
     case 'paper_execution_receipts': return executionReceipts.listExecutionReceipts(accountFor(req).accountId, args?.limit);
+    case 'paper_execution_intents': {
+      const accountId = accountFor(req).accountId;
+      if (args?.intentId) {
+        const intent = executionIntents.getExecutionIntent(accountId, args.intentId);
+        if (!intent) throw Object.assign(new Error('execution intent not found'), { protocolCode: -32602 });
+        return { ok: true, mode: 'paper-only', intent };
+      }
+      return { ok: true, mode: 'paper-only', intents: executionIntents.listExecutionIntents(accountId, args?.limit) };
+    }
     case 'paper_missions': {
       const ownerId = missionOwnerId(req);
       if (!ownerId) throw Object.assign(new Error('user-bound mission access required'), { status: 403 });
@@ -1307,7 +1323,12 @@ app.post('/mcp', publicLimiter, async (req, res) => {
       return reply({ jsonrpc: '2.0', id, result });
     } catch (e) {
       if (e.protocolCode) return reply({ jsonrpc: '2.0', id, error: { code: e.protocolCode, message: e.message } });
-      const errorData = { ok: false, error: e.message, mode: 'paper-only', ...(e.receipt ? { receipt: e.receipt } : {}) };
+      const errorData = {
+        ok: false, error: e.message, mode: 'paper-only',
+        ...(e.reason ? { reason: e.reason } : {}),
+        ...(e.receipt ? { receipt: e.receipt } : {}),
+        ...(e.executionIntent ? { executionIntent: e.executionIntent } : {}),
+      };
       const result = modern ? modernResult(errorData, MCP_SERVER_INFO, { isError: true }) : { content: [{ type: 'text', text: `error: ${e.message}` }], isError: true };
       return reply({ jsonrpc: '2.0', id, result });
     }
@@ -1591,7 +1612,11 @@ app.post('/api/paper/open', requireUser, async (req, res) => {
   try {
     res.json(await executePaperOpen(req, req.body || {}, 'rest'));
   } catch (e) {
-    res.status(e.status || 502).json({ error: e.message, ...(e.reason ? { reason: e.reason } : {}), ...(e.receipt ? { receipt: e.receipt } : {}) });
+    res.status(e.status || 502).json({
+      error: e.message, ...(e.reason ? { reason: e.reason } : {}),
+      ...(e.receipt ? { receipt: e.receipt } : {}),
+      ...(e.executionIntent ? { executionIntent: e.executionIntent } : {}),
+    });
   }
 });
 
@@ -1609,7 +1634,11 @@ app.post('/api/paper/close', requireUser, async (req, res) => {
     }
     res.json(r);
   } catch (e) {
-    res.status(e.status || 502).json({ error: e.message, ...(e.reason ? { reason: e.reason } : {}), ...(e.receipt ? { receipt: e.receipt } : {}) });
+    res.status(e.status || 502).json({
+      error: e.message, ...(e.reason ? { reason: e.reason } : {}),
+      ...(e.receipt ? { receipt: e.receipt } : {}),
+      ...(e.executionIntent ? { executionIntent: e.executionIntent } : {}),
+    });
   }
 });
 
@@ -1629,6 +1658,16 @@ app.get('/api/paper/stats', requireUser, (req, res) => res.json(journalStats(acc
 app.get('/api/execution-receipts', requireUser, (req, res) => {
   if (req.userAgent && !userAgentHas(req, 'read')) return res.status(403).json({ error: 'read scope required' });
   res.json(executionReceipts.listExecutionReceipts(accountFor(req).accountId, req.query.limit));
+});
+app.get('/api/execution-intents', requireUser, (req, res) => {
+  if (req.userAgent && !userAgentHas(req, 'read')) return res.status(403).json({ error: 'read scope required' });
+  res.json({ ok: true, mode: 'paper-only', intents: executionIntents.listExecutionIntents(accountFor(req).accountId, req.query.limit) });
+});
+app.get('/api/execution-intents/:intentId', requireUser, (req, res) => {
+  if (req.userAgent && !userAgentHas(req, 'read')) return res.status(403).json({ error: 'read scope required' });
+  const intent = executionIntents.getExecutionIntent(accountFor(req).accountId, req.params.intentId);
+  if (!intent) return res.status(404).json({ error: 'execution intent not found' });
+  res.json({ ok: true, mode: 'paper-only', intent });
 });
 
 // ================= decentralized AI agents — Phase 1 =================
@@ -2510,6 +2549,8 @@ function beginPaperReceipt(req, order, action, source) {
       missionAttached: !!String(order?.missionId || '').trim(),
       missionId: String(order?.missionId || '').trim() || null,
       positionId: order?.positionId || null,
+      intentProtected: !!String(order?.intentId || '').trim(),
+      intentId: String(order?.intentId || '').trim() || null,
     },
   };
 }
@@ -2552,7 +2593,49 @@ function rejectedPaperError(message, status, reason, receipt = null) {
   return Object.assign(new Error(message), { status, reason, ...(receipt ? { receipt } : {}) });
 }
 
+function paperExecutionIntentId(req, order, source) {
+  const bodyId = String(order?.intentId || '').trim();
+  const headerId = source === 'rest' ? String(req.get('idempotency-key') || '').trim() : '';
+  if (bodyId && headerId && bodyId !== headerId) {
+    throw Object.assign(new Error('execution intent header and body must match'), {
+      status: 400, reason: 'execution-intent-mismatch',
+    });
+  }
+  const intentId = bodyId || headerId;
+  if (intentId) return intentId;
+  if (source === 'mcp' || req.userAgent || req.agentKey) {
+    throw Object.assign(new Error('execution intent id required'), {
+      status: 400, reason: 'execution-intent-required',
+    });
+  }
+  return `auto_${crypto.randomBytes(16).toString('hex')}`;
+}
+
+function paperIntentRequest(order, action) {
+  if (action === 'close') return { positionId: String(order?.positionId || '') };
+  return Object.fromEntries(Object.entries(order || {})
+    .filter(([key]) => !['intentId', 'idempotencyKey'].includes(key)));
+}
+
+function missingPaperExecutionScope(req, source) {
+  return source === 'mcp'
+    ? (!req.userAgent || !userAgentHas(req, 'trade-paper'))
+    : (req.userAgent && !userAgentHas(req, 'trade-paper'));
+}
+
 async function executePaperOpen(req, order, source = 'rest') {
+  // Current authorization is checked before looking up a cached result so a
+  // lower-scope key cannot use a guessed intent ID as a private read channel.
+  if (missingPaperExecutionScope(req, source)) return executePaperOpenOnce(req, order, source);
+  const accountId = accountFor(req).accountId;
+  const intentId = paperExecutionIntentId(req, order, source);
+  const protectedOrder = { ...(order || {}), intentId };
+  return executionIntents.runExecutionIntent({
+    accountId, intentId, action: 'open', request: paperIntentRequest(protectedOrder, 'open'),
+  }, () => executePaperOpenOnce(req, protectedOrder, source));
+}
+
+async function executePaperOpenOnce(req, order, source = 'rest') {
   const attempt = beginPaperReceipt(req, order, 'open', source);
   const entry = Number(order?.entry || 0);
   const size = Number(order?.size || 0);
@@ -2563,9 +2646,7 @@ async function executePaperOpen(req, order, source = 'rest') {
   let gate = null;
   const authorizationStartedAt = Date.now();
 
-  const missingPaperScope = source === 'mcp'
-    ? (!req.userAgent || !userAgentHas(req, 'trade-paper'))
-    : (req.userAgent && !userAgentHas(req, 'trade-paper'));
+  const missingPaperScope = missingPaperExecutionScope(req, source);
   if (missingPaperScope) {
     attempt.authorizationMs = Date.now() - authorizationStartedAt;
     const receipt = writePaperReceipt(req, attempt, {
@@ -2685,6 +2766,16 @@ async function executePaperOpen(req, order, source = 'rest') {
 }
 
 async function executePaperClose(req, order, source = 'rest') {
+  if (missingPaperExecutionScope(req, source)) return executePaperCloseOnce(req, order, source);
+  const accountId = accountFor(req).accountId;
+  const intentId = paperExecutionIntentId(req, order, source);
+  const protectedOrder = { ...(order || {}), intentId };
+  return executionIntents.runExecutionIntent({
+    accountId, intentId, action: 'close', request: paperIntentRequest(protectedOrder, 'close'),
+  }, () => executePaperCloseOnce(req, protectedOrder, source));
+}
+
+async function executePaperCloseOnce(req, order, source = 'rest') {
   const accountId = accountFor(req).accountId;
   const position = getState(accountId).positions.find((item) => item.id === order?.positionId) || null;
   const request = {
@@ -2694,9 +2785,7 @@ async function executePaperClose(req, order, source = 'rest') {
   const attempt = beginPaperReceipt(req, request, 'close', source);
   attempt.request.positionId = order?.positionId || null;
   const authorizationStartedAt = Date.now();
-  const missingPaperScope = source === 'mcp'
-    ? (!req.userAgent || !userAgentHas(req, 'trade-paper'))
-    : (req.userAgent && !userAgentHas(req, 'trade-paper'));
+  const missingPaperScope = missingPaperExecutionScope(req, source);
   attempt.authorizationMs = Date.now() - authorizationStartedAt;
   if (missingPaperScope) {
     const receipt = writePaperReceipt(req, attempt, {
@@ -3345,10 +3434,12 @@ const API_INDEX = {
   execution: [
     { path: '/api/account', method: 'GET', purpose: 'light per-account snapshot for UI topbar: cash, equity, openPositions, lastTrades' },
     { path: '/api/paper', method: 'GET', purpose: 'account + open positions + journal (mark-to-market)' },
-    { path: '/api/paper/open', method: 'POST', body: '{symbol,side,size,entry,stop?,target?,reason?,confidence?,walletId,pactId,missionId?,recipient?,protocol?}', purpose: 'agent-key opens require trade-paper scope + owned wallet + active wallet-bound Pact; mission orders add server-enforced symbol, size, count, expiry and loss limits' },
-    { path: '/api/paper/close', method: 'POST', body: '{positionId}', purpose: 'close paper trade at a server-observed price (client exit prices are ignored)' },
+    { path: '/api/paper/open', method: 'POST', body: '{intentId,symbol,side,size,entry,stop?,target?,reason?,confidence?,walletId,pactId,missionId?,recipient?,protocol?}', purpose: 'idempotent paper open; agent-key requests require intentId + trade-paper scope + owned wallet + active wallet-bound Pact; mission orders add server-enforced symbol, size, count, expiry and loss limits' },
+    { path: '/api/paper/close', method: 'POST', body: '{intentId,positionId}', purpose: 'idempotent close at a server-observed price (client exit prices are ignored)' },
     { path: '/api/paper/stats', method: 'GET', purpose: 'journal statistics (win rate, P&L)' },
     { path: '/api/execution-receipts', method: 'GET', query: 'limit=1..200', purpose: 'private SHA-256-chained paper execution receipts with pricing, authorization, cost and latency evidence' },
+    { path: '/api/execution-intents', method: 'GET', query: 'limit=1..200', purpose: 'private replay-safe paper execution intent states; pending intents fail closed as outcome-unknown after restart' },
+    { path: '/api/execution-intents/:intentId', method: 'GET', purpose: 'private status lookup for one paper execution intent' },
     { path: '/api/paper/reset', method: 'POST', purpose: 'reset paper account' },
   ],
   agents: [

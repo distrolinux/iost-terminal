@@ -37,8 +37,9 @@ The cockpit displays the common evidence pipeline:
 
 A user-bound MCP agent can read `paper_missions` and append bounded evidence
 with `paper_mission_checkpoint`. It cannot create, start, pause, stop, expand,
-or rebind a mission. A mission-aware `paper_trade_open` includes `missionId` in
-addition to its exact `walletId` and `pactId`.
+or rebind a mission. A mission-aware `paper_trade_open` includes a unique
+retry-safe `intentId` plus `missionId` in addition to its exact `walletId` and
+`pactId`.
 
 `paper_missions` returns a deliberately sanitized evidence view rather than the
 owner-control record. It includes the symbol allowlist, USD limits and usage,

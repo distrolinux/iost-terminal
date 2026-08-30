@@ -33,6 +33,7 @@ assert.equal(fixtureEvaluation.ok, true);
 const fixtureRunA = evaluationHistory.saveEvaluation(registered.user.id, fixtureEvaluation, Date.now() - 2);
 const fixtureRunB = evaluationHistory.saveEvaluation(registered.user.id, fixtureEvaluation, Date.now() - 1);
 const keyA = agentKeys.createKey({ userId: registered.user.id, name: 'MCP test agent', scopes: ['read', 'trade-paper'] });
+const keyReadOnly = agentKeys.createKey({ userId: registered.user.id, name: 'MCP read-only agent', scopes: ['read'] });
 const keyB = agentKeys.createKey({ userId: 'different-user', name: 'Other agent', scopes: ['read'] });
 const agentOwner = `agent:key:${keyA.entry.id}`;
 const wallet = wallets.createAgentWallet({
@@ -138,6 +139,7 @@ try {
   assert.equal(privateTools.body.result.cacheScope, 'private');
   assert(privateTools.body.result.tools.some((tool) => tool.name === 'paper_trade_open'));
   assert(privateTools.body.result.tools.some((tool) => tool.name === 'paper_execution_receipts'));
+  assert(privateTools.body.result.tools.some((tool) => tool.name === 'paper_execution_intents'));
   assert(!privateTools.body.result.tools.some((tool) => /live|swap|convert/i.test(tool.name)));
   const appTools = await mcp('tools/list', {}, { key: keyA.key, apps: true });
   const reviewTool = appTools.body.result.tools.find((tool) => tool.name === 'evaluation_review');
@@ -176,6 +178,22 @@ try {
   assert.equal(authStatus.body.result.structuredContent.canOpenPaperTrade, true);
   assert.equal(authStatus.body.result.structuredContent.wallet.walletId, wallet.walletId);
 
+  const restMissingIntent = await fetch(`${BASE}/api/paper/open`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-API-Key': keyA.key },
+    body: JSON.stringify({ symbol: 'AAPL', side: 'long', size: 1, entry: 10, walletId: wallet.walletId, pactId: pact.pactId }),
+  });
+  assert.equal(restMissingIntent.status, 400);
+  assert.equal((await restMissingIntent.json()).reason, 'execution-intent-required');
+
+  const restMismatchedIntent = await fetch(`${BASE}/api/paper/open`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-API-Key': keyA.key, 'Idempotency-Key': 'rest-header-intent-0001' },
+    body: JSON.stringify({ intentId: 'rest-body-intent-0002', symbol: 'AAPL', side: 'long', size: 1, entry: 10, walletId: wallet.walletId, pactId: pact.pactId }),
+  });
+  assert.equal(restMismatchedIntent.status, 400);
+  assert.equal((await restMismatchedIntent.json()).reason, 'execution-intent-mismatch');
+
   const review = await mcp('tools/call', {
     name: 'evaluation_review', arguments: { runIds: [fixtureRunA.id, fixtureRunB.id] },
   }, { key: keyA.key, name: 'evaluation_review', apps: true });
@@ -193,35 +211,68 @@ try {
 
   const opened = await mcp('tools/call', {
     name: 'paper_trade_open',
-    arguments: { symbol: 'AAPL', side: 'long', size: 1, entry: 10, walletId: wallet.walletId, pactId: pact.pactId, reason: 'MCP integration test' },
+    arguments: { intentId: 'mcp-open-integration-0001', symbol: 'AAPL', side: 'long', size: 1, entry: 10, walletId: wallet.walletId, pactId: pact.pactId, reason: 'MCP integration test' },
   }, { key: keyA.key, name: 'paper_trade_open' });
   assert.equal(opened.status, 200);
   assert.equal(opened.body.result.isError, false);
   assert.equal(opened.body.result.structuredContent.ok, true);
   assert.equal(opened.body.result.structuredContent.receipt.outcome, 'accepted');
   assert.equal(opened.body.result.structuredContent.receipt.authorization.walletPactAuthorized, true);
+  assert.equal(opened.body.result.structuredContent.executionIntent.replayed, false);
   const positionId = opened.body.result.structuredContent.position.id;
+
+  const unauthorizedReplay = await fetch(`${BASE}/api/paper/open`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-API-Key': keyReadOnly.key, 'Idempotency-Key': 'mcp-open-integration-0001' },
+    body: JSON.stringify({ intentId: 'mcp-open-integration-0001', symbol: 'AAPL', side: 'long', size: 1, entry: 10, walletId: wallet.walletId, pactId: pact.pactId, reason: 'MCP integration test' }),
+  });
+  const unauthorizedReplayBody = await unauthorizedReplay.json();
+  assert.equal(unauthorizedReplay.status, 403);
+  assert.equal(unauthorizedReplayBody.reason, 'trade-paper-scope-required');
+  assert.equal(unauthorizedReplayBody.position, undefined, 'read-only key must not receive cached execution data');
+
+  const replayedOpen = await mcp('tools/call', {
+    name: 'paper_trade_open',
+    arguments: { intentId: 'mcp-open-integration-0001', symbol: 'AAPL', side: 'long', size: 1, entry: 10, walletId: wallet.walletId, pactId: pact.pactId, reason: 'MCP integration test' },
+  }, { key: keyA.key, name: 'paper_trade_open' });
+  assert.equal(replayedOpen.body.result.structuredContent.executionIntent.replayed, true);
+  assert.equal(replayedOpen.body.result.structuredContent.position.id, positionId);
+
+  const conflictingOpen = await mcp('tools/call', {
+    name: 'paper_trade_open',
+    arguments: { intentId: 'mcp-open-integration-0001', symbol: 'AAPL', side: 'long', size: 2, entry: 10, walletId: wallet.walletId, pactId: pact.pactId, reason: 'MCP integration test' },
+  }, { key: keyA.key, name: 'paper_trade_open' });
+  assert.equal(conflictingOpen.body.result.isError, true);
+  assert.equal(conflictingOpen.body.result.structuredContent.reason, 'execution-intent-conflict');
 
   const policyRejected = await mcp('tools/call', {
     name: 'paper_trade_open',
-    arguments: { symbol: 'AAPL', side: 'long', size: 1, entry: 10, walletId: wallet.walletId, pactId: accountPact.pactId, reason: 'Receipt rejection integration test' },
+    arguments: { intentId: 'mcp-policy-reject-0002', symbol: 'AAPL', side: 'long', size: 1, entry: 10, walletId: wallet.walletId, pactId: accountPact.pactId, reason: 'Receipt rejection integration test' },
   }, { key: keyA.key, name: 'paper_trade_open' });
   assert.equal(policyRejected.body.result.isError, true);
   assert.equal(policyRejected.body.result.structuredContent.receipt.outcome, 'rejected');
   assert.equal(policyRejected.body.result.structuredContent.receipt.authorization.walletPactAuthorized, false);
+
+  const replayedRejection = await mcp('tools/call', {
+    name: 'paper_trade_open',
+    arguments: { intentId: 'mcp-policy-reject-0002', symbol: 'AAPL', side: 'long', size: 1, entry: 10, walletId: wallet.walletId, pactId: accountPact.pactId, reason: 'Receipt rejection integration test' },
+  }, { key: keyA.key, name: 'paper_trade_open' });
+  assert.equal(replayedRejection.body.result.isError, true);
+  assert.equal(replayedRejection.body.result.structuredContent.executionIntent.replayed, true);
+  assert.equal(replayedRejection.body.result.structuredContent.receipt.hash, policyRejected.body.result.structuredContent.receipt.hash);
 
   // Agent Control Center creates wallets under the signed-in account rather
   // than an individual key id. That account-owned wallet must remain usable
   // only by the same user's scoped key and an exact wallet-bound Pact.
   const accountWalletOpened = await mcp('tools/call', {
     name: 'paper_trade_open',
-    arguments: { symbol: 'AAPL', side: 'long', size: 1, entry: 10, walletId: accountWallet.walletId, pactId: accountPact.pactId, reason: 'Owner-control wallet integration test' },
+    arguments: { intentId: 'mcp-account-wallet-0003', symbol: 'AAPL', side: 'long', size: 1, entry: 10, walletId: accountWallet.walletId, pactId: accountPact.pactId, reason: 'Owner-control wallet integration test' },
   }, { key: keyA.key, name: 'paper_trade_open' });
   assert.equal(accountWalletOpened.status, 200);
   assert.equal(accountWalletOpened.body.result.structuredContent.ok, true, JSON.stringify(accountWalletOpened.body));
 
   const closed = await mcp('tools/call', {
-    name: 'paper_trade_close', arguments: { positionId, exitPrice: 11 },
+    name: 'paper_trade_close', arguments: { intentId: 'mcp-close-integration-0004', positionId, exitPrice: 11 },
   }, { key: keyA.key, name: 'paper_trade_close' });
   assert.equal(closed.body.result.structuredContent.ok, true);
   // The MCP client may not choose a profitable exit price. With a fresh quote
@@ -231,6 +282,19 @@ try {
   assert.match(closed.body.result.structuredContent.exitAuthority, /^server-(market|last-observed)$/);
   assert.equal(closed.body.result.structuredContent.receipt.action, 'close');
   assert.equal(closed.body.result.structuredContent.receipt.outcome, 'accepted');
+
+  const replayedClose = await mcp('tools/call', {
+    name: 'paper_trade_close', arguments: { intentId: 'mcp-close-integration-0004', positionId, exitPrice: 999 },
+  }, { key: keyA.key, name: 'paper_trade_close' });
+  assert.equal(replayedClose.body.result.structuredContent.executionIntent.replayed, true);
+  assert.equal(replayedClose.body.result.structuredContent.exitPrice, closed.body.result.structuredContent.exitPrice);
+
+  const intentHistory = await mcp('tools/call', {
+    name: 'paper_execution_intents', arguments: { limit: 20 },
+  }, { key: keyA.key, name: 'paper_execution_intents' });
+  assert.equal(intentHistory.body.result.structuredContent.ok, true);
+  assert(intentHistory.body.result.structuredContent.intents.length >= 4);
+  assert(intentHistory.body.result.structuredContent.intents.every((intent) => intent.replaySafe === true));
 
   const receiptHistory = await mcp('tools/call', {
     name: 'paper_execution_receipts', arguments: { limit: 20 },

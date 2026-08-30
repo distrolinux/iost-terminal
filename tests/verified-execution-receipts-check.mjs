@@ -8,11 +8,13 @@ process.env.IOST_DATA_DIR = scratch;
 
 try {
   const receipts = await import('../lib/execution-receipts.js');
+  const intents = await import('../lib/execution-intents.js');
   const accountId = 'private-account-id';
   const walletId = 'private-wallet-id';
   const pactId = 'private-pact-id';
   const missionId = 'msn_acceptance123';
   const positionId = 'private-position-id';
+  const intentId = 'private-execution-intent-0001';
 
   const market = receipts.marketEvidence({
     ticker: { last: 0.004, bid: 0.00399, ask: 0.00401, source: 'TEST', observedAt: 1_000, ageMs: 25, fresh: true },
@@ -35,7 +37,7 @@ try {
       symbol: 'IOST', side: 'long', size: 1_000, requestedEntry: 0.00402,
       requestedNotionalUsd: 4.02, confidence: 77,
       reasoningSummary: 'Momentum confirmation api_key=should-never-persist',
-      missionAttached: true, missionId, positionId,
+      missionAttached: true, missionId, positionId, intentProtected: true, intentId,
     },
     market,
     execution: { status: 'filled', fillPrice: 0.00402, fillAuthority: 'client-supplied-paper-entry', feeUsd: 0 },
@@ -53,6 +55,8 @@ try {
   assert.equal(accepted.authorization.walletPactAuthorized, true);
   assert.equal(accepted.execution.simulated, true);
   assert.equal(accepted.execution.feeUsd, 0);
+  assert.equal(accepted.order.intentProtected, true);
+  assert.equal(accepted.order.intentRef, intents.executionIntentRef(accountId, intentId));
 
   const rejected = receipts.recordExecutionReceipt({
     accountId,
@@ -76,7 +80,7 @@ try {
   assert.equal(listed.receipts[1].outcome, 'accepted');
 
   const raw = readFileSync(join(scratch, 'execution-receipts.jsonl'), 'utf8');
-  for (const forbidden of [accountId, walletId, pactId, missionId, positionId, 'should-never-persist']) {
+  for (const forbidden of [accountId, walletId, pactId, missionId, positionId, intentId, 'should-never-persist']) {
     assert.equal(raw.includes(forbidden), false, `${forbidden} must not be stored`);
   }
   assert.equal(statSync(join(scratch, 'execution-receipts.jsonl')).mode & 0o777, 0o600);

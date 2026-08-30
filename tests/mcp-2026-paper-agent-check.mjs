@@ -73,6 +73,7 @@ ok('tool discovery is least privilege and never exposes live, token, or chain mu
   assert(!readNames.includes('paper_trade_open'));
   assert(paperNames.includes('paper_trade_open'));
   assert(paperNames.includes('paper_trade_close'));
+  assert(readNames.includes('paper_execution_intents'));
   assert(paperNames.includes('evaluation_run'));
   for (const names of [publicNames, readNames, paperNames]) {
     assert(!names.some((name) => /live|token|chain.*(write|send|trade)|wallet.*send|swap|convert/i.test(name)));
@@ -88,6 +89,8 @@ ok('all tools have deterministic schemas, structured outputs, and safety hints',
     assert(tool.outputSchema?.$schema);
     assert.equal(typeof tool.annotations?.readOnlyHint, 'boolean');
   }
+  assert.equal(tools.find((tool) => tool.name === 'paper_trade_open').annotations.idempotentHint, true);
+  assert.equal(tools.find((tool) => tool.name === 'paper_trade_close').annotations.idempotentHint, true);
 });
 
 ok('least-privilege discovery and schema validation stay within a local performance budget', () => {
@@ -103,11 +106,14 @@ ok('least-privilege discovery and schema validation stay within a local performa
 ok('tool arguments are bounded and validated before execution', () => {
   const access = { authenticated: true, scopes: ['read', 'trade-paper'] };
   assert.equal(validateToolArguments('paper_trade_open', {
-    symbol: 'AAPL', side: 'long', size: 1, entry: 10, walletId: 'wallet-1', pactId: 'pact-1',
+    intentId: 'paper-intent-0001', symbol: 'AAPL', side: 'long', size: 1, entry: 10, walletId: 'wallet-1', pactId: 'pact-1',
   }, access).ok, true);
   assert.match(validateToolArguments('paper_trade_open', {
-    symbol: 'AAPL', side: 'long', size: 1, entry: 10, walletId: 'wallet-1', pactId: 'pact-1', live: true,
+    intentId: 'paper-intent-0001', symbol: 'AAPL', side: 'long', size: 1, entry: 10, walletId: 'wallet-1', pactId: 'pact-1', live: true,
   }, access).error, /live is not allowed/);
+  assert.match(validateToolArguments('paper_trade_open', {
+    symbol: 'AAPL', side: 'long', size: 1, entry: 10, walletId: 'wallet-1', pactId: 'pact-1',
+  }, access).error, /intentId is required/);
   assert.match(validateToolArguments('evaluation_run', {
     symbol: 'AAPL', strategy: {},
   }, access).error, /strategy\.entry is required/);
