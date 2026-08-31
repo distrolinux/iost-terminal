@@ -96,6 +96,47 @@ const changedCapacity = buildPaperTradePreflight({
 assert.notEqual(changedCapacity.preflightFingerprint, riskBound.preflightFingerprint,
   'risk-capacity changes must invalidate the binding');
 
+const executionQuality = {
+  required: true, decision: 'allow', reasonCode: 'execution-quality-passed', executionSide: 'ask',
+  bestPriceVenue: 'OKX', bestPrice: 0.004, selectedVenue: 'Test Venue', selectedPrice: 0.00401,
+  selectedScore: 94, selectedTier: 'excellent', selectedLatencyMs: 25,
+  selectedReliabilityPct: 100, latencySloMet: true, failoverApplied: true,
+  failoverFromVenue: 'OKX', failoverReason: 'quality-score', eligibleVenueCount: 2, degradedVenueCount: 0,
+  policy: { maximumPriceTradeoffBps: 10, targetLatencyMs: 500, maximumLatencyMs: 2500,
+    minimumReliabilityPct: 90, minimumReliabilitySamples: 5, circuitBreakerFailures: 3,
+    weights: { price: 0.45, latency: 0.35, reliability: 0.2 } },
+  venues: [],
+};
+const qualityTicker = { ...ticker, quoteIntegrity: {
+  required: true, quorumMet: true, minimumVenues: 2, quoteCount: 2,
+  trustedVenueCount: 2, excludedVenueCount: 0, excludedVenues: [], consensusPrice: 0.004,
+  maximumOutlierBps: 100, maximumVenueSpreadBps: 100, maximumObservedDeviationBps: 1,
+  routeVenue: 'Test Venue', routeLatencyMs: 25, executionSide: 'ask', executionQuality, venues: [],
+} };
+const qualityBound = buildPaperTradePreflight({
+  order, ticker: qualityTicker, cashUsd: 100, authorization,
+  accountScope: 'private-account-id', supportedSymbols: ['IOST'], now,
+  bindingSecret: 'private-test-binding-secret',
+});
+assert.equal(qualityBound.decision, 'allow');
+assert.equal(qualityBound.market.quoteIntegrity.executionQuality.selectedScore, 94);
+const changedQuality = buildPaperTradePreflight({
+  order, ticker: { ...qualityTicker, quoteIntegrity: { ...qualityTicker.quoteIntegrity,
+    executionQuality: { ...executionQuality, selectedScore: 90 } } },
+  cashUsd: 100, authorization, accountScope: 'private-account-id', supportedSymbols: ['IOST'], now,
+  bindingSecret: 'private-test-binding-secret',
+});
+assert.notEqual(changedQuality.preflightFingerprint, qualityBound.preflightFingerprint,
+  'execution-quality changes must invalidate the binding');
+const deniedQuality = buildPaperTradePreflight({
+  order, ticker: { ...qualityTicker, quoteIntegrity: { ...qualityTicker.quoteIntegrity,
+    executionQuality: { ...executionQuality, decision: 'deny', reasonCode: 'execution-quality-unavailable',
+      selectedVenue: null, selectedPrice: null, selectedScore: null } } },
+  cashUsd: 100, authorization, accountScope: 'private-account-id', supportedSymbols: ['IOST'], now,
+});
+assert.equal(deniedQuality.decision, 'deny');
+assert.equal(deniedQuality.reasonCode, 'execution-quality-unavailable');
+
 const otherIntent = buildPaperTradePreflight({
   order: { ...order, intentId: 'preflight-intent-0002' }, ticker, cashUsd: 100,
   authorization, accountScope: 'private-account-id', supportedSymbols: ['IOST'], now,
@@ -196,12 +237,14 @@ assert(open.inputSchema.required.includes('preflightFingerprint'));
 assert(open.inputSchema.required.includes('maxSlippageBps'));
 assert(open.inputSchema.required.includes('stop'));
 assert.match(open.description, /preflight fingerprint/i);
-assert.match(open.description, /best fresh consensus-approved server ask/i);
+assert.match(open.description, /quality-selected server ask/i);
 assert(!buildMcpTools().some((tool) => tool.name === 'paper_trade_preflight'), 'public clients must not receive private preflight');
 assert(!buildMcpTools({ authenticated: true, scopes: ['read'] }).some((tool) => tool.name === 'paper_trade_preflight'), 'read-only keys without trade-paper must not receive execution preflight');
 
 const server = readFileSync(new URL('../server.js', import.meta.url), 'utf8');
-assert.match(server, /const DISCOVERY_VERSION = '1\.28\.0'/);
+assert.match(server, /const DISCOVERY_VERSION = '1\.29\.0'/);
+assert.match(preflight.description, /execution-quality/i);
+assert.match(preflight.description, /venue failover/i);
 assert.match(server, /enforcePaperPreflightBinding/);
 assert.match(server, /preflight-evidence-changed/);
 assert.match(server, /case 'paper_trade_preflight'/);

@@ -135,6 +135,12 @@ async function boundOpenArguments(intentId, overrides = {}, key = keyA.key) {
   assert.equal(preflight.body.result.structuredContent.portfolioRisk.volatility.venueCount, 2);
   assert(preflight.body.result.structuredContent.portfolioRisk.volatility.forecastVolDailyPct > 0);
   assert.equal(preflight.body.result.structuredContent.portfolioRisk.execution.attempted, false);
+  const quality = preflight.body.result.structuredContent.market.quoteIntegrity.executionQuality;
+  assert.equal(quality.decision, 'allow');
+  assert.equal(quality.selectedVenue, preflight.body.result.structuredContent.market.quoteIntegrity.routeVenue);
+  assert.equal(quality.policy.maximumPriceTradeoffBps, 10);
+  assert.equal(quality.execution.attempted, false);
+  assert.equal(quality.authorization.liveScopeUsed, false);
   return { ...order, preflightFingerprint: preflight.body.result.structuredContent.preflightFingerprint };
 }
 
@@ -348,6 +354,9 @@ try {
   assert.equal(opened.body.result.structuredContent.receipt.market.quoteIntegrity.quorumMet, true);
   assert.equal(opened.body.result.structuredContent.receipt.market.quoteIntegrity.trustedVenueCount, 3);
   assert.equal(opened.body.result.structuredContent.receipt.market.quoteIntegrity.routeVenue, 'KuCoin');
+  assert.equal(opened.body.result.structuredContent.receipt.market.quoteIntegrity.executionQuality.decision, 'allow');
+  assert.equal(opened.body.result.structuredContent.receipt.market.quoteIntegrity.executionQuality.selectedVenue, 'KuCoin');
+  assert.equal(opened.body.result.structuredContent.receipt.market.quoteIntegrity.executionQuality.policy.maximumPriceTradeoffBps, 10);
   assert.equal(opened.body.result.structuredContent.receipt.execution.slippageBps, 10);
   assert.equal(opened.body.result.structuredContent.receipt.execution.maxSlippageBps, 100);
   assert.equal(opened.body.result.structuredContent.receipt.portfolioRisk.decision, 'allow');

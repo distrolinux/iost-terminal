@@ -33,6 +33,11 @@ assert.equal(long.quoteIntegrity.trustedVenueCount, 3);
 assert.equal(long.quoteIntegrity.routeVenue, 'KuCoin');
 assert.equal(long.quoteIntegrity.executionSide, 'ask');
 assert.equal(long.quoteIntegrity.quorumMet, true);
+assert.equal(long.quoteIntegrity.executionQuality.decision, 'allow');
+assert.equal(long.quoteIntegrity.executionQuality.selectedVenue, 'KuCoin');
+assert.equal(long.quoteIntegrity.executionQuality.bestPriceVenue, 'KuCoin');
+assert.equal(long.quoteIntegrity.executionQuality.latencySloMet, true);
+assert.equal(long.quoteIntegrity.executionQuality.policy.maximumPriceTradeoffBps, 10);
 assert.equal(long.quoteIntegrity.venues[0].high24h, 10.2);
 assert.equal(long.quoteIntegrity.venues[0].low24h, 9.8);
 
@@ -42,6 +47,7 @@ assert.equal(short.source, 'Gate');
 assert.equal(short.bid, 10);
 assert.equal(short.quoteIntegrity.routeVenue, 'Gate');
 assert.equal(short.quoteIntegrity.executionSide, 'bid');
+assert.equal(short.quoteIntegrity.executionQuality.selectedVenue, 'Gate');
 
 const outlier = buildMultiVenueExecutionQuote({
   symbol: 'IOST', side: 'long', now,
@@ -87,6 +93,21 @@ const disagreement = buildMultiVenueExecutionQuote({
 assert.equal(disagreement.ok, false);
 assert.equal(disagreement.reasonCode, 'quote-quorum');
 assert.equal(disagreement.quoteIntegrity.quorumMet, false);
+
+const qualityFailover = buildMultiVenueExecutionQuote({
+  symbol: 'IOST', side: 'long', now,
+  quotes: [
+    { ...quote('OKX', { last: 10, bid: 9.99, ask: 10, latencyMs: 400 }),
+      venueHealth: { sampleCount: 20, reliabilityPct: 70, consecutiveFailures: 3, circuitOpen: true } },
+    { ...quote('KuCoin', { last: 10, bid: 9.99, ask: 10.005, latencyMs: 25 }),
+      venueHealth: { sampleCount: 20, reliabilityPct: 100, consecutiveFailures: 0, circuitOpen: false } },
+  ],
+});
+assert.equal(qualityFailover.ok, true);
+assert.equal(qualityFailover.source, 'KuCoin');
+assert.equal(qualityFailover.quoteIntegrity.executionQuality.failoverApplied, true);
+assert.equal(qualityFailover.quoteIntegrity.executionQuality.failoverReason, 'venue-circuit-open');
+assert.equal(qualityFailover.quoteIntegrity.executionQuality.authorization.liveScopeUsed, false);
 
 const marketSource = readFileSync(new URL('../lib/market.js', import.meta.url), 'utf8');
 assert.match(marketSource, /EXECUTION_QUOTE_TIMEOUT_MS = 2_500/);

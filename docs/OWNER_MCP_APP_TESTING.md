@@ -37,8 +37,9 @@ the returned SHA-256 hash. Before a paper trade test, call the read-only
 `walletId`, active `pactId`, protective `stop`, and the unique `intentId`
 reserved for this attempt.
 Set an explicit `maxSlippageBps` no greater than 100. Review its quote expiry,
-multi-venue quorum, exclusions, routed venue and latency, bid/ask execution
-side, server-fill notional, estimated cost, portfolio exposure, concentration,
+multi-venue quorum, exclusions, best-price anchor, quality score, route latency,
+rolling reliability, circuit state, price protection and failover reason;
+bid/ask execution side, server-fill notional, estimated cost, portfolio exposure, concentration,
 correlated sleeve, drawdown, daily loss, stop risk, volatility regime, dynamic
 maximum order, portfolio capacity, limiting factor and machine-readable
 authorization checks. If it allows the request, call
