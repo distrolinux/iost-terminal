@@ -124,12 +124,36 @@ const wideSpread = buildPaperTradePreflight({
 assert.equal(wideSpread.decision, 'deny');
 assert.equal(wideSpread.reasonCode, 'spread-within-limit');
 
+const failedQuorum = buildPaperTradePreflight({
+  order,
+  ticker: {
+    ...ticker,
+    quoteIntegrity: {
+      required: true, quorumMet: false, minimumVenues: 2,
+      quoteCount: 1, trustedVenueCount: 1, excludedVenueCount: 2,
+      excludedVenues: [
+        { source: 'KuCoin', reason: 'stale-quote' },
+        { source: 'Gate', reason: 'consensus-outlier' },
+      ],
+      consensusPrice: 0.004, maximumOutlierBps: 100,
+      maximumObservedDeviationBps: 0, routeVenue: null,
+      routeLatencyMs: null, executionSide: 'ask', venues: [],
+    },
+  },
+  cashUsd: 100, authorization, accountScope: 'private-account-id',
+  supportedSymbols: ['IOST'], now,
+});
+assert.equal(failedQuorum.decision, 'deny');
+assert.equal(failedQuorum.reasonCode, 'quote-quorum');
+assert.equal(failedQuorum.execution.attempted, false);
+
 const tools = buildMcpTools({ authenticated: true, scopes: ['read', 'trade-paper'] });
 const preflight = tools.find((tool) => tool.name === 'paper_trade_preflight');
 assert(preflight, 'paper_trade_preflight must be discoverable to scoped agents');
 assert.equal(preflight.annotations.readOnlyHint, true);
 assert.equal(preflight.annotations.destructiveHint, false);
 assert.equal(preflight.annotations.idempotentHint, true);
+assert.match(preflight.description, /multi-venue quote quorum/i);
 for (const required of ['intentId', 'symbol', 'side', 'size', 'entry', 'maxSlippageBps', 'walletId', 'pactId']) {
   assert(preflight.inputSchema.required.includes(required), `${required} must be required`);
 }
@@ -137,11 +161,12 @@ const open = tools.find((tool) => tool.name === 'paper_trade_open');
 assert(open.inputSchema.required.includes('preflightFingerprint'));
 assert(open.inputSchema.required.includes('maxSlippageBps'));
 assert.match(open.description, /preflight fingerprint/i);
+assert.match(open.description, /best fresh consensus-approved server ask/i);
 assert(!buildMcpTools().some((tool) => tool.name === 'paper_trade_preflight'), 'public clients must not receive private preflight');
 assert(!buildMcpTools({ authenticated: true, scopes: ['read'] }).some((tool) => tool.name === 'paper_trade_preflight'), 'read-only keys without trade-paper must not receive execution preflight');
 
 const server = readFileSync(new URL('../server.js', import.meta.url), 'utf8');
-assert.match(server, /const DISCOVERY_VERSION = '1\.25\.0'/);
+assert.match(server, /const DISCOVERY_VERSION = '1\.26\.0'/);
 assert.match(server, /enforcePaperPreflightBinding/);
 assert.match(server, /preflight-evidence-changed/);
 assert.match(server, /case 'paper_trade_preflight'/);

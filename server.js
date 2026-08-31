@@ -4,7 +4,7 @@ import compression from 'compression';
 import { createServer } from 'node:http';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getTicker, getKlines, peekTicker, WATCHLIST } from './lib/market.js';
+import { getTicker, getExecutionTicker, getKlines, peekTicker, WATCHLIST } from './lib/market.js';
 import { getGlobalMetrics, getTopMovers, getMarketExtras, getCmcGlobal } from './lib/marketdata.js';
 import { applyGarchSizing, getGarchState, garchConfig } from './lib/garch.js';
 import { scanAll, analyzeSymbol } from './lib/scanner.js';
@@ -698,7 +698,7 @@ ${s?.autopilot?.enabled ? `enabled (${s.autopilot.ticks} ticks)${s.autopilot.con
 ### Agent access
 - **Read state (no auth):** [/api/ui-state](/api/ui-state) · [/api/scores](/api/scores) · [/api/scanner](/api/scanner) · [/api/news](/api/news) · [/api/onchain](/api/onchain) · [/api/probability](/api/probability)
 - **Authenticate:** mint an agent key in the app (Portfolio → AI Agents) → send as \`X-API-Key: itk_…\`, or OAuth 2.0 client_credentials → Bearer token ([/auth.md](/auth.md))
-- **Trade (paper):** preflight with a unique 8-128 character \`intentId\`, then POST /api/paper/open with that intent and the returned \`preflightFingerprint\`; exact retries return the original outcome, changed evidence fails closed, and opens require a \`trade-paper\`-scoped key + owned walletId + active wallet-bound pactId
+- **Trade (paper):** preflight with a unique 8-128 character \`intentId\`; crypto requires a fresh two-venue quote quorum and routes to the best trusted ask/bid. Then POST /api/paper/open with that intent and the returned \`preflightFingerprint\`; exact retries return the original outcome, changed evidence fails closed, and opens require a \`trade-paper\`-scoped key + owned walletId + active wallet-bound pactId
 - **Live:** proposals only — owner approves before anything executes (option C, human-in-the-loop)
 `;
 }
@@ -776,7 +776,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.25.0';
+const DISCOVERY_VERSION = '1.26.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -832,7 +832,7 @@ const OPENAPI_PATHS = {
   '/api/signals/feed': { get: { summary: 'Public signal feed with on-chain proof status', tags: ['agents'], security: [] } },
   '/api/autopilot/proposals': { get: { summary: 'Pending human-in-the-loop proposals with full reasoning', tags: ['autonomy'], security: [] } },
   '/api/paper': { get: { summary: 'Account + open positions + journal (mark-to-market)', tags: ['execution'] } },
-  '/api/paper/preflight': { post: { summary: 'Read-only paper trade preflight with fresh quote, estimated cost and authorization evidence', tags: ['execution'] } },
+  '/api/paper/preflight': { post: { summary: 'Read-only paper trade preflight with multi-venue quote integrity, routed price, estimated cost and authorization evidence', tags: ['execution'] } },
   '/api/paper/open': { post: { summary: 'Open paper trade', tags: ['execution'] } },
   '/api/paper/close': { post: { summary: 'Close paper trade', tags: ['execution'] } },
   '/api/execution-receipts': { get: { summary: 'Private tamper-evident paper execution receipts and chain verification', tags: ['execution'] } },
@@ -2533,8 +2533,7 @@ async function paperTradePreflight(req, order = {}) {
   let ticker = null;
   if (supportedSymbols.includes(symbol)) {
     try {
-      await getTicker(symbol);
-      ticker = peekTicker(symbol, Date.now());
+      ticker = await getExecutionTicker(symbol, order?.side, Date.now());
     } catch { /* unavailable quote fails closed in the decision */ }
   }
   const agentPrincipal = !!(req.agentKey || req.userAgent);
@@ -2773,6 +2772,7 @@ async function enforcePaperPreflightBinding(req, order, source, attempt) {
       last: current.market?.observedPrice, bid: current.market?.bid, ask: current.market?.ask,
       source: current.market?.source, observedAt: current.market?.observedAt,
       ageMs: current.market?.quoteAgeMs, fresh: current.market?.fresh,
+      quoteIntegrity: current.market?.quoteIntegrity,
     },
     requestedEntry: order?.entry, side: order?.side, size: order?.size,
     now: current.checkedAt,
@@ -2792,6 +2792,7 @@ function serverPaperFill(preflight, order) {
   return {
     fillPrice,
     fillAuthority: `server-top-of-book-${side === 'short' ? 'bid' : 'ask'}`,
+    fillVenue: preflight?.market?.quoteIntegrity?.routeVenue || preflight?.market?.source || null,
     maxSlippageBps: Number(preflight?.request?.maxSlippageBps),
     slippageBps: Number(preflight?.market?.adverseSlippageBps),
     slippageUsd: Math.round(Math.max(0, priceDelta) * size * 10_000) / 10_000,
@@ -3615,8 +3616,8 @@ const API_INDEX = {
   execution: [
     { path: '/api/account', method: 'GET', purpose: 'light per-account snapshot for UI topbar: cash, equity, openPositions, lastTrades' },
     { path: '/api/paper', method: 'GET', purpose: 'account + open positions + journal (mark-to-market)' },
-    { path: '/api/paper/preflight', method: 'POST', body: '{intentId,symbol,side,size,entry,maxSlippageBps,stop?,target?,walletId,pactId,missionId?,recipient?,protocol?}', purpose: 'read-only one-intent paper execution preflight; fresh bid/ask, hard spread cap, caller slippage tolerance, server-fill notional, paper cash, wallet/Pact limits and optional mission checks' },
-    { path: '/api/paper/open', method: 'POST', body: '{intentId,preflightFingerprint,symbol,side,size,entry,maxSlippageBps,stop?,target?,reason?,confidence?,walletId,pactId,missionId?,recipient?,protocol?}', purpose: 'idempotent server-priced paper open; long fills use the bound ask, short fills use the bound bid; agent-key requests require a matching unexpired preflight fingerprint and authoritative wallet/Pact rails' },
+    { path: '/api/paper/preflight', method: 'POST', body: '{intentId,symbol,side,size,entry,maxSlippageBps,stop?,target?,walletId,pactId,missionId?,recipient?,protocol?}', purpose: 'read-only one-intent paper execution preflight; crypto quote quorum, stale/outlier rejection, best trusted bid/ask, hard spread and slippage caps, server-fill notional and authorization rails' },
+    { path: '/api/paper/open', method: 'POST', body: '{intentId,preflightFingerprint,symbol,side,size,entry,maxSlippageBps,stop?,target?,reason?,confidence?,walletId,pactId,missionId?,recipient?,protocol?}', purpose: 'idempotent server-priced paper open; crypto longs use the best consensus-approved ask and shorts the best bid; matching unexpired preflight and authoritative wallet/Pact rails are required' },
     { path: '/api/paper/close', method: 'POST', body: '{intentId,positionId}', purpose: 'idempotent close at a server-observed price (client exit prices are ignored)' },
     { path: '/api/paper/stats', method: 'GET', purpose: 'journal statistics (win rate, P&L)' },
     { path: '/api/execution-receipts', method: 'GET', query: 'limit=1..200', purpose: 'private SHA-256-chained paper execution receipts with pricing, authorization, cost and latency evidence' },

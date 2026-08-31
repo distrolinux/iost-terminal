@@ -18,7 +18,16 @@ try {
   const preflightFingerprint = 'a'.repeat(64);
 
   const market = receipts.marketEvidence({
-    ticker: { last: 0.004, bid: 0.00399, ask: 0.00401, source: 'TEST', observedAt: 1_000, ageMs: 25, fresh: true },
+    ticker: {
+      last: 0.004, bid: 0.00399, ask: 0.00401, source: 'KuCoin', observedAt: 1_000, ageMs: 25, fresh: true,
+      quoteIntegrity: {
+        required: true, quorumMet: true, minimumVenues: 2, quoteCount: 3,
+        trustedVenueCount: 3, excludedVenueCount: 0, excludedVenues: [],
+        consensusPrice: 0.004, maximumOutlierBps: 100, maximumVenueSpreadBps: 100, maximumObservedDeviationBps: 2,
+        routeVenue: 'KuCoin', routeLatencyMs: 18, executionSide: 'ask',
+        venues: [{ source: 'KuCoin', bid: 0.00399, ask: 0.00401, observedAt: 1_000, ageMs: 25, latencyMs: 18, consensusDeviationBps: 1, spreadBps: 50 }],
+      },
+    },
     requestedEntry: 0.00402,
     side: 'long',
     size: 1_000,
@@ -28,6 +37,9 @@ try {
   assert.equal(market.quoteAgeMs, 25);
   assert.equal(market.spreadBps, 50);
   assert.equal(market.entryDeviationBps, 50);
+  assert.equal(market.quoteIntegrity.quorumMet, true);
+  assert.equal(market.quoteIntegrity.routeVenue, 'KuCoin');
+  assert.equal(market.quoteIntegrity.routeLatencyMs, 18);
 
   const accepted = receipts.recordExecutionReceipt({
     accountId,
@@ -43,7 +55,7 @@ try {
     },
     market,
     execution: {
-      status: 'filled', fillPrice: 0.00401, fillAuthority: 'server-top-of-book-ask',
+      status: 'filled', fillPrice: 0.00401, fillAuthority: 'server-top-of-book-ask', fillVenue: 'KuCoin',
       maxSlippageBps: 50, slippageBps: 25, slippageUsd: 0.01,
       priceImprovementUsd: 0, feeUsd: 0,
     },
@@ -63,6 +75,7 @@ try {
   assert.equal(accepted.execution.simulated, true);
   assert.equal(accepted.execution.feeUsd, 0);
   assert.equal(accepted.execution.fillAuthority, 'server-top-of-book-ask');
+  assert.equal(accepted.execution.fillVenue, 'KuCoin');
   assert.equal(accepted.execution.maxSlippageBps, 50);
   assert.equal(accepted.execution.slippageBps, 25);
   assert.equal(accepted.execution.slippageUsd, 0.01);
@@ -118,6 +131,8 @@ try {
   assert.match(app, /Verified Execution Receipts/);
   assert.match(app, /quote age/);
   assert.match(app, /slippage.*maxSlippageBps/);
+  assert.match(app, /quorum verified/);
+  assert.match(app, /fillVenue/);
 
   console.log('verified execution receipt checks passed');
 } finally {
