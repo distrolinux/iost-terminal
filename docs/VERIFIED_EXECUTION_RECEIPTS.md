@@ -11,8 +11,8 @@ Each receipt contains:
 
 - action, symbol, side, size, requested entry and notional;
 - sanitized reasoning summary and confidence;
-- cached server quote source, observation age, bid/ask spread and entry
-  deviation when an observation exists;
+- server quote source, observation age, bid/ask spread, multi-venue quorum,
+  exclusions, selected route and entry deviation;
 - simulated fill price, server bid/ask authority, requested slippage ceiling,
   realized slippage, price improvement, zero-fee paper model and close P&L;
 - paper scope, wallet/Pact gate and mission-gate results as booleans;
@@ -40,13 +40,15 @@ evidence, not a public-chain attestation or a claim of external execution.
 
 ## Honest paper-fill semantics
 
-The client entry is a requested reference, never fill authority. Paper opens
-obtain a fresh server quote during bound preflight: longs fill at the ask and
-shorts at the bid. The same quote determines cash, wallet, Pact and mission
+The client entry is a requested reference, never fill authority. Crypto paper
+opens require at least two fresh consensus-approved quotes during preflight.
+Longs route to the lowest trusted ask and shorts to the highest trusted bid.
+The same routed quote determines cash, wallet, Pact and mission
 authorization. Spread above 100 basis points, stale quotes, and adverse
 slippage above the caller's bounded `maxSlippageBps` fail before reservations
 or broker work. Receipts label accepted opens `server-top-of-book-ask` or
-`server-top-of-book-bid` and record slippage or price improvement.
+`server-top-of-book-bid`, record the routed venue, and report slippage or price
+improvement.
 
 A close ignores any client exit price and records `server-market` or
 `server-last-observed`.

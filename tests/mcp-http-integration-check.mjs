@@ -305,6 +305,10 @@ try {
   assert.equal(opened.body.result.structuredContent.position.entry, 10.01);
   assert.equal(opened.body.result.structuredContent.receipt.execution.fillPrice, 10.01);
   assert.equal(opened.body.result.structuredContent.receipt.execution.fillAuthority, 'server-top-of-book-ask');
+  assert.equal(opened.body.result.structuredContent.receipt.execution.fillVenue, 'KuCoin');
+  assert.equal(opened.body.result.structuredContent.receipt.market.quoteIntegrity.quorumMet, true);
+  assert.equal(opened.body.result.structuredContent.receipt.market.quoteIntegrity.trustedVenueCount, 3);
+  assert.equal(opened.body.result.structuredContent.receipt.market.quoteIntegrity.routeVenue, 'KuCoin');
   assert.equal(opened.body.result.structuredContent.receipt.execution.slippageBps, 10);
   assert.equal(opened.body.result.structuredContent.receipt.execution.maxSlippageBps, 100);
   assert.equal(opened.body.result.structuredContent.executionIntent.replayed, false);
@@ -383,6 +387,8 @@ try {
   assert.equal(accountWalletOpened.body.result.structuredContent.position.entry, 9.99);
   assert.equal(accountWalletOpened.body.result.structuredContent.receipt.execution.fillPrice, 9.99);
   assert.equal(accountWalletOpened.body.result.structuredContent.receipt.execution.fillAuthority, 'server-top-of-book-bid');
+  assert.equal(accountWalletOpened.body.result.structuredContent.receipt.execution.fillVenue, 'Gate');
+  assert.equal(accountWalletOpened.body.result.structuredContent.receipt.market.quoteIntegrity.routeVenue, 'Gate');
 
   const closed = await mcp('tools/call', {
     name: 'paper_trade_close', arguments: { intentId: 'mcp-close-integration-0004', positionId, exitPrice: 11 },

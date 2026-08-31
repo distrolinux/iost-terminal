@@ -8,11 +8,28 @@ globalThis.fetch = async (input, init) => {
   if (url.startsWith('https://www.okx.com/api/v5/market/ticker?instId=IOST-USDT')) {
     return new Response(JSON.stringify({
       code: '0', data: [{
-        last: '10', askPx: '10.01', bidPx: '9.99', open24h: '10',
+        last: '10', askPx: '10.02', bidPx: '9.98', open24h: '10',
         high24h: '10.2', low24h: '9.8', volCcy24h: '1000',
         volCcyQuote24h: '10000', ts: String(Date.now()),
       }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+  if (url.startsWith('https://api.kucoin.com/api/v1/market/orderbook/level1?symbol=IOST-USDT')) {
+    return new Response(JSON.stringify({
+      code: '200000', data: { price: '10', bestAsk: '10.01', bestBid: '9.97' },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+  if (url.startsWith('https://api.kucoin.com/api/v1/market/stats?symbol=IOST-USDT')) {
+    return new Response(JSON.stringify({
+      code: '200000', data: { open: '10', high: '10.2', low: '9.8', volValue: '10000' },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+  if (url.startsWith('https://api.gateio.ws/api/v4/spot/tickers?currency_pair=IOST_USDT')) {
+    return new Response(JSON.stringify([{
+      last: '10', lowest_ask: '10.03', highest_bid: '9.99',
+      change_percentage: '0', high_24h: '10.2', low_24h: '9.8',
+      base_volume: '1000', quote_volume: '10000',
+    }]), { status: 200, headers: { 'Content-Type': 'application/json' } });
   }
   if (url.startsWith('https://query1.finance.yahoo.com/v8/finance/chart/AAPL')) {
     return new Response(JSON.stringify({

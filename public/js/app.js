@@ -2843,14 +2843,18 @@ async function renderJournal() {
           const quote = r.market?.available
             ? `${esc(r.market.source || 'market')} · ${r.market.quoteAgeMs == null ? 'age unknown' : `${r.market.quoteAgeMs} ms`} · spread ${r.market.spreadBps == null ? '—' : `${r.market.spreadBps} bps`}`
             : 'No cached server quote';
+          const integrity = r.market?.quoteIntegrity;
+          const routeEvidence = integrity?.required
+            ? `${integrity.quorumMet ? 'quorum verified' : 'quorum denied'} · ${fmtNum(integrity.trustedVenueCount, 0)}/${fmtNum(integrity.quoteCount, 0)} venues · route ${esc(integrity.routeVenue || 'none')}${integrity.routeLatencyMs == null ? '' : ` ${fmtNum(integrity.routeLatencyMs, 0)} ms`}`
+            : 'single-source market';
           const authority = r.authorization?.walletPactRequired
             ? `${r.authorization.walletPactAuthorized ? 'wallet/Pact verified' : 'wallet/Pact denied'}${r.order?.missionAttached ? ` · mission ${r.authorization.missionAuthorized ? 'verified' : 'denied'}` : ''}`
             : 'human session';
           return `<tr>
             <td><span class="chip ${outcomeClass}">${esc(r.outcome)}</span><small>${esc(r.policy?.reasonCode || '')}</small></td>
             <td><strong>${esc(r.order?.symbol || '—')}</strong> ${esc(r.action)} · ${esc(r.order?.side || '')}<small>${r.order?.requestedNotionalUsd == null ? '—' : `$${fmtNum(r.order.requestedNotionalUsd)}`}</small></td>
-            <td>${r.execution?.fillPrice == null ? 'not filled' : fmtPrice(r.execution.fillPrice, 'crypto')}<small>${esc(r.execution?.fillAuthority || '')} · ${r.execution?.slippageBps == null ? 'slippage —' : `slippage ${fmtNum(r.execution.slippageBps, 2)} / ${fmtNum(r.execution.maxSlippageBps, 2)} bps`} · fee $${fmtNum(r.execution?.feeUsd || 0)}</small></td>
-            <td>${quote}<small>${r.market?.entryDeviationBps == null ? 'entry deviation unavailable' : `entry deviation ${r.market.entryDeviationBps} bps`}</small></td>
+            <td>${r.execution?.fillPrice == null ? 'not filled' : fmtPrice(r.execution.fillPrice, 'crypto')}<small>${esc(r.execution?.fillAuthority || '')}${r.execution?.fillVenue ? ` · ${esc(r.execution.fillVenue)}` : ''} · ${r.execution?.slippageBps == null ? 'slippage —' : `slippage ${fmtNum(r.execution.slippageBps, 2)} / ${fmtNum(r.execution.maxSlippageBps, 2)} bps`} · fee $${fmtNum(r.execution?.feeUsd || 0)}</small></td>
+            <td>${quote}<small>${routeEvidence} · ${r.market?.entryDeviationBps == null ? 'entry deviation unavailable' : `entry deviation ${r.market.entryDeviationBps} bps`}</small></td>
             <td>${esc(authority)}<small>paper-only · live unused</small></td>
             <td class="mono">${fmtNum(r.latency?.totalMs, 0)} ms<small>auth ${fmtNum(r.latency?.authorizationMs, 0)} · broker ${fmtNum(r.latency?.brokerMs, 0)}</small></td>
             <td class="mono"><span title="${esc(r.hash || '')}">${esc((r.hash || '').slice(0, 12))}…</span><small>seq ${r.sequence} · ${r.order?.intentProtected ? `retry protected ${esc((r.order.intentRef || '').slice(0, 8))}` : 'legacy execution'}</small></td>
