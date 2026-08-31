@@ -776,7 +776,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.24.0';
+const DISCOVERY_VERSION = '1.25.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -2537,19 +2537,25 @@ async function paperTradePreflight(req, order = {}) {
       ticker = peekTicker(symbol, Date.now());
     } catch { /* unavailable quote fails closed in the decision */ }
   }
+  const agentPrincipal = !!(req.agentKey || req.userAgent);
+  const suppliedEntry = Number(order?.entry);
+  const effectiveOrder = !agentPrincipal && !(suppliedEntry > 0) && Number(ticker?.last) > 0
+    ? { ...order, entry: Number(ticker.last) }
+    : order;
   const now = Date.now();
-  const entry = Number(order?.entry);
-  const size = Number(order?.size);
-  const notionalMinor = Number.isFinite(entry) && entry > 0 && Number.isFinite(size) && size > 0
-    ? Math.trunc(entry * size * 100) : 0;
+  const size = Number(effectiveOrder?.size);
+  const side = effectiveOrder?.side === 'short' ? 'short' : 'long';
+  const fillPrice = Number(side === 'short' ? ticker?.bid : ticker?.ask) || Number(ticker?.last) || 0;
+  const notionalMinor = fillPrice > 0 && Number.isFinite(size) && size > 0
+    ? Math.ceil(fillPrice * size * 100) : 0;
   const authorization = agentSpendPreflight(req, notionalMinor, {
-    walletId: order?.walletId, pactId: order?.pactId,
-    recipient: order?.recipient, protocol: order?.protocol,
+    walletId: effectiveOrder?.walletId, pactId: effectiveOrder?.pactId,
+    recipient: effectiveOrder?.recipient, protocol: effectiveOrder?.protocol,
   });
   const ownerId = missionOwnerId(req);
-  const missionId = String(order?.missionId || '').trim();
+  const missionId = String(effectiveOrder?.missionId || '').trim();
   const mission = missionId ? missions.previewMissionTrade({
-    missionId, ownerId, walletId: order?.walletId, pactId: order?.pactId,
+    missionId, ownerId, walletId: effectiveOrder?.walletId, pactId: effectiveOrder?.pactId,
     symbol, notionalMinor,
   }) : null;
   let accountId = 'default';
@@ -2557,7 +2563,7 @@ async function paperTradePreflight(req, order = {}) {
   else if (req.userAgent?.userId) accountId = `user:${req.userAgent.userId}`;
   const account = getAccount(accountId);
   return buildPaperTradePreflight({
-    order, ticker, cashUsd: account?.account?.cash ?? 100_000,
+    order: effectiveOrder, ticker, cashUsd: account?.account?.cash ?? 100_000,
     authorization, mission, accountScope: accountId,
     supportedSymbols, now, bindingSecret: PAPER_PREFLIGHT_BINDING_SECRET,
   });
@@ -2737,12 +2743,13 @@ function preflightBindingError(req, attempt, message, status, reason, detail = m
 async function enforcePaperPreflightBinding(req, order, source, attempt) {
   const required = source === 'mcp' || !!req.userAgent || !!req.agentKey;
   const supplied = String(order?.preflightFingerprint || '').trim().toLowerCase();
-  if (!required && !supplied) return { ok: true, required: false };
   if (!supplied) {
-    preflightBindingError(req, attempt, 'paper execution preflight fingerprint required', 428,
-      'preflight-fingerprint-required');
+    if (required) {
+      preflightBindingError(req, attempt, 'paper execution preflight fingerprint required', 428,
+        'preflight-fingerprint-required');
+    }
   }
-  if (!/^[a-f0-9]{64}$/.test(supplied)) {
+  if (supplied && !/^[a-f0-9]{64}$/.test(supplied)) {
     preflightBindingError(req, attempt, 'paper execution preflight fingerprint invalid', 400,
       'preflight-fingerprint-invalid');
   }
@@ -2752,15 +2759,44 @@ async function enforcePaperPreflightBinding(req, order, source, attempt) {
     preflightBindingError(req, attempt, 'paper execution preflight no longer allows this request', 409,
       'preflight-denied', `Current preflight denied: ${current.reasonCode || 'policy-denied'}.`);
   }
-  const expected = String(current.preflightFingerprint || '');
-  const matches = /^[a-f0-9]{64}$/.test(expected)
-    && crypto.timingSafeEqual(Buffer.from(supplied, 'hex'), Buffer.from(expected, 'hex'));
-  if (!matches) {
-    preflightBindingError(req, attempt, 'paper execution preflight evidence changed', 409,
-      'preflight-evidence-changed', 'The order, quote, cash, wallet, Pact, mission, or spend-limit evidence changed. Run preflight again.');
+  if (supplied) {
+    const expected = String(current.preflightFingerprint || '');
+    const matches = /^[a-f0-9]{64}$/.test(expected)
+      && crypto.timingSafeEqual(Buffer.from(supplied, 'hex'), Buffer.from(expected, 'hex'));
+    if (!matches) {
+      preflightBindingError(req, attempt, 'paper execution preflight evidence changed', 409,
+        'preflight-evidence-changed', 'The order, quote, cash, wallet, Pact, mission, or spend-limit evidence changed. Run preflight again.');
+    }
   }
+  attempt.market = executionReceipts.marketEvidence({
+    ticker: {
+      last: current.market?.observedPrice, bid: current.market?.bid, ask: current.market?.ask,
+      source: current.market?.source, observedAt: current.market?.observedAt,
+      ageMs: current.market?.quoteAgeMs, fresh: current.market?.fresh,
+    },
+    requestedEntry: order?.entry, side: order?.side, size: order?.size,
+    now: current.checkedAt,
+  });
+  attempt.request.requestedEntry = current.request?.requestedEntry;
+  attempt.request.requestedNotionalUsd = current.request?.requestedNotionalUsd;
   attempt.preflightAuthorized = true;
-  return { ok: true, required: true, expiresAt: current.expiresAt, fingerprint: supplied };
+  return { ...current, required, fingerprint: supplied || null };
+}
+
+function serverPaperFill(preflight, order) {
+  const fillPrice = Number(preflight?.market?.estimatedFillPrice);
+  const requestedEntry = Number(preflight?.request?.requestedEntry);
+  const size = Number(order?.size);
+  const side = order?.side === 'short' ? 'short' : 'long';
+  const priceDelta = side === 'short' ? requestedEntry - fillPrice : fillPrice - requestedEntry;
+  return {
+    fillPrice,
+    fillAuthority: `server-top-of-book-${side === 'short' ? 'bid' : 'ask'}`,
+    maxSlippageBps: Number(preflight?.request?.maxSlippageBps),
+    slippageBps: Number(preflight?.market?.adverseSlippageBps),
+    slippageUsd: Math.round(Math.max(0, priceDelta) * size * 10_000) / 10_000,
+    priceImprovementUsd: Math.round(Math.max(0, -priceDelta) * size * 10_000) / 10_000,
+  };
 }
 
 async function executePaperOpen(req, order, source = 'rest') {
@@ -2777,9 +2813,8 @@ async function executePaperOpen(req, order, source = 'rest') {
 
 async function executePaperOpenOnce(req, order, source = 'rest') {
   const attempt = beginPaperReceipt(req, order, 'open', source);
-  const entry = Number(order?.entry || 0);
   const size = Number(order?.size || 0);
-  const notionalMinor = entry > 0 && size > 0 ? Math.trunc(entry * size * 100) : 0;
+  let notionalMinor = 0;
   const missionId = String(order?.missionId || '').trim() || null;
   const missionOwner = missionOwnerId(req);
   let missionReservation = null;
@@ -2796,7 +2831,9 @@ async function executePaperOpenOnce(req, order, source = 'rest') {
     throw rejectedPaperError('scope: this key cannot trade (missing trade-paper)', 403, 'trade-paper-scope-required', receipt);
   }
 
-  await enforcePaperPreflightBinding(req, order, source, attempt);
+  const preflight = await enforcePaperPreflightBinding(req, order, source, attempt);
+  const fill = serverPaperFill(preflight, order);
+  notionalMinor = fill.fillPrice > 0 && size > 0 ? Math.ceil(fill.fillPrice * size * 100) : 0;
 
   if (missionId) {
     missionReservation = missions.reserveMissionTrade({
@@ -2833,7 +2870,9 @@ async function executePaperOpenOnce(req, order, source = 'rest') {
 
   try {
     const brokerStartedAt = Date.now();
-    const placed = await getBroker('paper').placeOrder({ ...(order || {}), accountId: attempt.accountId });
+    const placed = await getBroker('paper').placeOrder({
+      ...(order || {}), entry: fill.fillPrice, accountId: attempt.accountId,
+    });
     attempt.brokerMs = Date.now() - brokerStartedAt;
     const settlementStartedAt = Date.now();
     const settled = settleAgentSpend(gate, !!placed.ok);
@@ -2844,7 +2883,7 @@ async function executePaperOpenOnce(req, order, source = 'rest') {
       const receipt = writePaperReceipt(req, attempt, {
         outcome: 'reversed', execution: {
           status: 'reversed', fillPrice: placed.position?.entry,
-          fillAuthority: 'client-supplied-paper-entry', feeUsd: 0,
+          ...fill, feeUsd: 0,
         }, gate, missionAuthorized: missionReservation?.ok === true,
         reasonCode: 'authorization-settlement-failed', detail: 'The simulated fill was reversed.',
       });
@@ -2869,7 +2908,7 @@ async function executePaperOpenOnce(req, order, source = 'rest') {
         const receipt = writePaperReceipt(req, attempt, {
           outcome: 'reversed', execution: {
             status: 'reversed', fillPrice: placed.position?.entry,
-            fillAuthority: order?.entry ? 'client-supplied-paper-entry' : 'server-market', feeUsd: 0,
+            ...fill, feeUsd: 0,
           }, gate, missionAuthorized: false,
           reasonCode: 'mission-settlement-failed', detail: 'The simulated fill was reversed.',
         });
@@ -2881,7 +2920,7 @@ async function executePaperOpenOnce(req, order, source = 'rest') {
       receipt = writePaperReceipt(req, attempt, {
         outcome: 'accepted', execution: {
           status: 'filled', fillPrice: placed.position?.entry,
-          fillAuthority: order?.entry ? 'client-supplied-paper-entry' : 'server-market', feeUsd: 0,
+          ...fill, feeUsd: 0,
         }, gate, missionAuthorized: missionReservation?.ok === true,
         decision: 'allow', reasonCode: 'paper-fill-verified', detail: 'Simulated paper fill completed inside authorization rails.',
       });
@@ -3576,8 +3615,8 @@ const API_INDEX = {
   execution: [
     { path: '/api/account', method: 'GET', purpose: 'light per-account snapshot for UI topbar: cash, equity, openPositions, lastTrades' },
     { path: '/api/paper', method: 'GET', purpose: 'account + open positions + journal (mark-to-market)' },
-    { path: '/api/paper/preflight', method: 'POST', body: '{intentId,symbol,side,size,entry,stop?,target?,walletId,pactId,missionId?,recipient?,protocol?}', purpose: 'read-only one-intent paper execution preflight; fresh quote, spread/slippage estimate, paper cash, wallet/Pact limits and optional mission checks; creates no reservation, receipt, intent or trade' },
-    { path: '/api/paper/open', method: 'POST', body: '{intentId,preflightFingerprint,symbol,side,size,entry,stop?,target?,reason?,confidence?,walletId,pactId,missionId?,recipient?,protocol?}', purpose: 'idempotent paper open; agent-key requests require a matching unexpired preflight fingerprint + trade-paper scope + owned wallet + active wallet-bound Pact; changed evidence fails closed before reservations or broker work' },
+    { path: '/api/paper/preflight', method: 'POST', body: '{intentId,symbol,side,size,entry,maxSlippageBps,stop?,target?,walletId,pactId,missionId?,recipient?,protocol?}', purpose: 'read-only one-intent paper execution preflight; fresh bid/ask, hard spread cap, caller slippage tolerance, server-fill notional, paper cash, wallet/Pact limits and optional mission checks' },
+    { path: '/api/paper/open', method: 'POST', body: '{intentId,preflightFingerprint,symbol,side,size,entry,maxSlippageBps,stop?,target?,reason?,confidence?,walletId,pactId,missionId?,recipient?,protocol?}', purpose: 'idempotent server-priced paper open; long fills use the bound ask, short fills use the bound bid; agent-key requests require a matching unexpired preflight fingerprint and authoritative wallet/Pact rails' },
     { path: '/api/paper/close', method: 'POST', body: '{intentId,positionId}', purpose: 'idempotent close at a server-observed price (client exit prices are ignored)' },
     { path: '/api/paper/stats', method: 'GET', purpose: 'journal statistics (win rate, P&L)' },
     { path: '/api/execution-receipts', method: 'GET', query: 'limit=1..200', purpose: 'private SHA-256-chained paper execution receipts with pricing, authorization, cost and latency evidence' },

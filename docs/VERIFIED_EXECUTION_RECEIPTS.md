@@ -13,7 +13,8 @@ Each receipt contains:
 - sanitized reasoning summary and confidence;
 - cached server quote source, observation age, bid/ask spread and entry
   deviation when an observation exists;
-- simulated fill price, fill authority, zero-fee paper model and close P&L;
+- simulated fill price, server bid/ask authority, requested slippage ceiling,
+  realized slippage, price improvement, zero-fee paper model and close P&L;
 - paper scope, wallet/Pact gate and mission-gate results as booleans;
 - an opaque execution-intent reference and retry-protection flag;
 - policy decision and bounded reason code;
@@ -39,11 +40,16 @@ evidence, not a public-chain attestation or a claim of external execution.
 
 ## Honest paper-fill semantics
 
-An explicit paper entry remains a client-supplied simulated fill and is labeled
-`client-supplied-paper-entry`. A close ignores any client exit price and records
-`server-market` or `server-last-observed`. Cached quote evidence never triggers
-an extra network request in the execution path: if no cached observation exists,
-the receipt says so instead of fabricating freshness or slippage.
+The client entry is a requested reference, never fill authority. Paper opens
+obtain a fresh server quote during bound preflight: longs fill at the ask and
+shorts at the bid. The same quote determines cash, wallet, Pact and mission
+authorization. Spread above 100 basis points, stale quotes, and adverse
+slippage above the caller's bounded `maxSlippageBps` fail before reservations
+or broker work. Receipts label accepted opens `server-top-of-book-ask` or
+`server-top-of-book-bid` and record slippage or price improvement.
+
+A close ignores any client exit price and records `server-market` or
+`server-last-observed`.
 
 No live order, token action or public-chain action is part of this feature.
 
