@@ -42,7 +42,11 @@ try {
       preflightProtected: true, preflightFingerprint,
     },
     market,
-    execution: { status: 'filled', fillPrice: 0.00402, fillAuthority: 'client-supplied-paper-entry', feeUsd: 0 },
+    execution: {
+      status: 'filled', fillPrice: 0.00401, fillAuthority: 'server-top-of-book-ask',
+      maxSlippageBps: 50, slippageBps: 25, slippageUsd: 0.01,
+      priceImprovementUsd: 0, feeUsd: 0,
+    },
     authorization: {
       principal: 'user-agent', tradePaperScope: true, walletPactRequired: true,
       walletPactAuthorized: true, missionRequired: true, missionAuthorized: true,
@@ -58,6 +62,11 @@ try {
   assert.equal(accepted.authorization.walletPactAuthorized, true);
   assert.equal(accepted.execution.simulated, true);
   assert.equal(accepted.execution.feeUsd, 0);
+  assert.equal(accepted.execution.fillAuthority, 'server-top-of-book-ask');
+  assert.equal(accepted.execution.maxSlippageBps, 50);
+  assert.equal(accepted.execution.slippageBps, 25);
+  assert.equal(accepted.execution.slippageUsd, 0.01);
+  assert.equal(accepted.execution.priceImprovementUsd, 0);
   assert.equal(accepted.order.intentProtected, true);
   assert.equal(accepted.order.intentRef, intents.executionIntentRef(accountId, intentId));
   assert.equal(accepted.order.preflightProtected, true);
@@ -108,6 +117,7 @@ try {
   assert.match(protocol, /paper_execution_receipts/);
   assert.match(app, /Verified Execution Receipts/);
   assert.match(app, /quote age/);
+  assert.match(app, /slippage.*maxSlippageBps/);
 
   console.log('verified execution receipt checks passed');
 } finally {

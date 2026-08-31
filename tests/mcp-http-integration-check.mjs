@@ -114,7 +114,7 @@ async function mcp(method, params = {}, { key = null, bearer = null, name = null
 
 async function boundOpenArguments(intentId, overrides = {}, key = keyA.key) {
   const order = {
-    intentId, symbol: 'AAPL', side: 'long', size: 1, entry: 10,
+    intentId, symbol: 'IOST', side: 'long', size: 1, entry: 10, maxSlippageBps: 100,
     walletId: wallet.walletId, pactId: pact.pactId,
     reason: 'MCP integration test', ...overrides,
   };
@@ -213,7 +213,7 @@ try {
   }));
   const preflightResult = await mcp('tools/call', {
     name: 'paper_trade_preflight',
-    arguments: { intentId: 'mcp-preflight-readonly-0000', symbol: 'ZZZUNKNOWN', side: 'long', size: 1, entry: 10, walletId: wallet.walletId, pactId: pact.pactId },
+    arguments: { intentId: 'mcp-preflight-readonly-0000', symbol: 'ZZZUNKNOWN', side: 'long', size: 1, entry: 10, maxSlippageBps: 100, walletId: wallet.walletId, pactId: pact.pactId },
   }, { key: keyA.key, name: 'paper_trade_preflight' });
   assert.equal(preflightResult.status, 200);
   assert.equal(preflightResult.body.result.isError, false);
@@ -302,6 +302,11 @@ try {
   assert.equal(opened.body.result.structuredContent.receipt.authorization.walletPactAuthorized, true);
   assert.equal(opened.body.result.structuredContent.receipt.authorization.preflightAuthorized, true);
   assert.equal(opened.body.result.structuredContent.receipt.order.preflightFingerprint, openArguments.preflightFingerprint);
+  assert.equal(opened.body.result.structuredContent.position.entry, 10.01);
+  assert.equal(opened.body.result.structuredContent.receipt.execution.fillPrice, 10.01);
+  assert.equal(opened.body.result.structuredContent.receipt.execution.fillAuthority, 'server-top-of-book-ask');
+  assert.equal(opened.body.result.structuredContent.receipt.execution.slippageBps, 10);
+  assert.equal(opened.body.result.structuredContent.receipt.execution.maxSlippageBps, 100);
   assert.equal(opened.body.result.structuredContent.executionIntent.replayed, false);
   const positionId = opened.body.result.structuredContent.position.id;
 
@@ -366,6 +371,7 @@ try {
   // only by the same user's scoped key and an exact wallet-bound Pact.
   const accountWalletArguments = await boundOpenArguments('mcp-account-wallet-0003', {
     walletId: accountWallet.walletId, pactId: accountPact.pactId,
+    side: 'short',
     reason: 'Owner-control wallet integration test',
   });
   const accountWalletOpened = await mcp('tools/call', {
@@ -374,6 +380,9 @@ try {
   }, { key: keyA.key, name: 'paper_trade_open' });
   assert.equal(accountWalletOpened.status, 200);
   assert.equal(accountWalletOpened.body.result.structuredContent.ok, true, JSON.stringify(accountWalletOpened.body));
+  assert.equal(accountWalletOpened.body.result.structuredContent.position.entry, 9.99);
+  assert.equal(accountWalletOpened.body.result.structuredContent.receipt.execution.fillPrice, 9.99);
+  assert.equal(accountWalletOpened.body.result.structuredContent.receipt.execution.fillAuthority, 'server-top-of-book-bid');
 
   const closed = await mcp('tools/call', {
     name: 'paper_trade_close', arguments: { intentId: 'mcp-close-integration-0004', positionId, exitPrice: 11 },

@@ -14,8 +14,9 @@ proposal, token action, or public-chain action.
 The response includes:
 
 - a fresh server-observed quote, age and expiry;
-- bid, ask, spread and top-of-book slippage estimates when available;
-- requested notional, zero-fee paper cost model and estimated total;
+- bid, ask, spread, execution side and top-of-book slippage estimates;
+- caller-selected slippage tolerance capped at 100 basis points;
+- requested notional, server-fill notional, zero-fee paper cost model and estimated total;
 - paper cash sufficiency;
 - current trade-paper scope, wallet ownership/status/capability, wallet spend
   limits and active wallet-bound Pact authorization;
@@ -40,8 +41,10 @@ returns its original outcome; using a different intent changes the fingerprint.
 
 The estimate is evidence, not a fill guarantee. The slippage model uses the
 currently observed top-of-book spread and does not claim order-book depth or
-future liquidity. A preflight expires with its quote and execution rechecks the
-authoritative wallet, Pact, mission, spend and cash rails.
+future liquidity. Spread above 100 basis points or adverse slippage above the
+request's `maxSlippageBps` fails closed. A preflight expires with its quote.
+Execution rechecks the authoritative wallet, Pact, mission, spend and cash
+rails, then uses that exact bound ask for a long or bid for a short.
 
 ## Verification
 

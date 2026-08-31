@@ -2849,7 +2849,7 @@ async function renderJournal() {
           return `<tr>
             <td><span class="chip ${outcomeClass}">${esc(r.outcome)}</span><small>${esc(r.policy?.reasonCode || '')}</small></td>
             <td><strong>${esc(r.order?.symbol || '—')}</strong> ${esc(r.action)} · ${esc(r.order?.side || '')}<small>${r.order?.requestedNotionalUsd == null ? '—' : `$${fmtNum(r.order.requestedNotionalUsd)}`}</small></td>
-            <td>${r.execution?.fillPrice == null ? 'not filled' : fmtPrice(r.execution.fillPrice, 'crypto')}<small>${esc(r.execution?.fillAuthority || '')} · fee $${fmtNum(r.execution?.feeUsd || 0)}</small></td>
+            <td>${r.execution?.fillPrice == null ? 'not filled' : fmtPrice(r.execution.fillPrice, 'crypto')}<small>${esc(r.execution?.fillAuthority || '')} · ${r.execution?.slippageBps == null ? 'slippage —' : `slippage ${fmtNum(r.execution.slippageBps, 2)} / ${fmtNum(r.execution.maxSlippageBps, 2)} bps`} · fee $${fmtNum(r.execution?.feeUsd || 0)}</small></td>
             <td>${quote}<small>${r.market?.entryDeviationBps == null ? 'entry deviation unavailable' : `entry deviation ${r.market.entryDeviationBps} bps`}</small></td>
             <td>${esc(authority)}<small>paper-only · live unused</small></td>
             <td class="mono">${fmtNum(r.latency?.totalMs, 0)} ms<small>auth ${fmtNum(r.latency?.authorizationMs, 0)} · broker ${fmtNum(r.latency?.brokerMs, 0)}</small></td>
@@ -3063,7 +3063,8 @@ function openTradeModal(symbol = '', side = 'long', confidence = null) {
       <div class="field"><label>Symbol</label><input id="tSym" list="symList" value="${esc(symbol)}" placeholder="IOST"><datalist id="symList">${syms.split(',').map(s => `<option value="${s}">`).join('')}</datalist></div>
       <div class="field"><label>Side</label><select id="tSide"><option value="long" ${side === 'long' ? 'selected' : ''}>Long</option><option value="short" ${side === 'short' ? 'selected' : ''}>Short</option></select></div>
       <div class="field"><label>Size (units)</label><input id="tSize" type="number" step="any" placeholder="e.g. 100000"></div>
-      <div class="field"><label>Entry <span class="dim">(blank = market)</span></label><input id="tEntry" type="number" step="any"></div>
+      <div class="field"><label>Price reference <span class="dim">(blank = market)</span></label><input id="tEntry" type="number" step="any"></div>
+      <div class="field"><label>Maximum slippage <span class="dim">(basis points)</span></label><input id="tSlippage" type="number" step="1" min="0" max="100" value="50"></div>
       <div class="field"><label>Stop</label><input id="tStop" type="number" step="any"></div>
       <div class="field"><label>Target</label><input id="tTarget" type="number" step="any"></div>
       <div class="field"><label>Trailing stop % <span class="dim">(0 = off)</span></label><input id="tTrailStop" type="number" step="0.1" min="0" max="50" placeholder="e.g. 3"></div>
@@ -3097,6 +3098,7 @@ function openTradeModal(symbol = '', side = 'long', confidence = null) {
     const body = {
       symbol: $('#tSym').value.trim().toUpperCase(), side: $('#tSide').value,
       size: +$('#tSize').value, entry: $('#tEntry').value ? +$('#tEntry').value : null,
+      maxSlippageBps: +($('#tSlippage').value || 50),
       stop: $('#tStop').value ? +$('#tStop').value : null, target: $('#tTarget').value ? +$('#tTarget').value : null,
       reason: $('#tReason').value, confidence: $('#tConf').value ? +$('#tConf').value : null,
       trailStopPct: $('#tTrailStop').value ? +$('#tTrailStop').value / 100 : null,

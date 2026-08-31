@@ -39,7 +39,9 @@ A user-bound MCP agent can read `paper_missions` and append bounded evidence
 with `paper_mission_checkpoint`. It cannot create, start, pause, stop, expand,
 or rebind a mission. A mission-aware `paper_trade_open` includes a unique
 retry-safe `intentId` plus `missionId` in addition to its exact `walletId` and
-`pactId`.
+`pactId`. The mission order also carries its bound preflight fingerprint and
+maximum-slippage ceiling; mission budget authorization uses the server bid/ask
+fill notional rather than the client's requested reference price.
 
 `paper_missions` returns a deliberately sanitized evidence view rather than the
 owner-control record. It includes the symbol allowlist, USD limits and usage,

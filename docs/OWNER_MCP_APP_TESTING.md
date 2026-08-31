@@ -35,7 +35,8 @@ inspect equity, drawdown, baseline and calibration charts. Use
 the returned SHA-256 hash. Before a paper trade test, call the read-only
 `paper_trade_preflight` tool with an explicit symbol, side, size, entry, owned
 `walletId`, active `pactId`, and the unique `intentId` reserved for this attempt.
-Review its quote expiry, estimated cost and
+Set an explicit `maxSlippageBps` no greater than 100. Review its quote expiry,
+bid/ask execution side, server-fill notional, estimated cost and
 machine-readable authorization checks. If it allows the request, call
 `paper_trade_open` with the same request, `intentId`, and returned
 `preflightFingerprint`, then close it with `paper_trade_close`. Confirm the result

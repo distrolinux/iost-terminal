@@ -18,9 +18,11 @@ request and reuse it after a network interruption.
   `execution-intent-conflict` without reaching authorization or the broker.
 - Concurrent duplicate requests share one in-process execution.
 
-Open request fingerprints cover every submitted execution field except the
-intent value itself. Close fingerprints cover the position identifier; legacy
-client exit prices remain ignored and cannot manufacture paper P&L.
+Open request hashes cover every submitted execution field except the intent
+value itself. The required preflight fingerprint separately binds that intent,
+the requested price, maximum slippage, fresh bid/ask, server-fill notional and
+authorization evidence. Close fingerprints cover the position identifier;
+legacy client exit prices remain ignored and cannot manufacture paper P&L.
 
 ## Crash behavior
 

@@ -5,6 +5,15 @@ const nativeFetch = globalThis.fetch;
 
 globalThis.fetch = async (input, init) => {
   const url = String(input?.url || input);
+  if (url.startsWith('https://www.okx.com/api/v5/market/ticker?instId=IOST-USDT')) {
+    return new Response(JSON.stringify({
+      code: '0', data: [{
+        last: '10', askPx: '10.01', bidPx: '9.99', open24h: '10',
+        high24h: '10.2', low24h: '9.8', volCcy24h: '1000',
+        volCcyQuote24h: '10000', ts: String(Date.now()),
+      }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
   if (url.startsWith('https://query1.finance.yahoo.com/v8/finance/chart/AAPL')) {
     return new Response(JSON.stringify({
       chart: {

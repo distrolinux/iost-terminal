@@ -7,7 +7,7 @@ const now = 1_788_131_500_000;
 const order = {
   intentId: 'preflight-intent-0001', symbol: 'IOST', side: 'long', size: 100, entry: 0.004,
   stop: 0.0035, target: 0.005, walletId: 'private-wallet-id',
-  pactId: 'private-pact-id', recipient: 'private-recipient', protocol: 'paper',
+  pactId: 'private-pact-id', recipient: 'private-recipient', protocol: 'paper', maxSlippageBps: 50,
 };
 const ticker = {
   source: 'Test Venue', last: 0.004, bid: 0.00399, ask: 0.00401,
@@ -33,6 +33,10 @@ assert.equal(allowed.market.fresh, true);
 assert.equal(allowed.market.quoteAgeMs, 250);
 assert.equal(allowed.market.expiresAt, ticker.observedAt + PAPER_PREFLIGHT_QUOTE_TTL_MS);
 assert.equal(allowed.market.estimateModel, 'top-of-book-spread-only');
+assert.equal(allowed.market.executionSide, 'ask');
+assert.equal(allowed.market.adverseSlippageBps, 25);
+assert.equal(allowed.request.maxSlippageBps, 50);
+assert.equal(allowed.request.estimatedFillNotionalUsd, 0.4);
 assert.equal(allowed.costs.estimatedFeeUsd, 0);
 assert.equal(allowed.costs.feeModel, 'paper-zero-fee');
 assert.equal(allowed.account.sufficient, true);
@@ -106,23 +110,38 @@ const badProtection = buildPaperTradePreflight({
 assert.equal(badProtection.decision, 'deny');
 assert.equal(badProtection.reasonCode, 'stop-valid');
 
+const tightSlippage = buildPaperTradePreflight({
+  order: { ...order, maxSlippageBps: 10 }, ticker, cashUsd: 100, authorization,
+  accountScope: 'private-account-id', supportedSymbols: ['IOST'], now,
+});
+assert.equal(tightSlippage.decision, 'deny');
+assert.equal(tightSlippage.reasonCode, 'slippage-within-limit');
+
+const wideSpread = buildPaperTradePreflight({
+  order, ticker: { ...ticker, bid: 0.0039, ask: 0.0041 }, cashUsd: 100, authorization,
+  accountScope: 'private-account-id', supportedSymbols: ['IOST'], now,
+});
+assert.equal(wideSpread.decision, 'deny');
+assert.equal(wideSpread.reasonCode, 'spread-within-limit');
+
 const tools = buildMcpTools({ authenticated: true, scopes: ['read', 'trade-paper'] });
 const preflight = tools.find((tool) => tool.name === 'paper_trade_preflight');
 assert(preflight, 'paper_trade_preflight must be discoverable to scoped agents');
 assert.equal(preflight.annotations.readOnlyHint, true);
 assert.equal(preflight.annotations.destructiveHint, false);
 assert.equal(preflight.annotations.idempotentHint, true);
-for (const required of ['intentId', 'symbol', 'side', 'size', 'entry', 'walletId', 'pactId']) {
+for (const required of ['intentId', 'symbol', 'side', 'size', 'entry', 'maxSlippageBps', 'walletId', 'pactId']) {
   assert(preflight.inputSchema.required.includes(required), `${required} must be required`);
 }
 const open = tools.find((tool) => tool.name === 'paper_trade_open');
 assert(open.inputSchema.required.includes('preflightFingerprint'));
+assert(open.inputSchema.required.includes('maxSlippageBps'));
 assert.match(open.description, /preflight fingerprint/i);
 assert(!buildMcpTools().some((tool) => tool.name === 'paper_trade_preflight'), 'public clients must not receive private preflight');
 assert(!buildMcpTools({ authenticated: true, scopes: ['read'] }).some((tool) => tool.name === 'paper_trade_preflight'), 'read-only keys without trade-paper must not receive execution preflight');
 
 const server = readFileSync(new URL('../server.js', import.meta.url), 'utf8');
-assert.match(server, /const DISCOVERY_VERSION = '1\.24\.0'/);
+assert.match(server, /const DISCOVERY_VERSION = '1\.25\.0'/);
 assert.match(server, /enforcePaperPreflightBinding/);
 assert.match(server, /preflight-evidence-changed/);
 assert.match(server, /case 'paper_trade_preflight'/);
