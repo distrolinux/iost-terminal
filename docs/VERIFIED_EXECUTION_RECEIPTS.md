@@ -12,7 +12,8 @@ Each receipt contains:
 - action, symbol, side, size, requested entry and notional;
 - sanitized reasoning summary and confidence;
 - server quote source, observation age, bid/ask spread, multi-venue quorum,
-  exclusions, selected route and entry deviation;
+  exclusions, best-price anchor, price-protected quality score, rolling venue
+  reliability, circuit state, failover reason, selected route and entry deviation;
 - simulated fill price, server bid/ask authority, requested slippage ceiling,
   realized slippage, price improvement, zero-fee paper model and close P&L;
 - paper scope, wallet/Pact gate and mission-gate results as booleans;
@@ -47,7 +48,10 @@ evidence, not a public-chain attestation or a claim of external execution.
 
 The client entry is a requested reference, never fill authority. Crypto paper
 opens require at least two fresh consensus-approved quotes during preflight.
-Longs route to the lowest trusted ask and shorts to the highest trusted bid.
+Longs anchor to the lowest trusted ask and shorts to the highest trusted bid.
+Within a strict 10-basis-point price envelope, the quality engine may select a
+faster, more reliable venue; degraded venues fail over and all route evidence
+is receipt-bound.
 The same routed quote determines cash, wallet, Pact and mission
 authorization. Spread above 100 basis points, stale quotes, and adverse
 slippage above the caller's bounded `maxSlippageBps` fail before reservations

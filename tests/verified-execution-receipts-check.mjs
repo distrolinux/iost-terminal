@@ -25,6 +25,21 @@ try {
         trustedVenueCount: 3, excludedVenueCount: 0, excludedVenues: [],
         consensusPrice: 0.004, maximumOutlierBps: 100, maximumVenueSpreadBps: 100, maximumObservedDeviationBps: 2,
         routeVenue: 'KuCoin', routeLatencyMs: 18, executionSide: 'ask',
+        executionQuality: {
+          required: true, decision: 'allow', reasonCode: 'execution-quality-passed', executionSide: 'ask',
+          bestPriceVenue: 'OKX', bestPrice: 0.004, selectedVenue: 'KuCoin', selectedPrice: 0.00401,
+          selectedScore: 96.5, selectedTier: 'excellent', selectedLatencyMs: 18,
+          selectedReliabilityPct: 100, latencySloMet: true, failoverApplied: true,
+          failoverFromVenue: 'OKX', failoverReason: 'quality-score', eligibleVenueCount: 2, degradedVenueCount: 0,
+          policy: { maximumPriceTradeoffBps: 10, targetLatencyMs: 500, maximumLatencyMs: 2_500,
+            minimumReliabilityPct: 90, minimumReliabilitySamples: 5, circuitBreakerFailures: 3,
+            weights: { price: 0.45, latency: 0.35, reliability: 0.2 } },
+          venues: [{ source: 'KuCoin', bid: 0.00399, ask: 0.00401, latencyMs: 18,
+            reliabilityPct: 100, sampleCount: 20, consecutiveFailures: 0, circuitOpen: false,
+            priceDeltaBps: 2.5, withinPriceProtection: true, reliabilitySloMet: true,
+            latencySloMet: true, eligible: true, priceScore: 87.5, latencyScore: 96.4,
+            reliabilityScore: 100, score: 93, tier: 'excellent', status: 'eligible' }],
+        },
         venues: [{ source: 'KuCoin', bid: 0.00399, ask: 0.00401, high24h: 0.0041, low24h: 0.0039, observedAt: 1_000, ageMs: 25, latencyMs: 18, consensusDeviationBps: 1, spreadBps: 50 }],
       },
     },
@@ -40,6 +55,10 @@ try {
   assert.equal(market.quoteIntegrity.quorumMet, true);
   assert.equal(market.quoteIntegrity.routeVenue, 'KuCoin');
   assert.equal(market.quoteIntegrity.routeLatencyMs, 18);
+  assert.equal(market.quoteIntegrity.executionQuality.selectedScore, 96.5);
+  assert.equal(market.quoteIntegrity.executionQuality.failoverApplied, true);
+  assert.equal(market.quoteIntegrity.executionQuality.policy.maximumPriceTradeoffBps, 10);
+  assert.equal(market.quoteIntegrity.executionQuality.authorization.liveScopeUsed, false);
   assert.equal(market.quoteIntegrity.venues[0].high24h, 0.0041);
   assert.equal(market.quoteIntegrity.venues[0].low24h, 0.0039);
 
@@ -104,6 +123,9 @@ try {
   assert.equal(accepted.execution.slippageBps, 25);
   assert.equal(accepted.execution.slippageUsd, 0.01);
   assert.equal(accepted.execution.priceImprovementUsd, 0);
+  assert.equal(accepted.market.quoteIntegrity.executionQuality.selectedVenue, 'KuCoin');
+  assert.equal(accepted.market.quoteIntegrity.executionQuality.selectedReliabilityPct, 100);
+  assert.equal(accepted.market.quoteIntegrity.executionQuality.failoverReason, 'quality-score');
   assert.equal(accepted.order.intentProtected, true);
   assert.equal(accepted.order.intentRef, intents.executionIntentRef(accountId, intentId));
   assert.equal(accepted.order.preflightProtected, true);

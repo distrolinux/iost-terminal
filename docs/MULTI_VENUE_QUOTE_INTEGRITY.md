@@ -19,9 +19,13 @@ server concurrently observes OKX, KuCoin and Gate.io.
 
 ## Routing
 
-After quorum, a long routes to the lowest ask among trusted venues and a short
-routes to the highest bid. Equal prices prefer the lower-latency observation.
-The selected venue and price are bound into the HMAC preflight fingerprint.
+After quorum, the best ask for a long or best bid for a short establishes the
+price-protection anchor. The Execution Quality Engine may select a faster and
+more reliable trusted venue only when its price is within 10 basis points of
+that anchor. Circuit-open, reliability-degraded and excessively slow venues
+are ineligible. If no price-protected healthy venue remains, preflight denies.
+The selected venue, score, price tradeoff and failover reason are bound into
+the HMAC preflight fingerprint.
 Execution recomputes the evidence and fails closed if the quorum, route, price,
 account state or authorization changed.
 
@@ -32,7 +36,8 @@ reported as not requiring multi-venue quorum.
 
 Preflight and receipts report sanitized evidence: venue/trusted/excluded counts,
 exclusion reasons, consensus price, trusted deviation, route venue and latency,
-per-venue bid/ask/age/latency, and the simulated fill venue and slippage.
+per-venue bid/ask/age/latency, quality score, reliability window, circuit state,
+price tradeoff, failover reason, and the simulated fill venue and slippage.
 
 No API credential, wallet identifier, Pact identifier, live order or
 public-chain action is part of quote selection.
@@ -41,6 +46,7 @@ public-chain action is part of quote selection.
 
 ```bash
 node tests/multi-venue-quote-integrity-check.mjs
+node tests/execution-quality-engine-check.mjs
 node tests/mcp-http-integration-check.mjs
 node tests/verified-execution-receipts-check.mjs
 ```

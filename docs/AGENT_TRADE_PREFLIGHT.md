@@ -16,8 +16,9 @@ The response includes:
 - a fresh server-observed quote, age and expiry;
 - crypto quote quorum across OKX, KuCoin and Gate.io, with stale, malformed and
   consensus-outlier venues excluded;
-- best trustworthy bid or ask, routed venue, latency, spread, execution side
-  and top-of-book slippage estimates;
+- best-price anchor plus price-protected execution-quality routing across
+  venue price, latency and rolling reliability; circuit-breaker state,
+  failover reason, routed venue, spread, execution side and slippage estimates;
 - caller-selected slippage tolerance capped at 100 basis points;
 - requested notional, server-fill notional, zero-fee paper cost model and estimated total;
 - paper cash sufficiency;
@@ -45,7 +46,8 @@ that will be used for execution. `paper_trade_open` requires the returned
 `preflightFingerprint`.
 The server recomputes the fingerprint with an HMAC-bound account, order, quote,
 cash, portfolio exposure, concentration, correlated sleeve, drawdown, daily
-loss, protective-stop, cached volatility, wallet/Pact, spend-limit and optional
+loss, protective-stop, cached volatility, execution-quality route,
+wallet/Pact, spend-limit and optional
 mission snapshot immediately before any reservation or broker work. Missing,
 denied, expired, or changed evidence
 fails closed with an idempotent rejection receipt. Replaying the same intent
@@ -57,7 +59,8 @@ future liquidity. Crypto requires two fresh consensus-approved venues. Failed
 quorum, spread above 100 basis points, or adverse slippage above the request's
 `maxSlippageBps` fails closed. A preflight expires with its quote.
 Execution rechecks the authoritative wallet, Pact, mission, spend and cash
-rails, then uses that exact bound ask for a long or bid for a short.
+rails, then uses that exact bound price-protected ask for a long or bid for a
+short. A materially worse price can never win merely by being faster.
 An advancing evidence-age timer does not invalidate an otherwise identical
 fingerprint, but a changed volatility source, freshness class, regime, dynamic
 cap or portfolio capacity does.
@@ -67,6 +70,7 @@ cap or portfolio capacity does.
 ```bash
 node tests/agent-trade-preflight-check.mjs
 node tests/multi-venue-quote-integrity-check.mjs
+node tests/execution-quality-engine-check.mjs
 node tests/portfolio-risk-governor-check.mjs
 node tests/volatility-sentinel-check.mjs
 node tests/mcp-http-integration-check.mjs

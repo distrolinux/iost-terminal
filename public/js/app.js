@@ -2844,8 +2844,9 @@ async function renderJournal() {
             ? `${esc(r.market.source || 'market')} · ${r.market.quoteAgeMs == null ? 'age unknown' : `${r.market.quoteAgeMs} ms`} · spread ${r.market.spreadBps == null ? '—' : `${r.market.spreadBps} bps`}`
             : 'No cached server quote';
           const integrity = r.market?.quoteIntegrity;
+          const quality = integrity?.executionQuality;
           const routeEvidence = integrity?.required
-            ? `${integrity.quorumMet ? 'quorum verified' : 'quorum denied'} · ${fmtNum(integrity.trustedVenueCount, 0)}/${fmtNum(integrity.quoteCount, 0)} venues · route ${esc(integrity.routeVenue || 'none')}${integrity.routeLatencyMs == null ? '' : ` ${fmtNum(integrity.routeLatencyMs, 0)} ms`}`
+            ? `${integrity.quorumMet ? 'quorum verified' : 'quorum denied'} · ${fmtNum(integrity.trustedVenueCount, 0)}/${fmtNum(integrity.quoteCount, 0)} venues · route ${esc(integrity.routeVenue || 'none')}${integrity.routeLatencyMs == null ? '' : ` ${fmtNum(integrity.routeLatencyMs, 0)} ms`}${quality ? ` · quality ${fmtNum(quality.selectedScore, 1)}/100 ${esc(quality.selectedTier || '')} · reliability ${fmtNum(quality.selectedReliabilityPct, 1)}%${quality.failoverApplied ? ` · failover from ${esc(quality.failoverFromVenue || 'unknown')} (${esc(quality.failoverReason || 'quality')})` : ' · primary route'}` : ''}`
             : 'single-source market';
           const authority = r.authorization?.walletPactRequired
             ? `${r.authorization.walletPactAuthorized ? 'wallet/Pact verified' : 'wallet/Pact denied'}${r.order?.missionAttached ? ` · mission ${r.authorization.missionAuthorized ? 'verified' : 'denied'}` : ''}`

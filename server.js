@@ -700,7 +700,7 @@ ${s?.autopilot?.enabled ? `enabled (${s.autopilot.ticks} ticks)${s.autopilot.con
 ### Agent access
 - **Read state (no auth):** [/api/ui-state](/api/ui-state) · [/api/scores](/api/scores) · [/api/scanner](/api/scanner) · [/api/news](/api/news) · [/api/onchain](/api/onchain) · [/api/probability](/api/probability)
 - **Authenticate:** mint an agent key in the app (Portfolio → AI Agents) → send as \`X-API-Key: itk_…\`, or OAuth 2.0 client_credentials → Bearer token ([/auth.md](/auth.md))
-- **Trade (paper):** preflight with a unique 8-128 character \`intentId\`; crypto requires a fresh two-venue quote quorum and routes to the best trusted ask/bid. Then POST /api/paper/open with that intent and the returned \`preflightFingerprint\`; exact retries return the original outcome, changed evidence fails closed, and opens require a \`trade-paper\`-scoped key + owned walletId + active wallet-bound pactId
+- **Trade (paper):** preflight with a unique 8-128 character \`intentId\`; crypto requires a fresh two-venue quote quorum and uses price-protected venue-quality routing with automatic degraded-venue failover. Then POST /api/paper/open with that intent and the returned \`preflightFingerprint\`; exact retries return the original outcome, changed evidence fails closed, and opens require a \`trade-paper\`-scoped key + owned walletId + active wallet-bound pactId
 - **Live:** proposals only — owner approves before anything executes (option C, human-in-the-loop)
 `;
 }
@@ -778,7 +778,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.28.0';
+const DISCOVERY_VERSION = '1.29.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -834,7 +834,7 @@ const OPENAPI_PATHS = {
   '/api/signals/feed': { get: { summary: 'Public signal feed with on-chain proof status', tags: ['agents'], security: [] } },
   '/api/autopilot/proposals': { get: { summary: 'Pending human-in-the-loop proposals with full reasoning', tags: ['autonomy'], security: [] } },
   '/api/paper': { get: { summary: 'Account + open positions + journal (mark-to-market)', tags: ['execution'] } },
-  '/api/paper/preflight': { post: { summary: 'Read-only paper trade preflight with multi-venue quote integrity, routed price, estimated cost and authorization evidence', tags: ['execution'] } },
+  '/api/paper/preflight': { post: { summary: 'Read-only paper trade preflight with multi-venue quote integrity, price-protected execution-quality routing, estimated cost and authorization evidence', tags: ['execution'] } },
   '/api/paper/open': { post: { summary: 'Open paper trade', tags: ['execution'] } },
   '/api/paper/close': { post: { summary: 'Close paper trade', tags: ['execution'] } },
   '/api/execution-receipts': { get: { summary: 'Private tamper-evident paper execution receipts and chain verification', tags: ['execution'] } },
@@ -3643,7 +3643,7 @@ const API_INDEX = {
     { path: '/api/paper/open', method: 'POST', body: '{intentId,preflightFingerprint,symbol,side,size,entry,maxSlippageBps,stop?,target?,reason?,confidence?,walletId,pactId,missionId?,recipient?,protocol?}', purpose: 'idempotent server-priced paper open; agents require a protective stop and matching unexpired quote-integrity, portfolio-risk and wallet/Pact evidence; crypto longs use the best consensus-approved ask and shorts the best bid' },
     { path: '/api/paper/close', method: 'POST', body: '{intentId,positionId}', purpose: 'idempotent close at a server-observed price (client exit prices are ignored)' },
     { path: '/api/paper/stats', method: 'GET', purpose: 'journal statistics (win rate, P&L)' },
-    { path: '/api/execution-receipts', method: 'GET', query: 'limit=1..200', purpose: 'private SHA-256-chained paper execution receipts with pricing, volatility source/regime, dynamic portfolio capacity, authorization, cost and latency evidence' },
+    { path: '/api/execution-receipts', method: 'GET', query: 'limit=1..200', purpose: 'private SHA-256-chained paper execution receipts with pricing, venue quality/failover, volatility source/regime, dynamic portfolio capacity, authorization, cost and latency evidence' },
     { path: '/api/execution-intents', method: 'GET', query: 'limit=1..200', purpose: 'private replay-safe paper execution intent states; pending intents fail closed as outcome-unknown after restart' },
     { path: '/api/execution-intents/:intentId', method: 'GET', purpose: 'private status lookup for one paper execution intent' },
     { path: '/api/paper/reset', method: 'POST', purpose: 'reset paper account' },
