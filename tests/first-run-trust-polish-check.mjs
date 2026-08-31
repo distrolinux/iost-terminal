@@ -43,8 +43,8 @@ assert.doesNotMatch(home, /Live social proof · paper competition/);
 assert.match(css, /\.nav-group-label/);
 assert.match(css, /\.nav-palette/);
 assert.match(css, /@media \(max-width: 860px\)[\s\S]*\.nav-group \{ display: contents; \}/);
-assert.match(html, /\/css\/style\.css\?v=2\.21/);
-assert.match(html, /\/js\/app\.js\?v=2\.32\.0/);
+assert.match(html, /\/css\/style\.css\?v=2\.22/);
+assert.match(html, /\/js\/app\.js\?v=2\.33\.0/);
 assert.match(html, /\/js\/onboarding\.js\?v=1\.2\.0/);
 
 console.log('First-run experience and trust-polish checks passed');

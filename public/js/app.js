@@ -2564,7 +2564,7 @@ async function askAssistant(q) {
 async function renderEvaluationLab() {
   const el = $('#view-evaluation');
   el.innerHTML = `
-    <div class="section-title">Agent Evaluation Lab <span class="sub">walk-forward evidence · realistic execution costs · fail-closed paper review</span></div>
+    <div class="section-title">Agent Evaluation Lab <span class="sub">walk-forward evidence · strategy scorecards · fail-closed paper lifecycle</span></div>
     <div class="eval-boundary" role="status"><strong>PAPER EVIDENCE · FAIL-CLOSED</strong><span>This lab never enables live trading, token actions or public-chain writes.</span></div>
     <ol class="eval-pipeline" aria-label="Evaluation methodology">
       <li><span>01</span><strong>Freeze</strong><small>strategy parameters</small></li>
@@ -2572,7 +2572,7 @@ async function renderEvaluationLab() {
       <li><span>03</span><strong>Execute</strong><small>next-bar-open</small></li>
       <li><span>04</span><strong>Charge costs</strong><small>fee + spread + slip</small></li>
       <li><span>05</span><strong>Challenge</strong><small>baselines + calibration</small></li>
-      <li><span>06</span><strong>Hold or review</strong><small>paper candidate only</small></li>
+      <li><span>06</span><strong>Govern</strong><small>shadow · restrict · pause · review</small></li>
     </ol>
     <div class="eval-layout">
       <form class="card eval-form" id="evalForm">
@@ -2598,7 +2598,7 @@ async function renderEvaluationLab() {
         <div class="eval-await">
           <span class="eval-orbit" aria-hidden="true">⌬</span>
           <strong>Awaiting strategy evidence</strong>
-          <p>The lab will expose out-of-sample performance, costs, calibration, baselines and every reason the promotion gate holds.</p>
+          <p>The lab will expose out-of-sample performance, costs, calibration, baselines, a strategy scorecard and every lifecycle reason.</p>
         </div>
       </section>
     </div>
@@ -2637,6 +2637,7 @@ async function renderEvaluationLab() {
 
 function renderEvaluationResult(out, data) {
   const m = data.metrics || {}; const gate = data.promotion || {}; const cal = data.calibration || {};
+  const scorecard = gate.scorecard || {}; const lifecycle = scorecard.lifecycle || {}; const components = scorecard.components || {};
   const pass = gate.allowed === true;
   const metric = (label, value, sub, cls = '') => `<div class="card kpi"><span class="k-label">${label}</span><span class="k-value ${cls}">${value}</span><span class="k-sub">${sub}</span></div>`;
   const baselineRows = Object.entries(data.baselines || {}).map(([key, row]) => {
@@ -2645,12 +2646,20 @@ function renderEvaluationResult(out, data) {
   }).join('');
   const failures = (gate.failures || []).map(x => `<li>${esc(x.replaceAll('-', ' '))}</li>`).join('');
   const warnings = (data.warnings || []).map(x => `<li>${esc(x)}</li>`).join('');
+  const scoreRows = Object.entries({
+    'Risk-adjusted performance': components.riskAdjustedPerformance,
+    'Drawdown control': components.drawdownControl,
+    'Benchmark edge': components.benchmarkEdge,
+    'Confidence calibration': components.confidenceCalibration,
+    'Fold consistency': components.foldConsistency,
+    'Evidence depth': components.evidenceDepth,
+  }).map(([label, value]) => `<div class="promotion-component"><span>${label}</span><i><b style="width:${Math.max(0, Math.min(100, Number(value) || 0))}%"></b></i><strong>${value ?? '—'}</strong></div>`).join('');
   const folds = (data.folds || []).map(f => `<tr><td>${f.id}</td><td class="mono">${f.train.fromIndex}–${f.train.toIndex}</td><td class="mono">${f.test.fromIndex}–${f.test.toIndex}</td><td>${f.result?.trades ?? 0}</td><td class="${(f.result?.returnPct || 0) >= 0 ? 'up' : 'down'}">${(f.result?.returnPct || 0) > 0 ? '+' : ''}${fmtNum(f.result?.returnPct)}%</td></tr>`).join('');
   out.innerHTML = `
     <article class="eval-verdict ${pass ? 'is-pass' : 'is-hold'}">
-      <span class="eval-verdict-label">PROMOTION GATE · PAPER REVIEW ONLY</span>
-      <strong>${pass ? 'ELIGIBLE_FOR_PAPER_REVIEW' : 'HOLD'}</strong>
-      <p>${pass ? 'Evidence cleared every paper-review threshold. Human review is still required.' : 'The gate failed closed. No strategy state or execution permission changed.'}</p>
+      <span class="eval-verdict-label">STRATEGY GOVERNANCE · PAPER ONLY</span>
+      <strong>${esc(lifecycle.targetStage || (pass ? 'PAPER_REVIEW' : 'HOLD'))}</strong>
+      <p>${pass ? 'Evidence cleared every threshold for owner paper review.' : `${esc(lifecycle.action || 'HOLD')} is recommended; no authority changed.`} Human review remains required.</p>
     </article>
     <div class="grid g-3 eval-kpis">
       ${metric('OOS trades', m.trades ?? '—', `${m.wins ?? 0} wins · ${m.losses ?? 0} losses`)}
@@ -2663,6 +2672,16 @@ function renderEvaluationResult(out, data) {
       ${metric('Modeled costs', m.totalCosts != null ? `$${fmtNum(m.totalCosts)}` : '—', 'fees + spread + slippage')}
       ${metric('Calibration', cal.expectedCalibrationError != null ? fmtNum(cal.expectedCalibrationError, 4) : '—', `Brier ${fmtNum(cal.brierScore, 4)} · ${cal.observations ?? 0} observations`)}
     </div>
+    <section class="card promotion-scorecard" aria-label="Strategy promotion scorecard">
+      <div class="promotion-score"><span>STRATEGY SCORE</span><strong>${scorecard.score ?? '—'}</strong><b>GRADE ${esc(scorecard.grade || '—')}</b><small>${esc(scorecard.confidence || 'low')} evidence confidence</small></div>
+      <div class="promotion-components">${scoreRows}</div>
+      <div class="promotion-robustness">
+        <span><b>${scorecard.robustness?.positiveFoldPct ?? '—'}%</b> positive folds</span>
+        <span><b>${scorecard.robustness?.benchmarkAlphaPct ?? '—'}%</b> benchmark alpha</span>
+        <span><b>${esc(scorecard.robustness?.overfitRiskProxy || 'unknown')}</b> overfit-risk proxy</span>
+        <span><b>${lifecycle.executionPermissionsChanged === false ? 'unchanged' : 'unknown'}</b> execution authority</span>
+      </div>
+    </section>
     <div class="grid g-2 eval-detail-grid">
       <section class="card"><div class="section-title">Baseline challenge</div><div class="eval-baselines">${baselineRows}</div></section>
       <section class="card"><div class="section-title">Gate evidence</div>
@@ -2740,11 +2759,12 @@ async function loadEvaluationHistory() {
     <td><strong>${esc(run.symbol)}</strong><span class="eval-history-name">${esc(run.strategy?.name || run.strategy?.rule || 'strategy')}</span></td>
     <td>${esc(run.timeframe)}</td><td>${new Date(run.createdAt).toLocaleString()}</td>
     <td class="${(run.metrics?.cumulativeReturnPct || 0) >= 0 ? 'up' : 'down'}">${fmtNum(run.metrics?.cumulativeReturnPct)}%</td>
+    <td><strong class="mono">${run.promotion?.scorecard?.score ?? '—'}</strong><span class="eval-history-name">${esc(run.promotion?.scorecard?.lifecycle?.targetStage || 'HOLD')}</span></td>
     <td><span class="chip ${run.promotion?.allowed ? 'ok' : 'warn'}">${esc(run.promotion?.decision || 'HOLD')}</span></td>
     <td class="eval-history-actions"><button class="btn sm ghost" data-eval-view="${esc(run.id)}">View</button><a class="btn sm ghost" href="/api/evaluation-lab/history/${esc(run.id)}/export?format=json">JSON</a><a class="btn sm ghost" href="/api/evaluation-lab/history/${esc(run.id)}/export?format=csv">CSV</a></td>
   </tr>`).join('');
   box.innerHTML = `<div class="section-title">Private evaluation history <span class="sub">${runs.length}/${history.retention?.maxRuns || 25} retained · ${history.retention?.retentionDays || 90} days · owner-only</span><button class="btn sm" id="evalCompare" disabled>Compare selected</button></div>
-    ${rows ? `<div class="table-wrap"><table><thead><tr><th></th><th>Run</th><th>Bar</th><th>Created</th><th>Return</th><th>Gate</th><th>Evidence</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty">No saved evaluations yet.</div>'}`;
+    ${rows ? `<div class="table-wrap"><table><thead><tr><th></th><th>Run</th><th>Bar</th><th>Created</th><th>Return</th><th>Score</th><th>Gate</th><th>Evidence</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty">No saved evaluations yet.</div>'}`;
   const checks = [...box.querySelectorAll('[data-eval-compare]')]; const compare = $('#evalCompare');
   checks.forEach(check => check.addEventListener('change', () => {
     const selected = checks.filter(x => x.checked);

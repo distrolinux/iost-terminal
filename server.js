@@ -52,7 +52,7 @@ import * as management from './lib/management.js';
 import * as triggers from './lib/triggers.js';
 import { runBacktest, describeRule } from './lib/backtest.js';
 import { evaluateAgentStrategy } from './lib/evaluation.js';
-import { compareEvaluations, exportEvaluationCsv, exportEvaluationJson, getEvaluation, listEvaluations, saveEvaluation, secureEvaluationHistoryPermissions } from './lib/evaluation-history.js';
+import { compareEvaluations, exportEvaluationCsv, exportEvaluationJson, getEvaluation, listEvaluations, listStrategyScorecards, saveEvaluation, secureEvaluationHistoryPermissions } from './lib/evaluation-history.js';
 import { auditToken, smartMoney, AUDIT_CHAINS, SIGNAL_CHAINS } from './lib/binance-data.js';
 import session from 'express-session';
 import { FileSessionStore } from './lib/session-store.js';
@@ -250,7 +250,7 @@ app.use((req, res, next) => {
 app.use((req, res, next) => {
   const apiRequest = req.path.startsWith('/api/') || req.path.startsWith('/oauth/') || req.path === '/mcp';
   const authFlow = req.path.startsWith('/api/auth/');
-  const privateRoute = ['/api/evaluation-lab/history', '/api/account/', '/api/admin/', '/api/paper', '/api/agent-keys']
+  const privateRoute = ['/api/evaluation-lab/history', '/api/strategy-governance', '/api/account/', '/api/admin/', '/api/paper', '/api/agent-keys']
     .some((prefix) => req.path.startsWith(prefix));
   if (apiRequest && (authFlow || privateRoute || req.session?.userId || req.agentKey || req.userAgent)) {
     res.set('Cache-Control', 'private, no-store, max-age=0');
@@ -310,6 +310,7 @@ const AUDIT_ROUTES = [
   { re: /^\/api\/evaluation-lab\/history\/compare$/, method: 'GET', action: 'evaluation.history.compare' },
   { re: /^\/api\/evaluation-lab\/history\/[^/]+$/, method: 'GET', action: 'evaluation.history.read' },
   { re: /^\/api\/evaluation-lab\/history\/[^/]+\/export$/, method: 'GET', action: 'evaluation.export' },
+  { re: /^\/api\/strategy-governance$/, method: 'GET', action: 'strategy.governance.read' },
   { re: /^\/api\/audit$/, method: 'GET', action: 'audit.read' },
   { re: /^\/mcp$/, method: 'POST', action: 'mcp.request' },
 ];
@@ -778,7 +779,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.29.0';
+const DISCOVERY_VERSION = '1.30.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -829,6 +830,7 @@ const OPENAPI_PATHS = {
   '/api/evaluation-lab/history/compare': { get: { summary: 'Compare exactly two current-user evaluation runs', tags: ['analysis'], parameters: [{ name: 'ids', in: 'query', required: true, schema: { type: 'string' } }] } },
   '/api/evaluation-lab/history/{id}': { get: { summary: 'Read one current-user evaluation run', tags: ['analysis'], parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }] } },
   '/api/evaluation-lab/history/{id}/export': { get: { summary: 'Deterministic private JSON or CSV evidence export', tags: ['analysis'], parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }, { name: 'format', in: 'query', required: true, schema: { type: 'string', enum: ['json', 'csv'] } }] } },
+  '/api/strategy-governance': { get: { summary: 'Private evidence-bound strategy scorecards and paper-only lifecycle recommendations', tags: ['analysis'] } },
   '/api/token-audit': { post: { summary: 'Binance Web3 token security audit (honeypot/rug/tax scan)', tags: ['analysis'], security: [], requestBody: { content: { 'application/json': { schema: { type: 'object', properties: { contractAddress: { type: 'string' }, chainId: { type: 'string' } }, required: ['contractAddress'] } } } } } },
   '/api/smart-money': { get: { summary: 'Whale buy/sell signals (BSC/Solana)', tags: ['analysis'], security: [] } },
   '/api/signals/feed': { get: { summary: 'Public signal feed with on-chain proof status', tags: ['agents'], security: [] } },
@@ -1001,7 +1003,9 @@ Human-session paper execution remains unchanged.
 Endpoint: \`POST ${SITE_URL}/mcp\`. Public tools are read-only. A user-bound key or
 an MCP-resource-bound bearer token adds private evaluation/account tools,
 including \`paper_execution_receipts\` and \`paper_execution_intents\` with
-tamper-evident execution evidence and replay-safe intent status. The
+tamper-evident execution evidence and replay-safe intent status. The read-only
+\`strategy_promotion_scorecards\` tool returns evidence-bound paper lifecycle
+recommendations without changing agent authority. The
 \`trade-paper\` scope adds read-only \`paper_trade_preflight\` plus
 \`paper_trade_open\` and \`paper_trade_close\`.
 Both require a unique \`intentId\`; exact retries return the original terminal
@@ -1192,6 +1196,7 @@ async function mcpToolCall(req, name, args) {
       if (!ownerId) throw Object.assign(new Error('user-bound evaluation history required'), { status: 403 });
       return { ok: true, mode: 'paper-only', ...listEvaluations(ownerId, args?.limit) };
     }
+    case 'strategy_promotion_scorecards': return listStrategyScorecards(mcpEvaluationOwner(req), args?.limit);
     case 'evaluation_review': return mcpEvaluationReview(req, args);
     case 'evaluation_get': return mcpEvaluationGet(req, args?.runId);
     case 'evaluation_compare': return mcpEvaluationCompare(req, args?.runIds);
@@ -3603,6 +3608,7 @@ const API_INDEX = {
   backtest: { path: '/api/backtest', method: 'POST', body: '{symbol,timeframe?:1d|4h|1h|15m,strategy:{name?,side,entry:{rule:ma-cross|rsi|breakout|ai-score,params},exit:{stopPct?,targetPct?,trailingPct?,maxBars?},sizePct?}}', purpose: 'PUBLIC backtesting (FXReplay methodology): objective rules vs historical bars → expectancy, profit factor, max drawdown, Sharpe, vs buy-and-hold + per-trade journal. Honest caveats included.' },
   evaluationLab: { path: '/api/evaluation-lab', method: 'POST', body: '{symbol,timeframe,strategy,config?:{trainBars,testBars,stepBars,minimumTrades,costs:{feeBps,spreadBps,slippageBps}}}', purpose: 'AUTHENTICATED per-user paper-only rolling walk-forward evaluation with causal next-bar fills, realistic costs, baselines, calibration, evidence hashes, private retained history and a fail-closed paper-review gate.' },
   evaluationHistory: { path: '/api/evaluation-lab/history', method: 'GET', query: 'limit=1..retention maximum', purpose: 'List only the current user history. Read one run at /history/:id, compare two at /history/compare?ids=id1,id2, or export deterministic evidence at /history/:id/export?format=json|csv.' },
+  strategyGovernance: { path: '/api/strategy-governance', method: 'GET', query: 'limit=1..retention maximum', purpose: 'Private evidence-bound 0-100 strategy scorecards with paper-review, shadow, restriction or pause/demotion recommendations. Read-only; never changes authority.' },
   binanceData: [
     { path: '/api/token-audit', method: 'POST', body: '{contractAddress, chainId?:56|8453|CT_501|1}', purpose: 'PUBLIC Binance Web3 token security audit (honeypot/rug-pull/scam/tax scan). No keys. Proxy of web3.binance.com — result normalized: riskLevel 1-5, taxes, verified flag, risk-item checks. NOT investment advice.' },
     { path: '/api/smart-money', method: 'GET', query: 'chainId=56|CT_501&page=1&pageSize=20', purpose: 'PUBLIC Binance Web3 smart-money on-chain signals (BSC/Solana): buy/sell events from tracked whale wallets, trigger vs current price, max gain, exit rate, tags. 30s server cache. NOT investment advice.' },
@@ -4221,6 +4227,15 @@ app.get('/api/evaluation-lab/history/:id', requireUser, (req, res) => {
     const run = getEvaluation(ownerId, req.params.id);
     if (!run) return res.status(404).json({ error: 'evaluation run not found' });
     res.set('Cache-Control', 'private, no-store'); res.json({ ok: true, mode: 'paper-only', ...run });
+  } catch (error) { res.status(409).json({ ok: false, error: error.message }); }
+});
+
+app.get('/api/strategy-governance', requireUser, (req, res) => {
+  const ownerId = evaluationOwner(req);
+  if (!ownerId) return res.status(403).json({ error: 'user-bound strategy scorecards required' });
+  try {
+    res.set('Cache-Control', 'private, no-store');
+    res.json({ ok: true, ...listStrategyScorecards(ownerId, req.query.limit) });
   } catch (error) { res.status(409).json({ ok: false, error: error.message }); }
 });
 
