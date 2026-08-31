@@ -22,19 +22,26 @@ The response includes:
 - optional Mission Control symbol, order-size, trade-count, expiry and loss-halt
   authorization;
 - machine-readable checks, an allow/deny decision and reason code; and
-- a SHA-256 preflight fingerprint bound to the authenticated account, exact
-  request, observed quote and decision.
+- an HMAC-SHA-256 preflight fingerprint bound to the authenticated account, exact
+  execution intent, request, observed quote, cash and authorization decision.
 
 Wallet, Pact, account, recipient and mission identifiers are not returned.
 `liveScopeUsed` and `publicChainUsed` are always false.
 
 ## Boundaries
 
+Each agent preflight requires the same unique `intentId` that will be used for
+execution. `paper_trade_open` requires the returned `preflightFingerprint`.
+The server recomputes the fingerprint with an HMAC-bound account, order, quote,
+cash, wallet/Pact, spend-limit and optional mission snapshot immediately before
+any reservation or broker work. Missing, denied, expired, or changed evidence
+fails closed with an idempotent rejection receipt. Replaying the same intent
+returns its original outcome; using a different intent changes the fingerprint.
+
 The estimate is evidence, not a fill guarantee. The slippage model uses the
 currently observed top-of-book spread and does not claim order-book depth or
 future liquidity. A preflight expires with its quote and execution rechecks the
-authoritative wallet, Pact, mission, spend and cash rails. Execution remains a
-separate idempotent `paper_trade_open` call with a unique `intentId`.
+authoritative wallet, Pact, mission, spend and cash rails.
 
 ## Verification
 

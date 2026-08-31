@@ -15,6 +15,7 @@ try {
   const missionId = 'msn_acceptance123';
   const positionId = 'private-position-id';
   const intentId = 'private-execution-intent-0001';
+  const preflightFingerprint = 'a'.repeat(64);
 
   const market = receipts.marketEvidence({
     ticker: { last: 0.004, bid: 0.00399, ask: 0.00401, source: 'TEST', observedAt: 1_000, ageMs: 25, fresh: true },
@@ -38,12 +39,14 @@ try {
       requestedNotionalUsd: 4.02, confidence: 77,
       reasoningSummary: 'Momentum confirmation api_key=should-never-persist',
       missionAttached: true, missionId, positionId, intentProtected: true, intentId,
+      preflightProtected: true, preflightFingerprint,
     },
     market,
     execution: { status: 'filled', fillPrice: 0.00402, fillAuthority: 'client-supplied-paper-entry', feeUsd: 0 },
     authorization: {
       principal: 'user-agent', tradePaperScope: true, walletPactRequired: true,
       walletPactAuthorized: true, missionRequired: true, missionAuthorized: true,
+      preflightRequired: true, preflightAuthorized: true,
       walletId, pactId,
     },
     policy: { decision: 'allow', reasonCode: 'paper-fill-verified' },
@@ -57,6 +60,10 @@ try {
   assert.equal(accepted.execution.feeUsd, 0);
   assert.equal(accepted.order.intentProtected, true);
   assert.equal(accepted.order.intentRef, intents.executionIntentRef(accountId, intentId));
+  assert.equal(accepted.order.preflightProtected, true);
+  assert.equal(accepted.order.preflightFingerprint, preflightFingerprint);
+  assert.equal(accepted.authorization.preflightRequired, true);
+  assert.equal(accepted.authorization.preflightAuthorized, true);
 
   const rejected = receipts.recordExecutionReceipt({
     accountId,
