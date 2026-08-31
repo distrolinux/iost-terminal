@@ -65,6 +65,37 @@ const repeated = buildPaperTradePreflight({
 });
 assert.equal(repeated.preflightFingerprint, allowed.preflightFingerprint, 'same evidence must fingerprint identically');
 
+const portfolioRisk = {
+  decision: 'allow', reasonCode: 'portfolio-risk-passed',
+  policy: { maxOrderPct: 10, normalMaxOrderPct: 7.5 },
+  metrics: { volatilitySource: 'trusted-venue-24h-range', volatilityRegime: 'normal',
+    volatilityEvidenceAgeMs: 100, dynamicMaxOrderPct: 7.5 },
+  checks: [{ code: 'volatility-order-limit', pass: true }],
+  capacity: { available: true, maximumNewOrderUsd: 7_500,
+    maximumNewOrderPct: 7.5, limitingFactors: ['volatility-normal-limit'] },
+};
+const riskBound = buildPaperTradePreflight({
+  order, ticker, cashUsd: 100, authorization, portfolioRisk,
+  accountScope: 'private-account-id', supportedSymbols: ['IOST'], now,
+  bindingSecret: 'private-test-binding-secret',
+});
+const agedRiskBound = buildPaperTradePreflight({
+  order, ticker, cashUsd: 100, authorization,
+  portfolioRisk: { ...portfolioRisk, metrics: { ...portfolioRisk.metrics, volatilityEvidenceAgeMs: 250 } },
+  accountScope: 'private-account-id', supportedSymbols: ['IOST'], now,
+  bindingSecret: 'private-test-binding-secret',
+});
+assert.equal(agedRiskBound.preflightFingerprint, riskBound.preflightFingerprint,
+  'an advancing age timer must not invalidate unchanged volatility evidence');
+const changedCapacity = buildPaperTradePreflight({
+  order, ticker, cashUsd: 100, authorization,
+  portfolioRisk: { ...portfolioRisk, capacity: { ...portfolioRisk.capacity, maximumNewOrderUsd: 5_000 } },
+  accountScope: 'private-account-id', supportedSymbols: ['IOST'], now,
+  bindingSecret: 'private-test-binding-secret',
+});
+assert.notEqual(changedCapacity.preflightFingerprint, riskBound.preflightFingerprint,
+  'risk-capacity changes must invalidate the binding');
+
 const otherIntent = buildPaperTradePreflight({
   order: { ...order, intentId: 'preflight-intent-0002' }, ticker, cashUsd: 100,
   authorization, accountScope: 'private-account-id', supportedSymbols: ['IOST'], now,
@@ -155,6 +186,8 @@ assert.equal(preflight.annotations.destructiveHint, false);
 assert.equal(preflight.annotations.idempotentHint, true);
 assert.match(preflight.description, /multi-venue quote integrity/i);
 assert.match(preflight.description, /portfolio exposure/i);
+assert.match(preflight.description, /volatility fallback/i);
+assert.match(preflight.description, /dynamic risk-capacity/i);
 for (const required of ['intentId', 'symbol', 'side', 'size', 'entry', 'maxSlippageBps', 'stop', 'walletId', 'pactId']) {
   assert(preflight.inputSchema.required.includes(required), `${required} must be required`);
 }
@@ -168,7 +201,7 @@ assert(!buildMcpTools().some((tool) => tool.name === 'paper_trade_preflight'), '
 assert(!buildMcpTools({ authenticated: true, scopes: ['read'] }).some((tool) => tool.name === 'paper_trade_preflight'), 'read-only keys without trade-paper must not receive execution preflight');
 
 const server = readFileSync(new URL('../server.js', import.meta.url), 'utf8');
-assert.match(server, /const DISCOVERY_VERSION = '1\.27\.0'/);
+assert.match(server, /const DISCOVERY_VERSION = '1\.28\.0'/);
 assert.match(server, /enforcePaperPreflightBinding/);
 assert.match(server, /preflight-evidence-changed/);
 assert.match(server, /case 'paper_trade_preflight'/);
@@ -176,7 +209,7 @@ assert.match(server, /app\.post\('\/api\/paper\/preflight'/);
 const start = server.indexOf('function agentSpendPreflight');
 const end = server.indexOf('// A per-user agent key', start);
 const implementation = server.slice(start, end);
-for (const requiredCall of ['previewSpend(', 'previewPactSpend(', 'previewMissionTrade(', 'getAccount(']) {
+for (const requiredCall of ['previewSpend(', 'previewPactSpend(', 'previewMissionTrade(', 'getAccount(', 'buildVolatilitySentinel(']) {
   assert(implementation.includes(requiredCall), `preflight must use read-only ${requiredCall}`);
 }
 for (const forbiddenCall of ['reserveSpend(', 'reservePactSpend(', 'recordExecutionReceipt(', 'runExecutionIntent(', 'placeOrder(', 'openTrade(']) {

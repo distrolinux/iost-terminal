@@ -25,6 +25,10 @@ selected bid/ask and venue, server-fill notional, portfolio-risk decision and
 authorization evidence. A retry cannot substitute a different stop or reuse a
 fingerprint after exposure, drawdown, daily-loss or other bound risk evidence
 has changed.
+The volatility evidence age timer is intentionally excluded because it advances
+between two immediate checks of the same observation. Source, freshness class,
+regime, dynamic cap and calculated capacity remain bound and invalidate changed
+evidence.
 Close fingerprints cover the position identifier;
 legacy client exit prices remain ignored and cannot manufacture paper P&L.
 

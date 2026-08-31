@@ -2852,7 +2852,7 @@ async function renderJournal() {
             : 'human session';
           const risk = r.portfolioRisk;
           const riskEvidence = risk
-            ? `risk ${risk.decision === 'allow' ? 'passed' : 'denied'} · gross ${risk.metrics?.projectedGrossExposurePct == null ? '—' : `${fmtNum(risk.metrics.projectedGrossExposurePct, 2)}%`} · symbol ${risk.metrics?.projectedSymbolExposurePct == null ? '—' : `${fmtNum(risk.metrics.projectedSymbolExposurePct, 2)}%`} · drawdown ${risk.metrics?.drawdownPct == null ? '—' : `${fmtNum(risk.metrics.drawdownPct, 2)}%`}`
+            ? `risk ${risk.decision === 'allow' ? 'passed' : 'denied'} · capacity ${risk.capacity?.maximumNewOrderUsd == null ? '—' : `$${fmtNum(risk.capacity.maximumNewOrderUsd)}`} · ${esc(risk.metrics?.volatilityRegime || 'unknown')} vol cap ${risk.metrics?.dynamicMaxOrderPct == null ? '—' : `${fmtNum(risk.metrics.dynamicMaxOrderPct, 2)}%`} · gross ${risk.metrics?.projectedGrossExposurePct == null ? '—' : `${fmtNum(risk.metrics.projectedGrossExposurePct, 2)}%`} · symbol ${risk.metrics?.projectedSymbolExposurePct == null ? '—' : `${fmtNum(risk.metrics.projectedSymbolExposurePct, 2)}%`} · drawdown ${risk.metrics?.drawdownPct == null ? '—' : `${fmtNum(risk.metrics.drawdownPct, 2)}%`} · limit ${esc(risk.capacity?.limitingFactors?.[0] || 'not reported')}`
             : 'legacy risk evidence';
           return `<tr>
             <td><span class="chip ${outcomeClass}">${esc(r.outcome)}</span><small>${esc(r.policy?.reasonCode || '')}</small></td>

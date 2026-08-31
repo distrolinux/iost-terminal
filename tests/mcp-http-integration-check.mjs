@@ -127,6 +127,13 @@ async function boundOpenArguments(intentId, overrides = {}, key = keyA.key) {
   assert.equal(preflight.body.result.isError, false, JSON.stringify(preflight.body));
   assert.equal(preflight.body.result.structuredContent.portfolioRisk.decision, 'allow');
   assert.equal(preflight.body.result.structuredContent.portfolioRisk.metrics.protectiveStopPresent, true);
+  assert.equal(preflight.body.result.structuredContent.portfolioRisk.metrics.volatilitySource, 'trusted-venue-24h-range');
+  assert.equal(preflight.body.result.structuredContent.portfolioRisk.metrics.volatilityRegime, 'normal');
+  assert.equal(preflight.body.result.structuredContent.portfolioRisk.metrics.dynamicMaxOrderPct, 7.5);
+  assert.equal(preflight.body.result.structuredContent.portfolioRisk.capacity.maximumNewOrderUsd, 7_500);
+  assert.equal(preflight.body.result.structuredContent.portfolioRisk.volatility.source, 'trusted-venue-24h-range');
+  assert.equal(preflight.body.result.structuredContent.portfolioRisk.volatility.venueCount, 2);
+  assert(preflight.body.result.structuredContent.portfolioRisk.volatility.forecastVolDailyPct > 0);
   assert.equal(preflight.body.result.structuredContent.portfolioRisk.execution.attempted, false);
   return { ...order, preflightFingerprint: preflight.body.result.structuredContent.preflightFingerprint };
 }
@@ -328,7 +335,7 @@ try {
     arguments: openArguments,
   }, { key: keyA.key, name: 'paper_trade_open' });
   assert.equal(opened.status, 200);
-  assert.equal(opened.body.result.isError, false);
+  assert.equal(opened.body.result.isError, false, JSON.stringify(opened.body));
   assert.equal(opened.body.result.structuredContent.ok, true);
   assert.equal(opened.body.result.structuredContent.receipt.outcome, 'accepted');
   assert.equal(opened.body.result.structuredContent.receipt.authorization.walletPactAuthorized, true);
@@ -346,6 +353,11 @@ try {
   assert.equal(opened.body.result.structuredContent.receipt.portfolioRisk.decision, 'allow');
   assert.equal(opened.body.result.structuredContent.receipt.portfolioRisk.reasonCode, 'portfolio-risk-passed');
   assert.equal(opened.body.result.structuredContent.receipt.portfolioRisk.metrics.protectiveStopPresent, true);
+  assert.equal(opened.body.result.structuredContent.receipt.portfolioRisk.metrics.volatilitySource, 'trusted-venue-24h-range');
+  assert.equal(opened.body.result.structuredContent.receipt.portfolioRisk.metrics.dynamicMaxOrderPct, 7.5);
+  assert.equal(opened.body.result.structuredContent.receipt.portfolioRisk.capacity.maximumNewOrderUsd, 7_500);
+  assert.equal(opened.body.result.structuredContent.receipt.portfolioRisk.volatility.source, 'trusted-venue-24h-range');
+  assert.equal(opened.body.result.structuredContent.receipt.portfolioRisk.volatility.venueCount, 2);
   assert.equal(opened.body.result.structuredContent.receipt.portfolioRisk.checks.every((check) => check.pass), true);
   assert.equal(opened.body.result.structuredContent.executionIntent.replayed, false);
   const positionId = opened.body.result.structuredContent.position.id;

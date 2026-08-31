@@ -15,15 +15,23 @@ fingerprint and tamper-evident execution receipt.
 - peak-to-current drawdown breaker: 10%;
 - UTC-day realized-loss breaker: 3% of initial paper cash;
 - protective-stop risk: at most 1% of current equity;
-- open positions after the order: at most 10; and
-- new order during a cached storm-volatility regime: at most 5% of equity.
+- open positions after the order: at most 10;
+- new order during calm volatility: at most 10% of equity;
+- new order during normal volatility: at most 7.5% of equity; and
+- new order during storm, stale or unavailable volatility: at most 5% of equity.
 
 Agent and MCP opens require a valid protective stop. Human-session paper opens
 retain their optional-stop workflow, but every supplied stop and every other
-portfolio limit is still checked. The volatility rule uses only a recent cached
-GARCH state and performs no network request or model refit in the execution
-path. Missing volatility evidence does not invent a storm state; all structural
-portfolio and loss limits still apply.
+portfolio limit is still checked. The volatility rule prefers a recent cached
+GARCH state. When it is unavailable, the Volatility Sentinel calculates a
+robust 24-hour range proxy from the same trusted venue quotes already collected
+for execution, adding no serial market request. Stale or missing evidence
+receives the conservative 5% cap. All structural limits still apply.
+
+Every decision also reports the maximum new portfolio order in dollars and as a
+percentage of equity. That capacity is the minimum remaining headroom across
+cash, order, volatility, gross, symbol, correlated sleeve, stop risk, position
+count, drawdown and daily-loss rails, with its limiting factor named.
 
 ## Evidence and privacy
 
@@ -42,6 +50,7 @@ does not require a new portfolio-open decision.
 
 ```bash
 node tests/portfolio-risk-governor-check.mjs
+node tests/volatility-sentinel-check.mjs
 node tests/agent-trade-preflight-check.mjs
 node tests/verified-execution-receipts-check.mjs
 node tests/mcp-http-integration-check.mjs

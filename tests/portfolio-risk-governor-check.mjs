@@ -20,7 +20,9 @@ assert.deepEqual(PORTFOLIO_RISK_POLICY, {
   maxDailyRealizedLossPct: 3,
   maxRiskAtStopPct: 1,
   maxOpenPositions: 10,
+  normalMaxOrderPct: 7.5,
   stormMaxOrderPct: 5,
+  unknownMaxOrderPct: 5,
 });
 
 const allowed = buildPortfolioRiskDecision({
@@ -34,6 +36,9 @@ assert.equal(allowed.metrics.currentEquityUsd, 100_000);
 assert.equal(allowed.metrics.projectedGrossExposurePct, 6);
 assert.equal(allowed.metrics.projectedSymbolExposurePct, 1);
 assert.equal(allowed.metrics.riskAtStopPct, 0.1);
+assert.equal(allowed.metrics.dynamicMaxOrderPct, 7.5);
+assert.equal(allowed.capacity.maximumNewOrderUsd, 7_500);
+assert.deepEqual(allowed.capacity.limitingFactors, ['volatility-normal-limit']);
 assert.equal(allowed.authorization.liveScopeUsed, false);
 assert.equal(allowed.execution.attempted, false);
 
@@ -101,5 +106,21 @@ const storm = buildPortfolioRiskDecision({
   volatility: { available: true, regime: 'storm', forecastVolAnnualizedPct: 110 },
 });
 assert.equal(storm.reasonCode, 'volatility-order-limit');
+
+const unknownVolatility = buildPortfolioRiskDecision({
+  account, positions: [position('BTC', 5_000)], journal: [],
+  order: { ...order, size: 6_000, stop: null }, fillPrice: 1, now,
+  volatility: { available: false, fresh: false, regime: 'unknown', dynamicMaxOrderPct: 5 },
+});
+assert.equal(unknownVolatility.reasonCode, 'volatility-order-limit');
+assert.equal(unknownVolatility.metrics.dynamicMaxOrderPct, 5);
+assert.equal(unknownVolatility.capacity.maximumNewOrderUsd, 5_000);
+
+const normalVolatility = buildPortfolioRiskDecision({
+  account, positions: [position('BTC', 5_000)], journal: [],
+  order: { ...order, size: 8_000, stop: null }, fillPrice: 1, now,
+  volatility: { available: true, fresh: true, regime: 'normal', dynamicMaxOrderPct: 7.5 },
+});
+assert.equal(normalVolatility.reasonCode, 'volatility-order-limit');
 
 console.log('portfolio risk governor checks passed');
