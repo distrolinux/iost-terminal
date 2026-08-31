@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -138,6 +138,10 @@ try {
   const privateTools = await mcp('tools/list', {}, { key: keyA.key });
   assert.equal(privateTools.body.result.cacheScope, 'private');
   assert(privateTools.body.result.tools.some((tool) => tool.name === 'paper_trade_open'));
+  const preflightTool = privateTools.body.result.tools.find((tool) => tool.name === 'paper_trade_preflight');
+  assert(preflightTool);
+  assert.equal(preflightTool.annotations.readOnlyHint, true);
+  assert.equal(preflightTool.annotations.destructiveHint, false);
   assert(privateTools.body.result.tools.some((tool) => tool.name === 'paper_execution_receipts'));
   assert(privateTools.body.result.tools.some((tool) => tool.name === 'paper_execution_intents'));
   assert(!privateTools.body.result.tools.some((tool) => /live|swap|convert/i.test(tool.name)));
@@ -177,6 +181,58 @@ try {
   });
   assert.equal(authStatus.body.result.structuredContent.canOpenPaperTrade, true);
   assert.equal(authStatus.body.result.structuredContent.wallet.walletId, wallet.walletId);
+
+  const preflightAccountBefore = await mcp('tools/call', { name: 'paper_account', arguments: {} }, {
+    key: keyA.key, name: 'paper_account',
+  });
+  const preflightReceiptsBefore = await mcp('tools/call', { name: 'paper_execution_receipts', arguments: { limit: 20 } }, {
+    key: keyA.key, name: 'paper_execution_receipts',
+  });
+  const preflightIntentsBefore = await mcp('tools/call', { name: 'paper_execution_intents', arguments: { limit: 20 } }, {
+    key: keyA.key, name: 'paper_execution_intents',
+  });
+  const preflightStateFiles = ['accounts.json', 'limits.json', 'pacts.json', 'missions.json', 'execution-intents.json', 'execution-receipts.jsonl'];
+  const preflightFilesBefore = new Map(preflightStateFiles.map((name) => {
+    const path = join(SCRATCH, name);
+    return [name, existsSync(path) ? readFileSync(path, 'utf8') : null];
+  }));
+  const preflightResult = await mcp('tools/call', {
+    name: 'paper_trade_preflight',
+    arguments: { symbol: 'ZZZUNKNOWN', side: 'long', size: 1, entry: 10, walletId: wallet.walletId, pactId: pact.pactId },
+  }, { key: keyA.key, name: 'paper_trade_preflight' });
+  assert.equal(preflightResult.status, 200);
+  assert.equal(preflightResult.body.result.isError, false);
+  assert.equal(preflightResult.body.result.structuredContent.readOnly, true);
+  assert.equal(preflightResult.body.result.structuredContent.decision, 'deny');
+  assert.equal(preflightResult.body.result.structuredContent.reasonCode, 'symbol-supported');
+  assert.equal(preflightResult.body.result.structuredContent.execution.attempted, false);
+  assert.equal(preflightResult.body.result.structuredContent.authorization.liveScopeUsed, false);
+  assert.equal(preflightResult.body.result.structuredContent.authorization.publicChainUsed, false);
+  assert.equal(JSON.stringify(preflightResult.body.result.structuredContent).includes(wallet.walletId), false);
+  assert.equal(JSON.stringify(preflightResult.body.result.structuredContent).includes(pact.pactId), false);
+  for (const name of preflightStateFiles) {
+    const path = join(SCRATCH, name);
+    assert.equal(existsSync(path) ? readFileSync(path, 'utf8') : null, preflightFilesBefore.get(name), `${name} changed during read-only preflight`);
+  }
+  const preflightAccountAfter = await mcp('tools/call', { name: 'paper_account', arguments: {} }, {
+    key: keyA.key, name: 'paper_account',
+  });
+  const preflightReceiptsAfter = await mcp('tools/call', { name: 'paper_execution_receipts', arguments: { limit: 20 } }, {
+    key: keyA.key, name: 'paper_execution_receipts',
+  });
+  const preflightIntentsAfter = await mcp('tools/call', { name: 'paper_execution_intents', arguments: { limit: 20 } }, {
+    key: keyA.key, name: 'paper_execution_intents',
+  });
+  assert.equal(preflightAccountAfter.body.result.structuredContent.account.cash, preflightAccountBefore.body.result.structuredContent.account.cash);
+  assert.equal(preflightAccountAfter.body.result.structuredContent.positions.length, preflightAccountBefore.body.result.structuredContent.positions.length);
+  assert.equal(preflightReceiptsAfter.body.result.structuredContent.receipts.length, preflightReceiptsBefore.body.result.structuredContent.receipts.length);
+  assert.equal(preflightIntentsAfter.body.result.structuredContent.intents.length, preflightIntentsBefore.body.result.structuredContent.intents.length);
+
+  const readOnlyPreflight = await fetch(`${BASE}/api/paper/preflight`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': keyReadOnly.key },
+    body: JSON.stringify({ symbol: 'AAPL', side: 'long', size: 1, entry: 10, walletId: wallet.walletId, pactId: pact.pactId }),
+  });
+  assert.equal(readOnlyPreflight.status, 403);
 
   const restMissingIntent = await fetch(`${BASE}/api/paper/open`, {
     method: 'POST',

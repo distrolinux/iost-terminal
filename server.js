@@ -14,7 +14,7 @@ import { getChainSnapshot } from './lib/onchain.js';
 import { iostChainIdentity } from './lib/iost-node.js';
 import { calculateRisk, portfolioExposure } from './lib/risk.js';
 import { analyzePortfolio } from './lib/portfolio.js';
-import { getState, closeTrade, resetAccount, setAccountSize, markToMarket, journalStats, ensureAccount, listAccounts, persistAccounts } from './lib/paper.js';
+import { getState, getAccount, closeTrade, resetAccount, setAccountSize, markToMarket, journalStats, ensureAccount, listAccounts, persistAccounts } from './lib/paper.js';
 import { getBroker } from './lib/broker/index.js';
 import { enableLive, disableLive, getLiveState, logLiveEvent, anyLiveEnabled, isLiveAllowed, isOwnerIdentity, liveTradingAvailable } from './lib/live.js';
 import { checkLiveOrder } from './lib/rails.js';
@@ -42,6 +42,7 @@ import * as pacts from './lib/pacts.js';
 import * as missions from './lib/missions.js';
 import * as executionReceipts from './lib/execution-receipts.js';
 import * as executionIntents from './lib/execution-intents.js';
+import { buildPaperTradePreflight } from './lib/trade-preflight.js';
 import * as iostAccounts from './lib/iost-accounts.js';
 import * as agentKeys from './lib/agent-keys.js';
 import * as liveProposals from './lib/live-proposals.js';
@@ -772,7 +773,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.22.0';
+const DISCOVERY_VERSION = '1.23.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -828,6 +829,7 @@ const OPENAPI_PATHS = {
   '/api/signals/feed': { get: { summary: 'Public signal feed with on-chain proof status', tags: ['agents'], security: [] } },
   '/api/autopilot/proposals': { get: { summary: 'Pending human-in-the-loop proposals with full reasoning', tags: ['autonomy'], security: [] } },
   '/api/paper': { get: { summary: 'Account + open positions + journal (mark-to-market)', tags: ['execution'] } },
+  '/api/paper/preflight': { post: { summary: 'Read-only paper trade preflight with fresh quote, estimated cost and authorization evidence', tags: ['execution'] } },
   '/api/paper/open': { post: { summary: 'Open paper trade', tags: ['execution'] } },
   '/api/paper/close': { post: { summary: 'Close paper trade', tags: ['execution'] } },
   '/api/execution-receipts': { get: { summary: 'Private tamper-evident paper execution receipts and chain verification', tags: ['execution'] } },
@@ -994,7 +996,8 @@ Endpoint: \`POST ${SITE_URL}/mcp\`. Public tools are read-only. A user-bound key
 an MCP-resource-bound bearer token adds private evaluation/account tools,
 including \`paper_execution_receipts\` and \`paper_execution_intents\` with
 tamper-evident execution evidence and replay-safe intent status. The
-\`trade-paper\` scope adds \`paper_trade_open\` and \`paper_trade_close\`.
+\`trade-paper\` scope adds read-only \`paper_trade_preflight\` plus
+\`paper_trade_open\` and \`paper_trade_close\`.
 Both require a unique \`intentId\`; exact retries return the original terminal
 outcome and conflicting reuse fails closed. Paper opens still require the wallet
 and Pact fields above. No MCP tool can execute a live,
@@ -1206,6 +1209,9 @@ async function mcpToolCall(req, name, args) {
       return cancelled;
     }
     case 'evaluation_run': return await runMcpEvaluation(req, args);
+    case 'paper_trade_preflight': {
+      return paperTradePreflight(req, args || {});
+    }
     case 'paper_trade_open': {
       return executePaperOpen(req, args || {}, 'mcp');
     }
@@ -1606,6 +1612,14 @@ app.get('/api/portfolio', async (req, res) => {
 app.get('/api/paper', requireUser, async (req, res) => {
   try { res.json(await markToMarket(accountFor(req).accountId)); }
   catch (e) { res.status(502).json({ error: e.message }); }
+});
+
+app.post('/api/paper/preflight', requireUser, async (req, res) => {
+  if (req.userAgent && !userAgentHas(req, 'trade-paper')) {
+    return res.status(403).json({ error: 'scope: this key cannot preflight paper execution (missing trade-paper)' });
+  }
+  try { res.json(await paperTradePreflight(req, req.body || {})); }
+  catch (e) { res.status(e.status || 502).json({ error: e.message }); }
 });
 
 app.post('/api/paper/open', requireUser, async (req, res) => {
@@ -2464,6 +2478,86 @@ function agentSpendGate(req, notionalMinor, { walletId = null, pactId = null, re
     return pactReservation;
   }
   return { ok: true, reserveId: reservation.reserveId, walletId: w.walletId, pactId };
+}
+
+// Non-mutating counterpart to agentSpendGate. Preflight must never create a
+// spend/Pact reservation, receipt, execution intent, position or chain action.
+function agentSpendPreflight(req, notionalMinor, { walletId = null, pactId = null, recipient = null, protocol = null } = {}) {
+  const agentPrincipal = !!(req.agentKey || req.userAgent);
+  const base = {
+    tradePaperScope: !req.userAgent || userAgentHas(req, 'trade-paper'),
+    walletPactRequired: agentPrincipal,
+    walletOwned: !agentPrincipal,
+    walletActive: !agentPrincipal,
+    walletTradePaper: !agentPrincipal,
+    walletLimitsAuthorized: !agentPrincipal,
+    pactAuthorized: !agentPrincipal,
+    remainingDailyMinor: null,
+    remainingWeeklyMinor: null,
+  };
+  if (!agentPrincipal) return { ...base, ok: true };
+  if (!base.tradePaperScope) return { ...base, ok: false, reason: 'trade-paper-scope-required' };
+  if (!Number.isSafeInteger(notionalMinor) || notionalMinor <= 0) {
+    return { ...base, ok: false, reason: 'trusted-entry-required' };
+  }
+  const wallet = findAgentWalletForRequest(req, walletId);
+  if (!wallet) return { ...base, ok: false, reason: 'agent-wallet-required' };
+  base.walletOwned = true;
+  base.walletActive = wallet.status === 'active';
+  if (!base.walletActive) return { ...base, ok: false, reason: 'wallet-suspended' };
+  base.walletTradePaper = wallet.capabilities?.includes('trade.paper') === true;
+  if (!base.walletTradePaper) return { ...base, ok: false, reason: 'wallet-capability-required' };
+  const walletGate = limits.previewSpend({ walletId: wallet.walletId, amountMinor: notionalMinor, purpose: '/api/paper/preflight' });
+  base.walletLimitsAuthorized = walletGate.ok === true;
+  base.remainingDailyMinor = Number.isSafeInteger(walletGate.remainingDailyMinor) && walletGate.remainingDailyMinor >= 0
+    ? Math.max(0, walletGate.remainingDailyMinor - notionalMinor) : null;
+  base.remainingWeeklyMinor = Number.isSafeInteger(walletGate.remainingWeeklyMinor) && walletGate.remainingWeeklyMinor >= 0
+    ? Math.max(0, walletGate.remainingWeeklyMinor - notionalMinor) : null;
+  if (!walletGate.ok) return { ...base, ok: false, reason: walletGate.reason || 'wallet-limit-denied' };
+  if (!pactId) return { ...base, ok: false, reason: 'pact-required' };
+  const pactGate = pacts.previewPactSpend({
+    pactId, walletId: wallet.walletId, ownerId: wallet.ownerId,
+    amountMinor: notionalMinor, recipient, protocol,
+  });
+  base.pactAuthorized = pactGate.ok === true;
+  if (!pactGate.ok) return { ...base, ok: false, reason: pactGate.reason || 'pact-denied' };
+  return { ...base, ok: true };
+}
+
+async function paperTradePreflight(req, order = {}) {
+  const symbol = String(order?.symbol || '').trim().toUpperCase();
+  const supportedSymbols = [...WATCHLIST.crypto, ...WATCHLIST.stocks];
+  let ticker = null;
+  if (supportedSymbols.includes(symbol)) {
+    try {
+      await getTicker(symbol);
+      ticker = peekTicker(symbol, Date.now());
+    } catch { /* unavailable quote fails closed in the decision */ }
+  }
+  const now = Date.now();
+  const entry = Number(order?.entry);
+  const size = Number(order?.size);
+  const notionalMinor = Number.isFinite(entry) && entry > 0 && Number.isFinite(size) && size > 0
+    ? Math.trunc(entry * size * 100) : 0;
+  const authorization = agentSpendPreflight(req, notionalMinor, {
+    walletId: order?.walletId, pactId: order?.pactId,
+    recipient: order?.recipient, protocol: order?.protocol,
+  });
+  const ownerId = missionOwnerId(req);
+  const missionId = String(order?.missionId || '').trim();
+  const mission = missionId ? missions.previewMissionTrade({
+    missionId, ownerId, walletId: order?.walletId, pactId: order?.pactId,
+    symbol, notionalMinor,
+  }) : null;
+  let accountId = 'default';
+  if (req.session?.userId && auth.findById(req.session.userId)) accountId = `user:${req.session.userId}`;
+  else if (req.userAgent?.userId) accountId = `user:${req.userAgent.userId}`;
+  const account = getAccount(accountId);
+  return buildPaperTradePreflight({
+    order, ticker, cashUsd: account?.account?.cash ?? 100_000,
+    authorization, mission, accountScope: accountId,
+    supportedSymbols, now,
+  });
 }
 
 // A per-user agent key may use a paper wallet created by that same signed-in
@@ -3434,6 +3528,7 @@ const API_INDEX = {
   execution: [
     { path: '/api/account', method: 'GET', purpose: 'light per-account snapshot for UI topbar: cash, equity, openPositions, lastTrades' },
     { path: '/api/paper', method: 'GET', purpose: 'account + open positions + journal (mark-to-market)' },
+    { path: '/api/paper/preflight', method: 'POST', body: '{symbol,side,size,entry,stop?,target?,walletId,pactId,missionId?,recipient?,protocol?}', purpose: 'read-only paper execution preflight; fresh quote, spread/slippage estimate, paper cash, wallet/Pact limits and optional mission checks; creates no reservation, receipt, intent or trade' },
     { path: '/api/paper/open', method: 'POST', body: '{intentId,symbol,side,size,entry,stop?,target?,reason?,confidence?,walletId,pactId,missionId?,recipient?,protocol?}', purpose: 'idempotent paper open; agent-key requests require intentId + trade-paper scope + owned wallet + active wallet-bound Pact; mission orders add server-enforced symbol, size, count, expiry and loss limits' },
     { path: '/api/paper/close', method: 'POST', body: '{intentId,positionId}', purpose: 'idempotent close at a server-observed price (client exit prices are ignored)' },
     { path: '/api/paper/stats', method: 'GET', purpose: 'journal statistics (win rate, P&L)' },
