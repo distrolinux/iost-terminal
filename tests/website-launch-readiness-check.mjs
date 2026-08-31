@@ -128,7 +128,7 @@ for (const [name, html] of [['landing', home], ['AITT', token], ['Terminal', app
 
 check('Terminal skip-link styles are cache-versioned',
   /\.skip-link\s*\{/.test(css)
-  && /\/css\/style\.css\?v=2\.21/.test(app));
+  && /\/css\/style\.css\?v=2\.22/.test(app));
 
 check('Terminal mobile navigation keeps every primary view reachable',
   /@media \(max-width: 860px\)[\s\S]{0,900}\.sidebar \{ display: block;/.test(css)

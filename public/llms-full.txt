@@ -164,6 +164,8 @@
 Endpoint: `POST /mcp` (stateless streamable HTTP, JSON-RPC 2.0). Anonymous clients see
 only public read tools. A resource-bound bearer token or per-user agent key with `read`
 adds the user's private paper account, statistics and causal evaluation history. The
+read-only `strategy_promotion_scorecards` tool reports evidence-bound 0–100 scores and
+paper review, shadow, restriction or pause/demotion recommendations without applying them. The
 `trade-paper` scope adds paper open/close tools, but an open still requires an owned
 agent wallet and active wallet-bound Pact. Long evaluations support owner-bound MCP
 Tasks. MCP never exposes live orders, money movement, token conversion or public-chain

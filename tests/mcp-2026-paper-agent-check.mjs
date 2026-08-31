@@ -74,6 +74,7 @@ ok('tool discovery is least privilege and never exposes live, token, or chain mu
   assert(paperNames.includes('paper_trade_open'));
   assert(paperNames.includes('paper_trade_close'));
   assert(readNames.includes('paper_execution_intents'));
+  assert(readNames.includes('strategy_promotion_scorecards'));
   assert(paperNames.includes('evaluation_run'));
   for (const names of [publicNames, readNames, paperNames]) {
     assert(!names.some((name) => /live|token|chain.*(write|send|trade)|wallet.*send|swap|convert/i.test(name)));

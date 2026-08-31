@@ -242,7 +242,7 @@ assert(!buildMcpTools().some((tool) => tool.name === 'paper_trade_preflight'), '
 assert(!buildMcpTools({ authenticated: true, scopes: ['read'] }).some((tool) => tool.name === 'paper_trade_preflight'), 'read-only keys without trade-paper must not receive execution preflight');
 
 const server = readFileSync(new URL('../server.js', import.meta.url), 'utf8');
-assert.match(server, /const DISCOVERY_VERSION = '1\.29\.0'/);
+assert.match(server, /const DISCOVERY_VERSION = '1\.30\.0'/);
 assert.match(preflight.description, /execution-quality/i);
 assert.match(preflight.description, /venue failover/i);
 assert.match(server, /enforcePaperPreflightBinding/);

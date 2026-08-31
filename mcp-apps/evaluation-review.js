@@ -1,6 +1,6 @@
 import { App } from '@modelcontextprotocol/ext-apps';
 
-const app = new App({ name: 'IOST Terminal Evaluation Review', version: '1.0.0' });
+const app = new App({ name: 'IOST Terminal Evaluation Review', version: '1.1.0' });
 const byId = (id) => document.getElementById(id);
 const selected = new Set();
 let currentRun = null;
@@ -46,7 +46,7 @@ function renderHistory(payload = {}) {
   const history = payload.history || payload;
   const runs = Array.isArray(history.runs) ? history.runs : [];
   const body = byId('historyBody'); clear(body); selected.clear(); byId('compare').disabled = true;
-  if (!runs.length) { const row = element('tr'); const cell = appendCell(row, 'No retained evaluations yet.'); cell.colSpan = 6; body.appendChild(row); return; }
+  if (!runs.length) { const row = element('tr'); const cell = appendCell(row, 'No retained evaluations yet.'); cell.colSpan = 7; body.appendChild(row); return; }
   for (const run of runs) {
     const row = element('tr'); const selectCell = appendCell(row, '');
     const checkbox = element('input'); checkbox.type = 'checkbox'; checkbox.setAttribute('aria-label', `Select ${run.strategy?.name || run.id} for comparison`);
@@ -59,6 +59,7 @@ function renderHistory(payload = {}) {
     appendCell(row, `${run.symbol || '—'} · ${run.strategy?.name || run.id}`);
     appendCell(row, Number.isFinite(run.createdAt) ? new Date(run.createdAt).toLocaleString() : '—');
     appendCell(row, value(run.metrics?.cumulativeReturnPct, '%'));
+    appendCell(row, value(run.promotion?.scorecard?.score));
     appendCell(row, run.promotion?.decision || 'HOLD');
     const actions = appendCell(row, ''); const view = element('button', 'View'); view.type = 'button';
     view.addEventListener('click', () => loadRun(run.id)); actions.appendChild(view); body.appendChild(row);
@@ -99,10 +100,11 @@ function renderSeriesTable(targetId, datasets, key) {
 function renderRun(run) {
   currentRun = run; const evaluation = run.evaluation || run; const metrics = evaluation.metrics || {}; const calibration = evaluation.calibration || {};
   byId('evidence').classList.remove('hidden'); const kpis = byId('kpis'); clear(kpis);
-  kpis.append(metric('Net return', value(metrics.cumulativeReturnPct, '%'), (metrics.cumulativeReturnPct || 0) >= 0 ? 'review' : 'hold'), metric('Max drawdown', value(metrics.maxDrawdownPct, '%'), 'hold'), metric('Trades', value(metrics.trades)), metric('Calibration error', value(calibration.expectedCalibrationError)));
+  const scorecard = evaluation.promotion?.scorecard || {}; const lifecycle = scorecard.lifecycle || {};
+  kpis.append(metric('Strategy score', value(scorecard.score), scorecard.score >= 75 ? 'review' : 'hold'), metric('Net return', value(metrics.cumulativeReturnPct, '%'), (metrics.cumulativeReturnPct || 0) >= 0 ? 'review' : 'hold'), metric('Max drawdown', value(metrics.maxDrawdownPct, '%'), 'hold'), metric('Trades', value(metrics.trades)), metric('Calibration error', value(calibration.expectedCalibrationError)));
   byId('methodology').textContent = `${evaluation.methodology?.split || 'rolling walk-forward'} · ${evaluation.methodology?.execution || 'next-bar-open'} · costs included`;
   byId('evidenceHash').textContent = `Evidence hash: ${evaluation.evidence?.resultHash || 'unavailable'}`;
-  const reasons = byId('gateReasons'); clear(reasons); const decision = evaluation.promotion?.decision || 'HOLD'; reasons.appendChild(element('p', `Paper-review gate: ${decision}`, decision === 'HOLD' ? 'hold' : 'review'));
+  const reasons = byId('gateReasons'); clear(reasons); const decision = evaluation.promotion?.decision || 'HOLD'; reasons.appendChild(element('p', `Lifecycle: ${lifecycle.targetStage || decision} · ${lifecycle.action || 'HOLD'} · owner review required`, decision === 'HOLD' ? 'hold' : 'review'));
   for (const reason of evaluation.promotion?.failures || []) reasons.appendChild(element('p', reason, 'warning'));
   for (const warning of evaluation.warnings || []) reasons.appendChild(element('p', warning, 'warning'));
   const equity = [{ label: 'Strategy', color: '#31e6ff', points: evaluation.series?.equity || [] }, { label: 'Buy & hold', color: '#ffd166', points: evaluation.series?.baselines?.buyAndHold || [] }, { label: 'SMA', color: '#48efb1', points: evaluation.series?.baselines?.smaCross || [] }];

@@ -67,6 +67,9 @@ adds private account and causal evaluation tools; `trade-paper` additionally exp
 paper open/close tools, which still require an owned agent wallet and active Pact.
 Long evaluations can use the owner-bound MCP Tasks extension. No MCP tool can place a
 live order, move real money, convert a token, or write to a public chain.
+The private read-only `strategy_promotion_scorecards` tool returns evidence-bound
+0–100 strategy scores and paper-review, shadow, restriction or pause/demotion
+recommendations without changing agent or execution authority.
 MCP Apps clients can render the private `evaluation_review` evidence panel with
 history, comparison charts and deterministic JSON/CSV exports; see
 `/docs/OWNER_MCP_APP_TESTING.md` for the owner test flow.

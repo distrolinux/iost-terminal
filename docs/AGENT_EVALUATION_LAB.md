@@ -15,7 +15,7 @@ The Agent Evaluation Lab is a read-only, paper-only strategy evidence system. It
 
 The response contains win rate, profit factor, expectancy, maximum drawdown, a trade-return Sharpe-like ratio, costs, sample warnings, confidence Brier score and expected calibration error. Results are compared with cash, cost-adjusted buy-and-hold, and a causal 20/50 SMA long-or-cash baseline.
 
-Strategy, candle snapshot, and complete result hashes make an evaluation reproducible. The version 2 result hash covers folds, metrics, trades, chart series, baselines, calibration, methodology, warnings, audit evidence, and the paper-review decision. Authenticated platform-agent calls also enter the existing payload-hash audit log.
+Strategy, candle snapshot, and complete result hashes make an evaluation reproducible. The version 2 result hash covers folds, metrics, trades, chart series, baselines, calibration, methodology, warnings, audit evidence, and the complete strategy-governance scorecard. Authenticated platform-agent calls also enter the existing payload-hash audit log.
 
 ## Private history and comparison
 
@@ -29,8 +29,12 @@ Each result includes equity, drawdown, causal buy-and-hold, causal 20/50 SMA, ca
 
 `GET /api/evaluation-lab/history/:id/export?format=json|csv` returns private, non-cacheable evidence. JSON uses canonical key ordering. CSV uses fixed columns and row ordering and neutralizes spreadsheet formulas. Neither format includes the run ID, creation time, user ID, email, or storage filename, so exporting the same stored evidence twice is byte-identical. Both formats carry the result hash.
 
-## Fail-closed promotion
+## Fail-closed promotion and lifecycle governance
 
 `promotion.allowed` defaults to false unless all evidence checks pass: at least 30 out-of-sample trades across at least three folds, drawdown at or below 20%, Sharpe-like performance at or above 0.5, acceptable confidence calibration, valid audit evidence, and returns above both trading baselines. Client configuration may make the sample requirement stricter but cannot lower the 30-trade or three-fold safety floors.
 
-Passing produces only `ELIGIBLE_FOR_PAPER_REVIEW`. Human review remains required and all existing live-money and launch controls remain independent and closed.
+The Strategy Promotion Engine adds a deterministic 0–100 score built from risk-adjusted performance (25%), drawdown control (20%), benchmark edge (20%), confidence calibration (15%), fold consistency (10%), and evidence depth (10%). It reports evidence confidence, benchmark alpha, fold dispersion, positive-fold rate, a conservative overfitting-risk proxy, and exact remediation codes.
+
+The engine recommends one paper-only lifecycle stage: `PAPER_REVIEW`, `SHADOW`, `RESTRICTED`, or `PAUSED`. The matching actions are `PROMOTE_TO_PAPER_REVIEW`, `KEEP_IN_SHADOW`, `RESTRICT_AND_REEVALUATE`, and `PAUSE_AND_DEMOTE`. Recommendations are automatic and evidence-bound, but are never automatically applied. Passing produces only `ELIGIBLE_FOR_PAPER_REVIEW`; human review remains required, execution permissions remain unchanged, and all live-money and launch controls remain independent and closed.
+
+`GET /api/strategy-governance` and the private read-only MCP tool `strategy_promotion_scorecards` return retained owner scorecards. Neither surface can mutate an agent or authorize execution.

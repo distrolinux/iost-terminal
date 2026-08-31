@@ -35,7 +35,7 @@ assert.match(authUi, /const labels = \{[\s\S]*signup: 'Create account'[\s\S]*set
   'account dialogs must expose labels matching the active step');
 assert.match(app, /\/js\/auth\.js\?v=2\.10\.0/,
   'account journey changes must be cache-versioned');
-assert.match(app, /\/js\/app\.js\?v=2\.32\.0/,
+assert.match(app, /\/js\/app\.js\?v=2\.33\.0/,
   'gate journey changes must be cache-versioned');
 
 console.log('Auth and onboarding journey contracts passed');

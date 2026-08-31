@@ -32,7 +32,10 @@ inspect their JSON responses.
 Call `evaluation_review` to load your private history, select up to two runs, and
 inspect equity, drawdown, baseline and calibration charts. Use
 `evaluation_export` to download deterministic JSON or CSV evidence and verify
-the returned SHA-256 hash. Before a paper trade test, call the read-only
+the returned SHA-256 hash. Call `strategy_promotion_scorecards` to review the
+0–100 strategy score, lifecycle recommendation, evidence confidence, benchmark
+alpha, fold stability and remediation codes. Confirm that `applied` is false and
+`executionPermissionsChanged` is false. Before a paper trade test, call the read-only
 `paper_trade_preflight` tool with an explicit symbol, side, size, entry, owned
 `walletId`, active `pactId`, protective `stop`, and the unique `intentId`
 reserved for this attempt.

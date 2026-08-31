@@ -176,6 +176,9 @@ try {
   assert.equal(preflightTool.annotations.destructiveHint, false);
   assert(privateTools.body.result.tools.some((tool) => tool.name === 'paper_execution_receipts'));
   assert(privateTools.body.result.tools.some((tool) => tool.name === 'paper_execution_intents'));
+  const promotionTool = privateTools.body.result.tools.find((tool) => tool.name === 'strategy_promotion_scorecards');
+  assert.equal(promotionTool.annotations.readOnlyHint, true);
+  assert.equal(promotionTool.annotations.destructiveHint, false);
   assert(!privateTools.body.result.tools.some((tool) => /live|swap|convert/i.test(tool.name)));
   const appTools = await mcp('tools/list', {}, { key: keyA.key, apps: true });
   const reviewTool = appTools.body.result.tools.find((tool) => tool.name === 'evaluation_review');
@@ -213,6 +216,18 @@ try {
   });
   assert.equal(authStatus.body.result.structuredContent.canOpenPaperTrade, true);
   assert.equal(authStatus.body.result.structuredContent.wallet.walletId, wallet.walletId);
+
+  const scorecards = await mcp('tools/call', { name: 'strategy_promotion_scorecards', arguments: { limit: 5 } }, {
+    key: keyReadOnly.key, name: 'strategy_promotion_scorecards',
+  });
+  assert.equal(scorecards.status, 200);
+  assert.equal(scorecards.body.result.structuredContent.mode, 'paper-only');
+  assert.equal(scorecards.body.result.structuredContent.scorecards.length, 2);
+  assert.equal(scorecards.body.result.structuredContent.scorecards[0].scorecard.lifecycle.executionPermissionsChanged, false);
+  const otherScorecards = await mcp('tools/call', { name: 'strategy_promotion_scorecards', arguments: { limit: 5 } }, {
+    key: keyB.key, name: 'strategy_promotion_scorecards',
+  });
+  assert.equal(otherScorecards.body.result.structuredContent.scorecards.length, 0, 'scorecards must not cross owner boundaries');
 
   const preflightAccountBefore = await mcp('tools/call', { name: 'paper_account', arguments: {} }, {
     key: keyA.key, name: 'paper_account',
