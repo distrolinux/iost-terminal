@@ -66,6 +66,19 @@ try {
       walletId, pactId,
     },
     policy: { decision: 'allow', reasonCode: 'paper-fill-verified' },
+    portfolioRisk: {
+      decision: 'allow', reasonCode: 'portfolio-risk-passed',
+      policy: { maxOrderPct: 10, maxGrossExposurePct: 80, maxSymbolExposurePct: 25,
+        maxCorrelatedExposurePct: 50, maxDrawdownPct: 10, maxDailyRealizedLossPct: 3,
+        maxRiskAtStopPct: 1, maxOpenPositions: 10, stormMaxOrderPct: 5 },
+      metrics: { currentEquityUsd: 100_000, orderNotionalUsd: 4.01, orderPct: 0,
+        projectedGrossExposurePct: 0, projectedSymbolExposurePct: 0,
+        correlatedGroup: 'crypto', projectedCorrelatedExposurePct: 0,
+        projectedOpenPositions: 1, drawdownPct: 0, dailyRealizedLossPct: 0,
+        protectiveStopRequired: true, protectiveStopPresent: true, protectiveStopValid: true, riskAtStopPct: 0,
+        volatilityRegime: 'normal' },
+      checks: [{ code: 'portfolio-equity-valid', pass: true }, { code: 'protective-stop-required', pass: true }],
+    },
     latency: { totalMs: 12, authorizationMs: 3, brokerMs: 7, settlementMs: 2 },
   });
   assert.equal(accepted.sequence, 1);
@@ -86,6 +99,10 @@ try {
   assert.equal(accepted.order.preflightFingerprint, preflightFingerprint);
   assert.equal(accepted.authorization.preflightRequired, true);
   assert.equal(accepted.authorization.preflightAuthorized, true);
+  assert.equal(accepted.portfolioRisk.decision, 'allow');
+  assert.equal(accepted.portfolioRisk.metrics.protectiveStopPresent, true);
+  assert.equal(accepted.portfolioRisk.metrics.protectiveStopValid, true);
+  assert.equal(accepted.portfolioRisk.checks.every((check) => check.pass), true);
 
   const rejected = receipts.recordExecutionReceipt({
     accountId,
@@ -133,6 +150,7 @@ try {
   assert.match(app, /slippage.*maxSlippageBps/);
   assert.match(app, /quorum verified/);
   assert.match(app, /fillVenue/);
+  assert.match(app, /risk .*passed/);
 
   console.log('verified execution receipt checks passed');
 } finally {

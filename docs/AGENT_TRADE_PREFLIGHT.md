@@ -21,24 +21,31 @@ The response includes:
 - caller-selected slippage tolerance capped at 100 basis points;
 - requested notional, server-fill notional, zero-fee paper cost model and estimated total;
 - paper cash sufficiency;
+- server-authoritative portfolio risk: order, gross, symbol and correlated-sleeve
+  exposure; open-position count; drawdown and daily realized-loss breakers;
+  protective-stop risk; and the stricter cached storm-volatility order cap;
 - current trade-paper scope, wallet ownership/status/capability, wallet spend
   limits and active wallet-bound Pact authorization;
 - optional Mission Control symbol, order-size, trade-count, expiry and loss-halt
   authorization;
 - machine-readable checks, an allow/deny decision and reason code; and
 - an HMAC-SHA-256 preflight fingerprint bound to the authenticated account, exact
-  execution intent, request, observed quote, cash and authorization decision.
+  execution intent, request, observed quote, cash, portfolio-risk state and
+  authorization decision.
 
 Wallet, Pact, account, recipient and mission identifiers are not returned.
 `liveScopeUsed` and `publicChainUsed` are always false.
 
 ## Boundaries
 
-Each agent preflight requires the same unique `intentId` that will be used for
-execution. `paper_trade_open` requires the returned `preflightFingerprint`.
+Each agent preflight requires a protective `stop` and the same unique `intentId`
+that will be used for execution. `paper_trade_open` requires the returned
+`preflightFingerprint`.
 The server recomputes the fingerprint with an HMAC-bound account, order, quote,
-cash, wallet/Pact, spend-limit and optional mission snapshot immediately before
-any reservation or broker work. Missing, denied, expired, or changed evidence
+cash, portfolio exposure, concentration, correlated sleeve, drawdown, daily
+loss, protective-stop, cached volatility, wallet/Pact, spend-limit and optional
+mission snapshot immediately before any reservation or broker work. Missing,
+denied, expired, or changed evidence
 fails closed with an idempotent rejection receipt. Replaying the same intent
 returns its original outcome; using a different intent changes the fingerprint.
 
@@ -55,6 +62,7 @@ rails, then uses that exact bound ask for a long or bid for a short.
 ```bash
 node tests/agent-trade-preflight-check.mjs
 node tests/multi-venue-quote-integrity-check.mjs
+node tests/portfolio-risk-governor-check.mjs
 node tests/mcp-http-integration-check.mjs
 npm test
 ```

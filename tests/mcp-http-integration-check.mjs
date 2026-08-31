@@ -114,16 +114,20 @@ async function mcp(method, params = {}, { key = null, bearer = null, name = null
 
 async function boundOpenArguments(intentId, overrides = {}, key = keyA.key) {
   const order = {
-    intentId, symbol: 'IOST', side: 'long', size: 1, entry: 10, maxSlippageBps: 100,
+    intentId, symbol: 'IOST', side: 'long', size: 1, entry: 10, stop: 9.9, maxSlippageBps: 100,
     walletId: wallet.walletId, pactId: pact.pactId,
     reason: 'MCP integration test', ...overrides,
   };
+  if (!Object.hasOwn(overrides, 'stop')) order.stop = order.side === 'short' ? 10.1 : 9.9;
   const { reason: _reason, confidence: _confidence, preflightFingerprint: _fingerprint, ...preflightOrder } = order;
   const preflight = await mcp('tools/call', {
     name: 'paper_trade_preflight', arguments: preflightOrder,
   }, { key, name: 'paper_trade_preflight' });
   assert.equal(preflight.status, 200);
   assert.equal(preflight.body.result.isError, false, JSON.stringify(preflight.body));
+  assert.equal(preflight.body.result.structuredContent.portfolioRisk.decision, 'allow');
+  assert.equal(preflight.body.result.structuredContent.portfolioRisk.metrics.protectiveStopPresent, true);
+  assert.equal(preflight.body.result.structuredContent.portfolioRisk.execution.attempted, false);
   return { ...order, preflightFingerprint: preflight.body.result.structuredContent.preflightFingerprint };
 }
 
@@ -213,7 +217,7 @@ try {
   }));
   const preflightResult = await mcp('tools/call', {
     name: 'paper_trade_preflight',
-    arguments: { intentId: 'mcp-preflight-readonly-0000', symbol: 'ZZZUNKNOWN', side: 'long', size: 1, entry: 10, maxSlippageBps: 100, walletId: wallet.walletId, pactId: pact.pactId },
+    arguments: { intentId: 'mcp-preflight-readonly-0000', symbol: 'ZZZUNKNOWN', side: 'long', size: 1, entry: 10, stop: 9.9, maxSlippageBps: 100, walletId: wallet.walletId, pactId: pact.pactId },
   }, { key: keyA.key, name: 'paper_trade_preflight' });
   assert.equal(preflightResult.status, 200);
   assert.equal(preflightResult.body.result.isError, false);
@@ -275,6 +279,34 @@ try {
   assert.equal(restMissingPreflightBody.reason, 'preflight-fingerprint-required');
   assert.equal(restMissingPreflightBody.receipt.authorization.preflightAuthorized, false);
 
+  const riskDeniedOrder = {
+    intentId: 'mcp-risk-denied-0006', symbol: 'IOST', side: 'long', size: 2_000,
+    entry: 10, stop: 9.99, maxSlippageBps: 100,
+    walletId: wallet.walletId, pactId: pact.pactId,
+  };
+  const riskDeniedPreflight = await mcp('tools/call', {
+    name: 'paper_trade_preflight', arguments: riskDeniedOrder,
+  }, { key: keyA.key, name: 'paper_trade_preflight' });
+  const deniedEvidence = riskDeniedPreflight.body.result.structuredContent;
+  assert.equal(deniedEvidence.decision, 'deny');
+  assert.equal(deniedEvidence.portfolioRisk.reasonCode, 'order-notional-limit');
+  const riskAccountBefore = await mcp('tools/call', { name: 'paper_account', arguments: {} }, {
+    key: keyA.key, name: 'paper_account',
+  });
+  const riskDeniedOpen = await mcp('tools/call', {
+    name: 'paper_trade_open',
+    arguments: { ...riskDeniedOrder, preflightFingerprint: deniedEvidence.preflightFingerprint },
+  }, { key: keyA.key, name: 'paper_trade_open' });
+  assert.equal(riskDeniedOpen.body.result.isError, true);
+  assert.equal(riskDeniedOpen.body.result.structuredContent.reason, 'preflight-denied');
+  assert.equal(riskDeniedOpen.body.result.structuredContent.receipt.portfolioRisk.decision, 'deny');
+  assert.equal(riskDeniedOpen.body.result.structuredContent.receipt.portfolioRisk.reasonCode, 'order-notional-limit');
+  const riskAccountAfter = await mcp('tools/call', { name: 'paper_account', arguments: {} }, {
+    key: keyA.key, name: 'paper_account',
+  });
+  assert.equal(riskAccountAfter.body.result.structuredContent.account.cash, riskAccountBefore.body.result.structuredContent.account.cash);
+  assert.equal(riskAccountAfter.body.result.structuredContent.positions.length, riskAccountBefore.body.result.structuredContent.positions.length);
+
   const review = await mcp('tools/call', {
     name: 'evaluation_review', arguments: { runIds: [fixtureRunA.id, fixtureRunB.id] },
   }, { key: keyA.key, name: 'evaluation_review', apps: true });
@@ -311,6 +343,10 @@ try {
   assert.equal(opened.body.result.structuredContent.receipt.market.quoteIntegrity.routeVenue, 'KuCoin');
   assert.equal(opened.body.result.structuredContent.receipt.execution.slippageBps, 10);
   assert.equal(opened.body.result.structuredContent.receipt.execution.maxSlippageBps, 100);
+  assert.equal(opened.body.result.structuredContent.receipt.portfolioRisk.decision, 'allow');
+  assert.equal(opened.body.result.structuredContent.receipt.portfolioRisk.reasonCode, 'portfolio-risk-passed');
+  assert.equal(opened.body.result.structuredContent.receipt.portfolioRisk.metrics.protectiveStopPresent, true);
+  assert.equal(opened.body.result.structuredContent.receipt.portfolioRisk.checks.every((check) => check.pass), true);
   assert.equal(opened.body.result.structuredContent.executionIntent.replayed, false);
   const positionId = opened.body.result.structuredContent.position.id;
 

@@ -21,7 +21,10 @@ request and reuse it after a network interruption.
 Open request hashes cover every submitted execution field except the intent
 value itself. The required preflight fingerprint separately binds that intent,
 the requested price, maximum slippage, fresh multi-venue quorum and exclusions,
-selected bid/ask and venue, server-fill notional and authorization evidence.
+selected bid/ask and venue, server-fill notional, portfolio-risk decision and
+authorization evidence. A retry cannot substitute a different stop or reuse a
+fingerprint after exposure, drawdown, daily-loss or other bound risk evidence
+has changed.
 Close fingerprints cover the position identifier;
 legacy client exit prices remain ignored and cannot manufacture paper P&L.
 

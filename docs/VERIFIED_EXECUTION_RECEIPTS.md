@@ -16,6 +16,8 @@ Each receipt contains:
 - simulated fill price, server bid/ask authority, requested slippage ceiling,
   realized slippage, price improvement, zero-fee paper model and close P&L;
 - paper scope, wallet/Pact gate and mission-gate results as booleans;
+- the portfolio-risk decision, bounded policy, exposure/concentration,
+  drawdown, daily-loss, stop-risk and volatility evidence plus per-check results;
 - an opaque execution-intent reference and retry-protection flag;
 - policy decision and bounded reason code;
 - authorization, broker, settlement and total latency;
@@ -33,6 +35,8 @@ change invalidates that account's chain and the read surface returns no
 receipts. The store persists only opaque hashes for account, mission and paper
 position correlation. Raw account, wallet, Pact, mission, position and
 reservation identifiers are excluded, as are credentials and secrets.
+Receipts written before portfolio-risk evidence was introduced remain
+verifiable; new receipts bind the sanitized risk object into the payload hash.
 
 Reasoning summaries are length-bounded and redact common API-key, access-token,
 secret, password and bearer-token shapes. Receipts are tamper-evident local
