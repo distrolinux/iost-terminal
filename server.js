@@ -44,6 +44,7 @@ import * as executionReceipts from './lib/execution-receipts.js';
 import * as executionIntents from './lib/execution-intents.js';
 import { buildPaperTradePreflight } from './lib/trade-preflight.js';
 import { buildPortfolioRiskDecision } from './lib/portfolio-risk-governor.js';
+import { buildVolatilitySentinel } from './lib/volatility-sentinel.js';
 import * as iostAccounts from './lib/iost-accounts.js';
 import * as agentKeys from './lib/agent-keys.js';
 import * as liveProposals from './lib/live-proposals.js';
@@ -777,7 +778,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.27.0';
+const DISCOVERY_VERSION = '1.28.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -2566,6 +2567,9 @@ async function paperTradePreflight(req, order = {}) {
   const accountState = account || {
     account: { initialCash: 100_000, cash: 100_000 }, positions: [], journal: [],
   };
+  const volatility = buildVolatilitySentinel({
+    symbol, garch: peekGarchState(symbol), market: ticker, now,
+  });
   const portfolioRisk = buildPortfolioRiskDecision({
     account: accountState.account,
     positions: accountState.positions || [],
@@ -2573,7 +2577,7 @@ async function paperTradePreflight(req, order = {}) {
     order: effectiveOrder,
     fillPrice,
     requireProtectiveStop: agentPrincipal,
-    volatility: peekGarchState(symbol),
+    volatility,
     now,
   });
   return buildPaperTradePreflight({
@@ -3635,11 +3639,11 @@ const API_INDEX = {
   execution: [
     { path: '/api/account', method: 'GET', purpose: 'light per-account snapshot for UI topbar: cash, equity, openPositions, lastTrades' },
     { path: '/api/paper', method: 'GET', purpose: 'account + open positions + journal (mark-to-market)' },
-    { path: '/api/paper/preflight', method: 'POST', body: '{intentId,symbol,side,size,entry,maxSlippageBps,stop?,target?,walletId,pactId,missionId?,recipient?,protocol?}', purpose: 'read-only one-intent paper execution preflight; crypto quote integrity, best trusted bid/ask, hard cost caps, portfolio exposure/concentration/correlation/drawdown/daily-loss/stop/volatility risk, server-fill notional and authorization rails' },
+    { path: '/api/paper/preflight', method: 'POST', body: '{intentId,symbol,side,size,entry,maxSlippageBps,stop?,target?,walletId,pactId,missionId?,recipient?,protocol?}', purpose: 'read-only one-intent paper execution preflight; crypto quote integrity, best trusted bid/ask, GARCH or trusted-range volatility, dynamic portfolio capacity, exposure/concentration/correlation/drawdown/daily-loss/stop risk, server-fill notional and authorization rails' },
     { path: '/api/paper/open', method: 'POST', body: '{intentId,preflightFingerprint,symbol,side,size,entry,maxSlippageBps,stop?,target?,reason?,confidence?,walletId,pactId,missionId?,recipient?,protocol?}', purpose: 'idempotent server-priced paper open; agents require a protective stop and matching unexpired quote-integrity, portfolio-risk and wallet/Pact evidence; crypto longs use the best consensus-approved ask and shorts the best bid' },
     { path: '/api/paper/close', method: 'POST', body: '{intentId,positionId}', purpose: 'idempotent close at a server-observed price (client exit prices are ignored)' },
     { path: '/api/paper/stats', method: 'GET', purpose: 'journal statistics (win rate, P&L)' },
-    { path: '/api/execution-receipts', method: 'GET', query: 'limit=1..200', purpose: 'private SHA-256-chained paper execution receipts with pricing, portfolio-risk, authorization, cost and latency evidence' },
+    { path: '/api/execution-receipts', method: 'GET', query: 'limit=1..200', purpose: 'private SHA-256-chained paper execution receipts with pricing, volatility source/regime, dynamic portfolio capacity, authorization, cost and latency evidence' },
     { path: '/api/execution-intents', method: 'GET', query: 'limit=1..200', purpose: 'private replay-safe paper execution intent states; pending intents fail closed as outcome-unknown after restart' },
     { path: '/api/execution-intents/:intentId', method: 'GET', purpose: 'private status lookup for one paper execution intent' },
     { path: '/api/paper/reset', method: 'POST', purpose: 'reset paper account' },

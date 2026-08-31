@@ -8,8 +8,8 @@ import {
 } from '../lib/quote-integrity.js';
 
 const now = 1_788_182_500_000;
-const quote = (source, { last, bid, ask, ageMs = 100, latencyMs = 20 }) => ({
-  source, last, bid, ask, observedAt: now - ageMs, latencyMs,
+const quote = (source, { last, bid, ask, high24h = 10.2, low24h = 9.8, ageMs = 100, latencyMs = 20 }) => ({
+  source, last, bid, ask, high24h, low24h, observedAt: now - ageMs, latencyMs,
 });
 
 const venues = [
@@ -33,6 +33,8 @@ assert.equal(long.quoteIntegrity.trustedVenueCount, 3);
 assert.equal(long.quoteIntegrity.routeVenue, 'KuCoin');
 assert.equal(long.quoteIntegrity.executionSide, 'ask');
 assert.equal(long.quoteIntegrity.quorumMet, true);
+assert.equal(long.quoteIntegrity.venues[0].high24h, 10.2);
+assert.equal(long.quoteIntegrity.venues[0].low24h, 9.8);
 
 const short = buildMultiVenueExecutionQuote({ symbol: 'IOST', side: 'short', quotes: venues, now });
 assert.equal(short.ok, true);

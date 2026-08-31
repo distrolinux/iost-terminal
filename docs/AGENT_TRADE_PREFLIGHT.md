@@ -23,7 +23,9 @@ The response includes:
 - paper cash sufficiency;
 - server-authoritative portfolio risk: order, gross, symbol and correlated-sleeve
   exposure; open-position count; drawdown and daily realized-loss breakers;
-  protective-stop risk; and the stricter cached storm-volatility order cap;
+  protective-stop risk; cached GARCH or trusted-venue 24-hour range volatility;
+  calm/normal/storm/unknown dynamic order caps; and maximum new portfolio-order
+  capacity with the limiting factor;
 - current trade-paper scope, wallet ownership/status/capability, wallet spend
   limits and active wallet-bound Pact authorization;
 - optional Mission Control symbol, order-size, trade-count, expiry and loss-halt
@@ -56,6 +58,9 @@ quorum, spread above 100 basis points, or adverse slippage above the request's
 `maxSlippageBps` fails closed. A preflight expires with its quote.
 Execution rechecks the authoritative wallet, Pact, mission, spend and cash
 rails, then uses that exact bound ask for a long or bid for a short.
+An advancing evidence-age timer does not invalidate an otherwise identical
+fingerprint, but a changed volatility source, freshness class, regime, dynamic
+cap or portfolio capacity does.
 
 ## Verification
 
@@ -63,6 +68,7 @@ rails, then uses that exact bound ask for a long or bid for a short.
 node tests/agent-trade-preflight-check.mjs
 node tests/multi-venue-quote-integrity-check.mjs
 node tests/portfolio-risk-governor-check.mjs
+node tests/volatility-sentinel-check.mjs
 node tests/mcp-http-integration-check.mjs
 npm test
 ```

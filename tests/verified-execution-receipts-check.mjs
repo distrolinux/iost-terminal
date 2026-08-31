@@ -25,7 +25,7 @@ try {
         trustedVenueCount: 3, excludedVenueCount: 0, excludedVenues: [],
         consensusPrice: 0.004, maximumOutlierBps: 100, maximumVenueSpreadBps: 100, maximumObservedDeviationBps: 2,
         routeVenue: 'KuCoin', routeLatencyMs: 18, executionSide: 'ask',
-        venues: [{ source: 'KuCoin', bid: 0.00399, ask: 0.00401, observedAt: 1_000, ageMs: 25, latencyMs: 18, consensusDeviationBps: 1, spreadBps: 50 }],
+        venues: [{ source: 'KuCoin', bid: 0.00399, ask: 0.00401, high24h: 0.0041, low24h: 0.0039, observedAt: 1_000, ageMs: 25, latencyMs: 18, consensusDeviationBps: 1, spreadBps: 50 }],
       },
     },
     requestedEntry: 0.00402,
@@ -40,6 +40,8 @@ try {
   assert.equal(market.quoteIntegrity.quorumMet, true);
   assert.equal(market.quoteIntegrity.routeVenue, 'KuCoin');
   assert.equal(market.quoteIntegrity.routeLatencyMs, 18);
+  assert.equal(market.quoteIntegrity.venues[0].high24h, 0.0041);
+  assert.equal(market.quoteIntegrity.venues[0].low24h, 0.0039);
 
   const accepted = receipts.recordExecutionReceipt({
     accountId,
@@ -70,14 +72,23 @@ try {
       decision: 'allow', reasonCode: 'portfolio-risk-passed',
       policy: { maxOrderPct: 10, maxGrossExposurePct: 80, maxSymbolExposurePct: 25,
         maxCorrelatedExposurePct: 50, maxDrawdownPct: 10, maxDailyRealizedLossPct: 3,
-        maxRiskAtStopPct: 1, maxOpenPositions: 10, stormMaxOrderPct: 5 },
+        maxRiskAtStopPct: 1, maxOpenPositions: 10, normalMaxOrderPct: 7.5,
+        stormMaxOrderPct: 5, unknownMaxOrderPct: 5 },
       metrics: { currentEquityUsd: 100_000, orderNotionalUsd: 4.01, orderPct: 0,
         projectedGrossExposurePct: 0, projectedSymbolExposurePct: 0,
         correlatedGroup: 'crypto', projectedCorrelatedExposurePct: 0,
         projectedOpenPositions: 1, drawdownPct: 0, dailyRealizedLossPct: 0,
         protectiveStopRequired: true, protectiveStopPresent: true, protectiveStopValid: true, riskAtStopPct: 0,
-        volatilityRegime: 'normal' },
+        volatilityRegime: 'normal', volatilityFresh: true,
+        volatilitySource: 'trusted-venue-24h-range', volatilityQuality: 'high',
+        volatilityEvidenceAgeMs: 25, volatilityVenueCount: 2, dynamicMaxOrderPct: 7.5 },
       checks: [{ code: 'portfolio-equity-valid', pass: true }, { code: 'protective-stop-required', pass: true }],
+      capacity: { available: true, maximumNewOrderUsd: 7_500, maximumNewOrderPct: 7.5,
+        limitingFactors: ['volatility-normal-limit'] },
+      volatility: { available: true, fresh: true, source: 'trusted-venue-24h-range',
+        quality: 'high', reasonCode: 'range-evidence-fresh', regime: 'normal',
+        forecastVolDailyPct: 2.4, forecastVolAnnualizedPct: 45.85,
+        evidenceAgeMs: 25, venueCount: 2, dynamicMaxOrderPct: 7.5 },
     },
     latency: { totalMs: 12, authorizationMs: 3, brokerMs: 7, settlementMs: 2 },
   });
@@ -102,6 +113,11 @@ try {
   assert.equal(accepted.portfolioRisk.decision, 'allow');
   assert.equal(accepted.portfolioRisk.metrics.protectiveStopPresent, true);
   assert.equal(accepted.portfolioRisk.metrics.protectiveStopValid, true);
+  assert.equal(accepted.portfolioRisk.metrics.volatilitySource, 'trusted-venue-24h-range');
+  assert.equal(accepted.portfolioRisk.metrics.dynamicMaxOrderPct, 7.5);
+  assert.equal(accepted.portfolioRisk.capacity.maximumNewOrderUsd, 7_500);
+  assert.equal(accepted.portfolioRisk.volatility.source, 'trusted-venue-24h-range');
+  assert.equal(accepted.portfolioRisk.volatility.forecastVolDailyPct, 2.4);
   assert.equal(accepted.portfolioRisk.checks.every((check) => check.pass), true);
 
   const rejected = receipts.recordExecutionReceipt({
@@ -151,6 +167,7 @@ try {
   assert.match(app, /quorum verified/);
   assert.match(app, /fillVenue/);
   assert.match(app, /risk .*passed/);
+  assert.match(app, /maximumNewOrderUsd/);
 
   console.log('verified execution receipt checks passed');
 } finally {

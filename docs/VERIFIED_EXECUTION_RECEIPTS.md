@@ -17,7 +17,8 @@ Each receipt contains:
   realized slippage, price improvement, zero-fee paper model and close P&L;
 - paper scope, wallet/Pact gate and mission-gate results as booleans;
 - the portfolio-risk decision, bounded policy, exposure/concentration,
-  drawdown, daily-loss, stop-risk and volatility evidence plus per-check results;
+  drawdown, daily-loss, stop-risk, volatility source/regime/dynamic cap, maximum
+  new portfolio-order capacity, limiting factor and per-check results;
 - an opaque execution-intent reference and retry-protection flag;
 - policy decision and bounded reason code;
 - authorization, broker, settlement and total latency;
