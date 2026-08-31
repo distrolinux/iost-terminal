@@ -34,10 +34,11 @@ inspect equity, drawdown, baseline and calibration charts. Use
 `evaluation_export` to download deterministic JSON or CSV evidence and verify
 the returned SHA-256 hash. Before a paper trade test, call the read-only
 `paper_trade_preflight` tool with an explicit symbol, side, size, entry, owned
-`walletId`, and active `pactId`. Review its quote expiry, estimated cost and
+`walletId`, active `pactId`, and the unique `intentId` reserved for this attempt.
+Review its quote expiry, estimated cost and
 machine-readable authorization checks. If it allows the request, call
-`paper_trade_open` separately with the same order authority and a unique 8-128
-character `intentId`, then close it with `paper_trade_close`. Confirm the result
+`paper_trade_open` with the same request, `intentId`, and returned
+`preflightFingerprint`, then close it with `paper_trade_close`. Confirm the result
 in the Paper account and revoke the agent key when finished.
 
 ## If you want a future live pilot

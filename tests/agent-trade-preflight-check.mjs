@@ -5,7 +5,7 @@ import { buildPaperTradePreflight, PAPER_PREFLIGHT_QUOTE_TTL_MS } from '../lib/t
 
 const now = 1_788_131_500_000;
 const order = {
-  symbol: 'IOST', side: 'long', size: 100, entry: 0.004,
+  intentId: 'preflight-intent-0001', symbol: 'IOST', side: 'long', size: 100, entry: 0.004,
   stop: 0.0035, target: 0.005, walletId: 'private-wallet-id',
   pactId: 'private-pact-id', recipient: 'private-recipient', protocol: 'paper',
 };
@@ -22,7 +22,7 @@ const authorization = {
 
 const allowed = buildPaperTradePreflight({
   order, ticker, cashUsd: 100, authorization, accountScope: 'private-account-id',
-  supportedSymbols: ['IOST'], now,
+  supportedSymbols: ['IOST'], now, bindingSecret: 'private-test-binding-secret',
 });
 assert.equal(allowed.ok, true);
 assert.equal(allowed.mode, 'paper-only');
@@ -44,6 +44,12 @@ assert.deepEqual(allowed.execution, {
   attempted: false, reservationCreated: false, receiptCreated: false, tradeCreated: false,
 });
 assert.match(allowed.preflightFingerprint, /^[a-f0-9]{64}$/);
+assert.deepEqual(allowed.binding, {
+  version: 1,
+  intentProtected: true,
+  oneExecutionIntent: true,
+  expiresAt: ticker.observedAt + PAPER_PREFLIGHT_QUOTE_TTL_MS,
+});
 
 const serialized = JSON.stringify(allowed);
 for (const secret of ['private-wallet-id', 'private-pact-id', 'private-recipient', 'private-account-id']) {
@@ -51,9 +57,24 @@ for (const secret of ['private-wallet-id', 'private-pact-id', 'private-recipient
 }
 const repeated = buildPaperTradePreflight({
   order, ticker, cashUsd: 100, authorization, accountScope: 'private-account-id',
-  supportedSymbols: ['IOST'], now,
+  supportedSymbols: ['IOST'], now, bindingSecret: 'private-test-binding-secret',
 });
 assert.equal(repeated.preflightFingerprint, allowed.preflightFingerprint, 'same evidence must fingerprint identically');
+
+const otherIntent = buildPaperTradePreflight({
+  order: { ...order, intentId: 'preflight-intent-0002' }, ticker, cashUsd: 100,
+  authorization, accountScope: 'private-account-id', supportedSymbols: ['IOST'], now,
+  bindingSecret: 'private-test-binding-secret',
+});
+assert.notEqual(otherIntent.preflightFingerprint, allowed.preflightFingerprint, 'one preflight must bind to one execution intent');
+
+const changedPolicy = buildPaperTradePreflight({
+  order, ticker, cashUsd: 100,
+  authorization: { ...authorization, remainingDailyMinor: 4_999 },
+  accountScope: 'private-account-id', supportedSymbols: ['IOST'], now,
+  bindingSecret: 'private-test-binding-secret',
+});
+assert.notEqual(changedPolicy.preflightFingerprint, allowed.preflightFingerprint, 'authorization evidence changes must invalidate the binding');
 
 const deniedWallet = buildPaperTradePreflight({
   order, ticker, cashUsd: 100,
@@ -91,14 +112,19 @@ assert(preflight, 'paper_trade_preflight must be discoverable to scoped agents')
 assert.equal(preflight.annotations.readOnlyHint, true);
 assert.equal(preflight.annotations.destructiveHint, false);
 assert.equal(preflight.annotations.idempotentHint, true);
-for (const required of ['symbol', 'side', 'size', 'entry', 'walletId', 'pactId']) {
+for (const required of ['intentId', 'symbol', 'side', 'size', 'entry', 'walletId', 'pactId']) {
   assert(preflight.inputSchema.required.includes(required), `${required} must be required`);
 }
+const open = tools.find((tool) => tool.name === 'paper_trade_open');
+assert(open.inputSchema.required.includes('preflightFingerprint'));
+assert.match(open.description, /preflight fingerprint/i);
 assert(!buildMcpTools().some((tool) => tool.name === 'paper_trade_preflight'), 'public clients must not receive private preflight');
 assert(!buildMcpTools({ authenticated: true, scopes: ['read'] }).some((tool) => tool.name === 'paper_trade_preflight'), 'read-only keys without trade-paper must not receive execution preflight');
 
 const server = readFileSync(new URL('../server.js', import.meta.url), 'utf8');
-assert.match(server, /const DISCOVERY_VERSION = '1\.23\.0'/);
+assert.match(server, /const DISCOVERY_VERSION = '1\.24\.0'/);
+assert.match(server, /enforcePaperPreflightBinding/);
+assert.match(server, /preflight-evidence-changed/);
 assert.match(server, /case 'paper_trade_preflight'/);
 assert.match(server, /app\.post\('\/api\/paper\/preflight'/);
 const start = server.indexOf('function agentSpendPreflight');

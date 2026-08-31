@@ -105,15 +105,19 @@ ok('least-privilege discovery and schema validation stay within a local performa
 
 ok('tool arguments are bounded and validated before execution', () => {
   const access = { authenticated: true, scopes: ['read', 'trade-paper'] };
+  const preflightFingerprint = 'a'.repeat(64);
   assert.equal(validateToolArguments('paper_trade_open', {
-    intentId: 'paper-intent-0001', symbol: 'AAPL', side: 'long', size: 1, entry: 10, walletId: 'wallet-1', pactId: 'pact-1',
+    intentId: 'paper-intent-0001', preflightFingerprint, symbol: 'AAPL', side: 'long', size: 1, entry: 10, walletId: 'wallet-1', pactId: 'pact-1',
   }, access).ok, true);
   assert.match(validateToolArguments('paper_trade_open', {
-    intentId: 'paper-intent-0001', symbol: 'AAPL', side: 'long', size: 1, entry: 10, walletId: 'wallet-1', pactId: 'pact-1', live: true,
+    intentId: 'paper-intent-0001', preflightFingerprint, symbol: 'AAPL', side: 'long', size: 1, entry: 10, walletId: 'wallet-1', pactId: 'pact-1', live: true,
   }, access).error, /live is not allowed/);
   assert.match(validateToolArguments('paper_trade_open', {
     symbol: 'AAPL', side: 'long', size: 1, entry: 10, walletId: 'wallet-1', pactId: 'pact-1',
   }, access).error, /intentId is required/);
+  assert.match(validateToolArguments('paper_trade_open', {
+    intentId: 'paper-intent-0001', symbol: 'AAPL', side: 'long', size: 1, entry: 10, walletId: 'wallet-1', pactId: 'pact-1',
+  }, access).error, /preflightFingerprint is required/);
   assert.match(validateToolArguments('evaluation_run', {
     symbol: 'AAPL', strategy: {},
   }, access).error, /strategy\.entry is required/);

@@ -108,6 +108,9 @@ function loadSessionSecret() {
   if ((statSync(f).mode & 0o777) !== 0o600) throw new Error('session-secret permissions must be 0600');
   return secret;
 }
+const SESSION_SECRET = loadSessionSecret();
+const PAPER_PREFLIGHT_BINDING_SECRET = crypto.createHash('sha256')
+  .update(`iost-terminal:paper-preflight-binding:v1:${SESSION_SECRET}`).digest();
 
 // defense-in-depth: data stores hold hashes / TOTP blobs / encrypted key
 // material — keep them owner-only at boot (tmp+rename writes reset perms).
@@ -192,7 +195,7 @@ app.use(sameOriginMutation(SITE_URL));
 app.set('trust proxy', 1);
 app.use(session({
   name: 'iost.sid',
-  secret: loadSessionSecret(),
+  secret: SESSION_SECRET,
   store: new FileSessionStore(), // survives restarts — no more surprise logouts
   resave: false,
   saveUninitialized: false,
@@ -695,7 +698,7 @@ ${s?.autopilot?.enabled ? `enabled (${s.autopilot.ticks} ticks)${s.autopilot.con
 ### Agent access
 - **Read state (no auth):** [/api/ui-state](/api/ui-state) · [/api/scores](/api/scores) · [/api/scanner](/api/scanner) · [/api/news](/api/news) · [/api/onchain](/api/onchain) · [/api/probability](/api/probability)
 - **Authenticate:** mint an agent key in the app (Portfolio → AI Agents) → send as \`X-API-Key: itk_…\`, or OAuth 2.0 client_credentials → Bearer token ([/auth.md](/auth.md))
-- **Trade (paper):** POST /api/paper/open|close with a unique 8-128 character \`intentId\` and a \`trade-paper\`-scoped key; exact retries return the original outcome, conflicting reuse fails closed, and opens require positive entry/size + owned walletId + active wallet-bound pactId
+- **Trade (paper):** preflight with a unique 8-128 character \`intentId\`, then POST /api/paper/open with that intent and the returned \`preflightFingerprint\`; exact retries return the original outcome, changed evidence fails closed, and opens require a \`trade-paper\`-scoped key + owned walletId + active wallet-bound pactId
 - **Live:** proposals only — owner approves before anything executes (option C, human-in-the-loop)
 `;
 }
@@ -773,7 +776,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.23.0';
+const DISCOVERY_VERSION = '1.24.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -2556,7 +2559,7 @@ async function paperTradePreflight(req, order = {}) {
   return buildPaperTradePreflight({
     order, ticker, cashUsd: account?.account?.cash ?? 100_000,
     authorization, mission, accountScope: accountId,
-    supportedSymbols, now,
+    supportedSymbols, now, bindingSecret: PAPER_PREFLIGHT_BINDING_SECRET,
   });
 }
 
@@ -2645,7 +2648,11 @@ function beginPaperReceipt(req, order, action, source) {
       positionId: order?.positionId || null,
       intentProtected: !!String(order?.intentId || '').trim(),
       intentId: String(order?.intentId || '').trim() || null,
+      preflightProtected: !!String(order?.preflightFingerprint || '').trim(),
+      preflightFingerprint: String(order?.preflightFingerprint || '').trim().toLowerCase() || null,
     },
+    preflightRequired: action === 'open' && (source === 'mcp' || !!req.userAgent || !!req.agentKey),
+    preflightAuthorized: action !== 'open' || !(source === 'mcp' || req.userAgent || req.agentKey),
   };
 }
 
@@ -2668,6 +2675,8 @@ function writePaperReceipt(req, attempt, {
       walletPactAuthorized: attempt.action === 'close' || !agentCredential || gate?.ok === true,
       missionRequired: attempt.request.missionAttached,
       missionAuthorized: !attempt.request.missionAttached || missionAuthorized,
+      preflightRequired: attempt.preflightRequired === true,
+      preflightAuthorized: attempt.preflightAuthorized === true,
     },
     policy: {
       decision: decision || (outcome === 'accepted' ? 'allow' : 'deny'),
@@ -2717,6 +2726,43 @@ function missingPaperExecutionScope(req, source) {
     : (req.userAgent && !userAgentHas(req, 'trade-paper'));
 }
 
+function preflightBindingError(req, attempt, message, status, reason, detail = message) {
+  const receipt = writePaperReceipt(req, attempt, {
+    outcome: 'rejected', execution: { status: 'not-filled' },
+    reasonCode: reason, detail,
+  });
+  throw rejectedPaperError(message, status, reason, receipt);
+}
+
+async function enforcePaperPreflightBinding(req, order, source, attempt) {
+  const required = source === 'mcp' || !!req.userAgent || !!req.agentKey;
+  const supplied = String(order?.preflightFingerprint || '').trim().toLowerCase();
+  if (!required && !supplied) return { ok: true, required: false };
+  if (!supplied) {
+    preflightBindingError(req, attempt, 'paper execution preflight fingerprint required', 428,
+      'preflight-fingerprint-required');
+  }
+  if (!/^[a-f0-9]{64}$/.test(supplied)) {
+    preflightBindingError(req, attempt, 'paper execution preflight fingerprint invalid', 400,
+      'preflight-fingerprint-invalid');
+  }
+
+  const current = await paperTradePreflight(req, order);
+  if (current.decision !== 'allow') {
+    preflightBindingError(req, attempt, 'paper execution preflight no longer allows this request', 409,
+      'preflight-denied', `Current preflight denied: ${current.reasonCode || 'policy-denied'}.`);
+  }
+  const expected = String(current.preflightFingerprint || '');
+  const matches = /^[a-f0-9]{64}$/.test(expected)
+    && crypto.timingSafeEqual(Buffer.from(supplied, 'hex'), Buffer.from(expected, 'hex'));
+  if (!matches) {
+    preflightBindingError(req, attempt, 'paper execution preflight evidence changed', 409,
+      'preflight-evidence-changed', 'The order, quote, cash, wallet, Pact, mission, or spend-limit evidence changed. Run preflight again.');
+  }
+  attempt.preflightAuthorized = true;
+  return { ok: true, required: true, expiresAt: current.expiresAt, fingerprint: supplied };
+}
+
 async function executePaperOpen(req, order, source = 'rest') {
   // Current authorization is checked before looking up a cached result so a
   // lower-scope key cannot use a guessed intent ID as a private read channel.
@@ -2749,6 +2795,8 @@ async function executePaperOpenOnce(req, order, source = 'rest') {
     });
     throw rejectedPaperError('scope: this key cannot trade (missing trade-paper)', 403, 'trade-paper-scope-required', receipt);
   }
+
+  await enforcePaperPreflightBinding(req, order, source, attempt);
 
   if (missionId) {
     missionReservation = missions.reserveMissionTrade({
@@ -3528,8 +3576,8 @@ const API_INDEX = {
   execution: [
     { path: '/api/account', method: 'GET', purpose: 'light per-account snapshot for UI topbar: cash, equity, openPositions, lastTrades' },
     { path: '/api/paper', method: 'GET', purpose: 'account + open positions + journal (mark-to-market)' },
-    { path: '/api/paper/preflight', method: 'POST', body: '{symbol,side,size,entry,stop?,target?,walletId,pactId,missionId?,recipient?,protocol?}', purpose: 'read-only paper execution preflight; fresh quote, spread/slippage estimate, paper cash, wallet/Pact limits and optional mission checks; creates no reservation, receipt, intent or trade' },
-    { path: '/api/paper/open', method: 'POST', body: '{intentId,symbol,side,size,entry,stop?,target?,reason?,confidence?,walletId,pactId,missionId?,recipient?,protocol?}', purpose: 'idempotent paper open; agent-key requests require intentId + trade-paper scope + owned wallet + active wallet-bound Pact; mission orders add server-enforced symbol, size, count, expiry and loss limits' },
+    { path: '/api/paper/preflight', method: 'POST', body: '{intentId,symbol,side,size,entry,stop?,target?,walletId,pactId,missionId?,recipient?,protocol?}', purpose: 'read-only one-intent paper execution preflight; fresh quote, spread/slippage estimate, paper cash, wallet/Pact limits and optional mission checks; creates no reservation, receipt, intent or trade' },
+    { path: '/api/paper/open', method: 'POST', body: '{intentId,preflightFingerprint,symbol,side,size,entry,stop?,target?,reason?,confidence?,walletId,pactId,missionId?,recipient?,protocol?}', purpose: 'idempotent paper open; agent-key requests require a matching unexpired preflight fingerprint + trade-paper scope + owned wallet + active wallet-bound Pact; changed evidence fails closed before reservations or broker work' },
     { path: '/api/paper/close', method: 'POST', body: '{intentId,positionId}', purpose: 'idempotent close at a server-observed price (client exit prices are ignored)' },
     { path: '/api/paper/stats', method: 'GET', purpose: 'journal statistics (win rate, P&L)' },
     { path: '/api/execution-receipts', method: 'GET', query: 'limit=1..200', purpose: 'private SHA-256-chained paper execution receipts with pricing, authorization, cost and latency evidence' },
