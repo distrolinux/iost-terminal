@@ -32,6 +32,7 @@
 - AI trade score: 0-100 composite over momentum, technical setup, volume, news sentiment, on-chain activity, risk
 - Position Guardian: server-enforced paper bracket/OCO stops and targets, fresh-quote watchdog health, and verified automatic-exit receipts that do not depend on the agent staying online
 - Agent Runtime Reliability: owner-bound 30-second heartbeats, readiness leases, mission checkpoints, exact-checkpoint restart recovery, and fail-closed new mission exposure for enrolled agents
+- Agent Runtime Supervisor: deterministic 20-second lease renewal, write-ahead exact retries, private checkpoint recovery, graceful draining, and Docker health evidence without trading authority
 - Agent Incident & Recovery Center: deduplicated runtime alerts, automatic offline/recovery-failure quarantine, structured timelines, and owner-only release after verified recovery
 - Agent Safety Playbook & SLO Center: honest mission-readiness coverage, 30-day error budget, multi-window burn alerts, and deterministic non-executing recovery guidance
 - Every page ships a machine layer: server-rendered data table, JSON-LD knowledge graph (Schema.org FinancialProduct/Stock/Offer, ISO 8601 dates, explicit priceCurrency), and a `<script type="application/json" id="agent-state">` state blob

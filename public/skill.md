@@ -77,7 +77,11 @@ Use `agent_runtime_heartbeat` every 30 seconds to enroll a paper agent, publish
 its mission checkpoint and keep new mission exposure ready. Poll the private
 read-only `agent_runtime_status` tool for readiness. After a disconnect, a new
 session must resume from the exact last checkpoint; heartbeats never expand
-authority, and Position Guardian continues protecting existing positions.
+authority. For continuous operation, run the deterministic Agent Runtime
+Supervisor companion at a 20-second cadence. It persists an exact write-ahead
+retry, recovers only from an offline or draining checkpoint, and records
+draining on shutdown; it never makes a trading decision or gains a scope.
+Position Guardian continues protecting existing positions.
 Poll the private read-only `agent_incident_status` tool for deduplicated runtime
 warnings, offline quarantines, recovery readiness and owner-review state. An
 agent cannot acknowledge, resolve or release its own quarantine; the runtime

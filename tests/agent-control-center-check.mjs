@@ -31,7 +31,7 @@ assert.match(html, /data-view="control"/,
   'sidebar must expose the owner control center');
 assert.match(html, /id="view-control"/,
   'app must include the control-center view');
-assert.match(html, /\/js\/app\.js\?v=2\.37\.0/,
+assert.match(html, /\/js\/app\.js\?v=2\.38\.0/,
   'app asset cache key must be bumped');
 
 assert.match(app, /async function renderAgentControl\(\)/,
@@ -48,5 +48,7 @@ assert.match(app, /dailyUsedMinor[\s\S]{0,800}weeklyUsedMinor/,
   'control center must display enforced budget usage');
 assert.match(app, /scopes/,
   'control center must display agent-key permissions');
+assert.match(app, /item\.supervisor\?\.managed/,
+  'control center must distinguish continuously supervised runtimes from manual heartbeats');
 
 console.log('agent control center checks passed');

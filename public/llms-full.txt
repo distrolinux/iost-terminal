@@ -105,8 +105,12 @@ Enrolled paper agents use `agent_runtime_heartbeat` every 30 seconds to publish
 readiness and an owner-bound mission checkpoint. `agent_runtime_status` reports
 the sanitized lease state. A degraded, offline, draining, or mission-mismatched
 runtime cannot open new mission exposure; exact-checkpoint recovery is required
-after a disconnect. Heartbeats never expand execution authority, and Position
-Guardian continues protecting existing positions independently.
+after restart. The deterministic Agent Runtime Supervisor companion renews the
+lease every 20 seconds, writes each payload before sending it, reconciles lost
+acknowledgements, resumes only from an exact offline/draining checkpoint and
+records draining during graceful shutdown. It reads the key from a file and
+cannot trade, grant authority, release quarantine or use a public chain.
+Position Guardian continues protecting existing positions independently.
 
 The server reconciles runtime incidents every 10 seconds. `agent_incident_status`
 returns deduplicated degraded, offline and rejected-recovery incidents for the

@@ -190,6 +190,8 @@ try {
   assert.equal(runtimeHeartbeatTool.annotations.readOnlyHint, false);
   assert.equal(runtimeHeartbeatTool.annotations.destructiveHint, false);
   assert.equal(runtimeHeartbeatTool.annotations.idempotentHint, true);
+  assert.equal(runtimeHeartbeatTool.inputSchema.properties.supervisorVersion.maximum, 1);
+  assert.equal(runtimeHeartbeatTool.inputSchema.properties.cadenceMs.maximum, 30_000);
   assert.equal(incidentStatusTool.annotations.readOnlyHint, true);
   assert.equal(incidentStatusTool.annotations.destructiveHint, false);
   assert.equal(incidentStatusTool.annotations.idempotentHint, true);
@@ -268,6 +270,7 @@ try {
   assert.equal(otherIncidents.body.result.structuredContent.counts.total, 0, 'incident state must not cross owners');
   const heartbeatArguments = {
     sessionId: 'mcp-runtime-session-0001', sequence: 1, state: 'ready', stage: 'idle',
+    supervisorVersion: 1, cadenceMs: 20_000,
   };
   const runtimeHeartbeat = await mcp('tools/call', { name: 'agent_runtime_heartbeat', arguments: heartbeatArguments }, {
     key: keyA.key, name: 'agent_runtime_heartbeat',
@@ -275,6 +278,8 @@ try {
   assert.equal(runtimeHeartbeat.status, 200);
   assert.equal(runtimeHeartbeat.body.result.isError, false);
   assert.equal(runtimeHeartbeat.body.result.structuredContent.status, 'ready');
+  assert.equal(runtimeHeartbeat.body.result.structuredContent.supervisor.managed, true);
+  assert.equal(runtimeHeartbeat.body.result.structuredContent.supervisor.cadenceMs, 20_000);
   assert.equal(runtimeHeartbeat.body.result.structuredContent.execution.authorityExpanded, false);
   assert.equal(runtimeHeartbeat.body.result.structuredContent.liveScopeUsed, false);
   assert.equal(runtimeHeartbeat.body.result.structuredContent.publicChainUsed, false);

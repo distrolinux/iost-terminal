@@ -45,7 +45,13 @@ An agent sees its own runtime; an owner session sees a sanitized aggregate.
 
 `agent_runtime_heartbeat` is private, idempotent, and non-destructive. It accepts
 `sessionId`, `sequence`, `state`, `stage`, optional `missionId`, optional bounded
-`cursor`, and—only for recovery—`resumeFromCheckpointId`.
+`cursor`, and—only for recovery—`resumeFromCheckpointId`. A deterministic
+supervisor may also report version 1 and a cadence between 5 and 30 seconds;
+these are operational evidence only and cannot expand authority.
+
+For continuous operation use the least-privilege companion documented in
+`AGENT_RUNTIME_SUPERVISOR.md`. Manual one-shot heartbeats are intended for
+testing and do not provide durable readiness evidence.
 
 The owner REST surface is `GET /api/agent-runtime`; agent-key heartbeats use
 `POST /api/agent-runtime/heartbeat`. Both are private and `no-store`.
