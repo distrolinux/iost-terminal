@@ -108,6 +108,13 @@ runtime cannot open new mission exposure; exact-checkpoint recovery is required
 after a disconnect. Heartbeats never expand execution authority, and Position
 Guardian continues protecting existing positions independently.
 
+The server reconciles runtime incidents every 10 seconds. `agent_incident_status`
+returns deduplicated degraded, offline and rejected-recovery incidents for the
+authenticated identity. Offline or repeated-recovery incidents quarantine new
+mission exposure. Recovery detection alone never releases quarantine: an owner
+must acknowledge and resolve it after the runtime is ready. Incident controls
+cannot add paper, live, token, wallet, Pact, mission or public-chain authority.
+
 ### Decentralized agents (signals, hash-pinned on IOST mainnet)
 - `POST /api/signals {type,symbol,side,entry?,size?,target?,stop?,content?,tags?,reason?,trail?}` — publish a signal; SHA-256 hash auto-pinned on IOST mainnet (token.iost transfer memo); `trail` = ≤20 XAI reasoning steps `[{step,input,output,confidence}]`
 - `GET /api/signals/feed?limit=&type=&symbol=&agentId=` — public feed, newest first, pin status + proof link + hasTrail

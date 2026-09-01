@@ -41,6 +41,7 @@ import * as arena from './lib/arena.js';
 import * as pacts from './lib/pacts.js';
 import * as missions from './lib/missions.js';
 import * as agentRuntime from './lib/agent-runtime.js';
+import * as agentIncidents from './lib/agent-incidents.js';
 import * as executionReceipts from './lib/execution-receipts.js';
 import * as executionIntents from './lib/execution-intents.js';
 import { buildPaperTradePreflight } from './lib/trade-preflight.js';
@@ -125,7 +126,7 @@ try {
     'iost_accounts.json', 'pending_pins.json', 'signals.json', 'follows.json', 'triggers.json',
     'payments.json', 'fee-config.json', 'live-proposals.json', 'agent-audit.jsonl',
     'live-audit.jsonl', 'arena-audit.jsonl', 'mcp-tasks.json', 'missions.json', 'execution-receipts.jsonl',
-    'execution-intents.json', 'agent-runtimes.json',
+    'execution-intents.json', 'agent-runtimes.json', 'agent-incidents.json',
   ]) {
     const p = join(DATA_DIR, f);
     if (existsSync(p)) {
@@ -138,6 +139,7 @@ try {
   executionReceipts.secureReceiptPermissions();
   executionIntents.secureExecutionIntentPermissions();
   agentRuntime.secureAgentRuntimePermissions();
+  agentIncidents.secureAgentIncidentPermissions();
 } catch (e) {
   console.error(`[security] refusing boot: sensitive store permissions could not be secured (${e.message})`);
   throw e;
@@ -781,7 +783,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.32.0';
+const DISCOVERY_VERSION = '1.33.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -856,6 +858,9 @@ const OPENAPI_PATHS = {
   '/api/agent-missions/{id}/checkpoint': { post: { summary: 'Append a bounded user-agent mission checkpoint', tags: ['autonomy'] } },
   '/api/agent-runtime': { get: { summary: 'Private agent heartbeat, readiness, recovery and durable-checkpoint status', tags: ['autonomy'] } },
   '/api/agent-runtime/heartbeat': { post: { summary: 'Renew an authenticated user-agent runtime lease without expanding authority', tags: ['autonomy'] } },
+  '/api/agent-incidents': { get: { summary: 'Private deduplicated agent incidents, quarantine and recovery readiness', tags: ['autonomy'] } },
+  '/api/agent-incidents/{id}/acknowledge': { post: { summary: 'Owner acknowledgement of an agent incident without releasing quarantine', tags: ['autonomy'] } },
+  '/api/agent-incidents/{id}/resolve': { post: { summary: 'Owner resolution and quarantine release after runtime recovery', tags: ['autonomy'] } },
 };
 app.get('/openapi.json', (req, res) => {
   res.set('Access-Control-Allow-Origin', '*');
@@ -1016,6 +1021,9 @@ fresh-quote watchdog health and automatic risk-reducing exit evidence. The
 \`agent_runtime_status\` and idempotent \`agent_runtime_heartbeat\` tools add
 owner-bound liveness, readiness, exact-checkpoint recovery and fail-closed
 mission execution leases without expanding the agent's authority. The
+read-only \`agent_incident_status\` tool reports deduplicated runtime incidents,
+automatic quarantine, recovery readiness and owner-review requirements without
+acknowledging or resolving an incident. The
 \`trade-paper\` scope adds read-only \`paper_trade_preflight\` plus
 \`paper_trade_open\` and \`paper_trade_close\`.
 Both require a unique \`intentId\`; exact retries return the original terminal
@@ -1183,19 +1191,39 @@ async function mcpToolCall(req, name, args) {
     case 'paper_stats': return journalStats(accountFor(req).accountId);
     case 'paper_position_guardian': return management.positionGuardianStatus(accountFor(req).accountId);
     case 'agent_runtime_status': {
+      agentIncidents.reconcileRuntimeIncidents();
       if (req.userAgent) return agentRuntime.agentRuntimeStatus(req.userAgent.userId, req.userAgent.keyId);
       if (req.session?.userId) return agentRuntime.ownerRuntimeStatus(req.session.userId);
       throw Object.assign(new Error('user-bound runtime access required'), { protocolCode: -32602 });
+    }
+    case 'agent_incident_status': {
+      if (req.userAgent) return agentIncidents.agentIncidentStatus(req.userAgent.userId, req.userAgent.keyId);
+      if (req.session?.userId) return agentIncidents.ownerIncidentStatus(req.session.userId);
+      throw Object.assign(new Error('user-bound incident access required'), { protocolCode: -32602 });
     }
     case 'agent_runtime_heartbeat': {
       if (!req.userAgent || !userAgentHas(req, 'read')) {
         throw Object.assign(new Error('user agent read scope required'), { protocolCode: -32602 });
       }
-      return agentRuntime.recordAgentHeartbeat({
-        ...(args || {}),
-        ownerId: req.userAgent.userId, keyId: req.userAgent.keyId,
-        agentName: req.userAgent.name,
-      });
+      agentIncidents.reconcileRuntimeIncidents();
+      const previous = agentRuntime.agentRuntimeStatus(req.userAgent.userId, req.userAgent.keyId);
+      try {
+        const result = agentRuntime.recordAgentHeartbeat({
+          ...(args || {}),
+          ownerId: req.userAgent.userId, keyId: req.userAgent.keyId,
+          agentName: req.userAgent.name,
+        });
+        agentIncidents.reconcileRuntimeIncidents();
+        return result;
+      } catch (error) {
+        if (previous.enrolled) {
+          try { agentIncidents.recordRuntimeFailure({
+            ownerId: req.userAgent.userId, keyId: req.userAgent.keyId,
+            runtimeRef: previous.runtimeRef, name: req.userAgent.name, reasonCode: error.message,
+          }); } catch { /* preserve the authoritative heartbeat rejection */ }
+        }
+        throw error;
+      }
     }
     case 'paper_execution_receipts': return executionReceipts.listExecutionReceipts(accountFor(req).accountId, args?.limit);
     case 'paper_execution_intents': {
@@ -3776,6 +3804,8 @@ const API_INDEX = {
     { path: '/api/agent-missions/:id/checkpoint', method: 'POST', body: '{stage,detail,latencyMs?}', purpose: 'user-bound agent trace checkpoint; cannot expand mission authority' },
     { path: '/api/agent-runtime', method: 'GET', purpose: 'private owner or self view of agent liveness, readiness, lease age and exact-checkpoint recovery status' },
     { path: '/api/agent-runtime/heartbeat', method: 'POST', body: '{sessionId,sequence,state,stage,missionId?,cursor?,resumeFromCheckpointId?}', purpose: 'idempotent user-agent heartbeat and durable checkpoint; never starts missions, trades or expands authority' },
+    { path: '/api/agent-incidents', method: 'GET', purpose: 'private owner or self view of deduplicated runtime incidents, quarantine and recovery readiness' },
+    { path: '/api/agent-incidents/:id/acknowledge | /resolve', method: 'POST', purpose: 'owner-only incident review; resolution releases quarantine only after runtime readiness recovers' },
     { path: '/api/autopilot', method: 'GET', purpose: 'autopilot status + config + action audit trail + pending proposals' },
     { path: '/api/autopilot/start', method: 'POST', body: '{config?}', purpose: 'enable autonomous trading loop' },
     { path: '/api/autopilot/stop', method: 'POST', purpose: 'disable autonomous loop' },
@@ -3914,6 +3944,7 @@ app.get('/api/audit', requireUser, (req, res) => {
 // own lease. Heartbeats never start missions or expand execution authority.
 app.get('/api/agent-runtime', requireUser, (req, res) => {
   res.set('Cache-Control', 'private, no-store');
+  agentIncidents.reconcileRuntimeIncidents();
   if (req.userAgent) {
     if (!userAgentHas(req, 'read')) return res.status(403).json({ error: 'read scope required' });
     return res.json(agentRuntime.agentRuntimeStatus(req.userAgent.userId, req.userAgent.keyId));
@@ -3925,14 +3956,50 @@ app.get('/api/agent-runtime', requireUser, (req, res) => {
 app.post('/api/agent-runtime/heartbeat', requireUser, (req, res) => {
   res.set('Cache-Control', 'private, no-store');
   if (!req.userAgent || !userAgentHas(req, 'read')) return res.status(403).json({ error: 'user agent read scope required' });
+  agentIncidents.reconcileRuntimeIncidents();
+  const previous = agentRuntime.agentRuntimeStatus(req.userAgent.userId, req.userAgent.keyId);
   try {
-    return res.json(agentRuntime.recordAgentHeartbeat({
+    const result = agentRuntime.recordAgentHeartbeat({
       ...(req.body || {}),
       ownerId: req.userAgent.userId, keyId: req.userAgent.keyId,
       agentName: req.userAgent.name,
-    }));
-  } catch (error) { return res.status(409).json({ ok: false, error: error.message }); }
+    });
+    agentIncidents.reconcileRuntimeIncidents();
+    return res.json(result);
+  } catch (error) {
+    if (previous.enrolled) {
+      try { agentIncidents.recordRuntimeFailure({
+        ownerId: req.userAgent.userId, keyId: req.userAgent.keyId,
+        runtimeRef: previous.runtimeRef, name: req.userAgent.name, reasonCode: error.message,
+      }); } catch { /* preserve the authoritative heartbeat rejection */ }
+    }
+    return res.status(409).json({ ok: false, error: error.message });
+  }
 });
+
+app.get('/api/agent-incidents', requireUser, (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (req.userAgent) {
+    if (!userAgentHas(req, 'read')) return res.status(403).json({ error: 'read scope required' });
+    return res.json(agentIncidents.agentIncidentStatus(req.userAgent.userId, req.userAgent.keyId));
+  }
+  if (!isOwnerSession(req) || !req.session?.userId) return res.status(403).json({ error: 'owner or user agent required' });
+  return res.json(agentIncidents.ownerIncidentStatus(req.session.userId));
+});
+
+for (const action of ['acknowledge', 'resolve']) {
+  app.post(`/api/agent-incidents/:id/${action}`, requireUser, (req, res) => {
+    res.set('Cache-Control', 'private, no-store');
+    if (!isOwnerSession(req) || !req.session?.userId) return res.status(403).json({ error: 'owner only' });
+    try {
+      const incident = action === 'acknowledge'
+        ? agentIncidents.acknowledgeIncident(req.session.userId, req.params.id)
+        : agentIncidents.resolveIncident(req.session.userId, req.params.id);
+      logLiveEvent(req.session.userId, `agent.incident.${action}`, { incidentRef: incident.incidentRef, mode: 'paper-only' });
+      return res.json({ ok: true, incident });
+    } catch (error) { return res.status(409).json({ ok: false, error: error.message }); }
+  });
+}
 
 // Mission Control: owner-created, paper-only envelopes that a user-bound agent
 // may observe and checkpoint. Authority expansion remains human-only.
@@ -4013,6 +4080,7 @@ app.get('/api/agent-control', requireUser, (req, res) => {
   const pendingLive = liveProposals.listProposals({ userId: req.session.userId, status: 'pending', limit: 100 });
   const pendingPaper = getProposals();
   const ownerMissions = missions.listMissions(`user:${req.session.userId}`);
+  const incidentStatus = agentIncidents.ownerIncidentStatus(req.session.userId);
   const runtimeStatus = agentRuntime.ownerRuntimeStatus(req.session.userId);
   const lastAction = ap.actions[0] || null;
   res.json({
@@ -4038,6 +4106,7 @@ app.get('/api/agent-control', requireUser, (req, res) => {
       stopped: ownerMissions.filter((mission) => ['stopped', 'expired'].includes(mission.status)).length,
     },
     runtime: runtimeStatus,
+    incidents: incidentStatus,
     keys,
     keyStats: { active: keys.filter((k) => !k.revokedAt).length, revoked: keys.filter((k) => !!k.revokedAt).length },
     parentWallet,
@@ -4399,6 +4468,15 @@ async function pushTick() {
   } catch { /* next tick */ } finally { pushing = false; }
 }
 setInterval(pushTick, 20_000);
+
+// Runtime incidents are evaluated independently of dashboard traffic so an
+// offline agent is quarantined even when no owner has the Control Center open.
+function incidentSweep() {
+  try { agentIncidents.reconcileRuntimeIncidents(); }
+  catch (error) { console.error(`[agent-incidents] sweep failed: ${error.message}`); }
+}
+incidentSweep();
+setInterval(incidentSweep, 10_000);
 
 // ---------- serve ----------
 // JSON 404 for API paths AND any path where the client prefers JSON
