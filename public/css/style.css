@@ -834,7 +834,7 @@ body.onboarding-open #authReset { display: none !important; }
 .runtime-list { display: grid; grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); gap: 8px; margin-top: 10px; }
 .runtime-list article { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 9px; background: rgba(255,255,255,.018); }
 .runtime-list article>div:first-child { display: grid; gap: 2px; min-width: 0; }
-.runtime-list dl { grid-column: 1/-1; display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 7px; margin: 0; }
+.runtime-list dl { grid-column: 1/-1; display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 7px; margin: 0; }
 .runtime-list dl div { display: grid; gap: 2px; }
 .runtime-list dd { margin: 0; font: 600 10px/1.35 var(--mono); overflow-wrap: anywhere; }
 .runtime-note { margin: 10px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }

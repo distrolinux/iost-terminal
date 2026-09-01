@@ -1,0 +1,32 @@
+services:
+  iost-runtime-supervisor:
+    image: node:24-bookworm-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e
+    container_name: iost-runtime-supervisor
+    restart: unless-stopped
+    user: "10000:10000"
+    working_dir: /app
+    command: ["node", "scripts/agent-runtime-supervisor.mjs"]
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    stop_grace_period: 20s
+    environment:
+      IOST_TERMINAL_URL: https://iostcallister.com
+      IOST_AGENT_KEY_FILE: /run/secrets/iost-terminal-agent-key
+      IOST_SUPERVISOR_STATE_FILE: /var/lib/iost-runtime-supervisor/state.json
+      IOST_SUPERVISOR_CONTEXT_FILE: /run/iost-runtime-supervisor/context.json
+      IOST_SUPERVISOR_CADENCE_MS: "20000"
+      IOST_SUPERVISOR_REQUEST_TIMEOUT_MS: "10000"
+    volumes:
+      - ../:/app:ro
+      - /docker/hermes-agent-ghfx/secrets/iost-terminal-agent-key:/run/secrets/iost-terminal-agent-key:ro
+      - /docker/hermes-agent-ghfx/runtime-supervisor:/var/lib/iost-runtime-supervisor:rw
+      - /docker/hermes-agent-ghfx/data/iost-runtime-supervisor-context.json:/run/iost-runtime-supervisor/context.json:ro
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m
+    healthcheck:
+      test: ["CMD", "node", "scripts/agent-runtime-supervisor.mjs", "--check"]
+      interval: 10s
+      timeout: 4s
+      start_period: 30s
+      retries: 3

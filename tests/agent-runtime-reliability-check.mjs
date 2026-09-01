@@ -23,6 +23,7 @@ try {
   assert.equal(initial.execution.authorityExpanded, false);
   assert.equal(initial.liveScopeUsed, false);
   assert.equal(initial.publicChainUsed, false);
+  assert.equal(initial.supervisor.managed, false);
   assert.match(initial.checkpoint.checkpointId, /^cp_[a-f0-9-]{36}$/);
   assert.equal(initial.checkpoint.missionId, missionId);
 
@@ -64,6 +65,16 @@ try {
   assert.equal(recovered.session.recoveryCount, 1);
   assert.equal(recovered.recovery.lastOutcome, 'exact-checkpoint-resumed');
   assert.equal(runtime.missionRuntimeGate({ ownerId, keyId, missionId }, startedAt + 120_002).ok, true);
+
+  const supervised = runtime.recordAgentHeartbeat({
+    ownerId, keyId, agentName: 'Hermes Paper Agent', sessionId: 'session-beta-0002',
+    sequence: 2, state: 'ready', stage: 'idle', missionId,
+    supervisorVersion: 1, cadenceMs: 20_000,
+  }, startedAt + 140_001);
+  assert.equal(supervised.supervisor.managed, true);
+  assert.equal(supervised.supervisor.version, 1);
+  assert.equal(supervised.supervisor.cadenceMs, 20_000);
+  assert.equal(supervised.execution.authorityExpanded, false);
 
   assert.throws(() => runtime.recordAgentHeartbeat({
     ownerId, keyId, agentName: 'Conflicting Agent', sessionId: 'session-gamma-003',

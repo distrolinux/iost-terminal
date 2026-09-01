@@ -56,6 +56,11 @@ stage and exact `missionId`. Confirm `agent_runtime_status` remains ready before
 requesting new mission exposure. A restarted session must provide the last
 checkpoint identifier and restart its sequence at one. Do not treat a heartbeat
 as permission: the wallet, Pact, mission, preflight and risk gates still apply.
+For durable operation, prefer the separate Agent Runtime Supervisor companion
+documented in `docs/AGENT_RUNTIME_SUPERVISOR.md`. It renews at a fail-safe
+20-second cadence, persists exact retries before network submission and records
+draining on container shutdown. Confirm runtime status reports `supervisor.managed`
+without interpreting that evidence as permission to trade or release quarantine.
 
 Call the read-only `agent_incident_status` tool to inspect only the authenticated
 agent's sanitized runtime incidents. A degraded warning should deduplicate and

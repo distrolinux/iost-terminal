@@ -786,7 +786,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.34.0';
+const DISCOVERY_VERSION = '1.35.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -1024,7 +1024,9 @@ recommendations without changing agent authority. The read-only
 fresh-quote watchdog health and automatic risk-reducing exit evidence. The
 \`agent_runtime_status\` and idempotent \`agent_runtime_heartbeat\` tools add
 owner-bound liveness, readiness, exact-checkpoint recovery and fail-closed
-mission execution leases without expanding the agent's authority. The
+mission execution leases without expanding the agent's authority. Optional
+version/cadence fields identify the deterministic Runtime Supervisor companion;
+they are evidence, not permission. The
 read-only \`agent_incident_status\` tool reports deduplicated runtime incidents,
 automatic quarantine, recovery readiness and owner-review requirements without
 acknowledging or resolving an incident. The read-only
@@ -3825,7 +3827,7 @@ const API_INDEX = {
     { path: '/api/agent-missions/:id/start | /pause | /stop', method: 'POST', purpose: 'owner-only mission lifecycle controls; start revalidates the paper wallet and Pact' },
     { path: '/api/agent-missions/:id/checkpoint', method: 'POST', body: '{stage,detail,latencyMs?}', purpose: 'user-bound agent trace checkpoint; cannot expand mission authority' },
     { path: '/api/agent-runtime', method: 'GET', purpose: 'private owner or self view of agent liveness, readiness, lease age and exact-checkpoint recovery status' },
-    { path: '/api/agent-runtime/heartbeat', method: 'POST', body: '{sessionId,sequence,state,stage,missionId?,cursor?,resumeFromCheckpointId?}', purpose: 'idempotent user-agent heartbeat and durable checkpoint; never starts missions, trades or expands authority' },
+    { path: '/api/agent-runtime/heartbeat', method: 'POST', body: '{sessionId,sequence,state,stage,missionId?,cursor?,resumeFromCheckpointId?,supervisorVersion?,cadenceMs?}', purpose: 'idempotent user-agent heartbeat and durable checkpoint; optional supervisor evidence never starts missions, trades or expands authority' },
     { path: '/api/agent-incidents', method: 'GET', purpose: 'private owner or self view of deduplicated runtime incidents, quarantine and recovery readiness' },
     { path: '/api/agent-incidents/:id/acknowledge | /resolve', method: 'POST', purpose: 'owner-only incident review; resolution releases quarantine only after runtime readiness recovers' },
     { path: '/api/agent-safety-slo', method: 'GET', purpose: 'private read-only mission-readiness SLO, error-budget burn rates and deterministic incident playbooks' },
