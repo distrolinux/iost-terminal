@@ -70,6 +70,9 @@ live order, move real money, convert a token, or write to a public chain.
 The private read-only `strategy_promotion_scorecards` tool returns evidence-bound
 0–100 strategy scores and paper-review, shadow, restriction or pause/demotion
 recommendations without changing agent or execution authority.
+The private read-only `paper_position_guardian` tool reports server-enforced
+paper bracket/OCO coverage, fresh-quote watchdog health and automatic-exit
+receipt evidence. Protection continues when the initiating agent disconnects.
 MCP Apps clients can render the private `evaluation_review` evidence panel with
 history, comparison charts and deterministic JSON/CSV exports; see
 `/docs/OWNER_MCP_APP_TESTING.md` for the owner test flow.

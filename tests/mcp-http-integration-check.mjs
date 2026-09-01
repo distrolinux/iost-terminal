@@ -176,6 +176,11 @@ try {
   assert.equal(preflightTool.annotations.destructiveHint, false);
   assert(privateTools.body.result.tools.some((tool) => tool.name === 'paper_execution_receipts'));
   assert(privateTools.body.result.tools.some((tool) => tool.name === 'paper_execution_intents'));
+  const guardianTool = privateTools.body.result.tools.find((tool) => tool.name === 'paper_position_guardian');
+  assert(guardianTool);
+  assert.equal(guardianTool.annotations.readOnlyHint, true);
+  assert.equal(guardianTool.annotations.destructiveHint, false);
+  assert.equal(guardianTool.annotations.idempotentHint, true);
   const promotionTool = privateTools.body.result.tools.find((tool) => tool.name === 'strategy_promotion_scorecards');
   assert.equal(promotionTool.annotations.readOnlyHint, true);
   assert.equal(promotionTool.annotations.destructiveHint, false);
@@ -216,6 +221,19 @@ try {
   });
   assert.equal(authStatus.body.result.structuredContent.canOpenPaperTrade, true);
   assert.equal(authStatus.body.result.structuredContent.wallet.walletId, wallet.walletId);
+
+  const guardianStatus = await mcp('tools/call', { name: 'paper_position_guardian', arguments: {} }, {
+    key: keyA.key, name: 'paper_position_guardian',
+  });
+  assert.equal(guardianStatus.status, 200);
+  assert.equal(guardianStatus.body.result.isError, false);
+  assert.equal(guardianStatus.body.result.structuredContent.mode, 'paper-only');
+  assert.equal(guardianStatus.body.result.structuredContent.coverage.total, 0);
+  assert.equal(guardianStatus.body.result.structuredContent.guarantees.serverEnforced, true);
+  assert.equal(guardianStatus.body.result.structuredContent.guarantees.survivesAgentDisconnect, true);
+  assert.equal(guardianStatus.body.result.structuredContent.guarantees.ocoSiblingCancellation, true);
+  assert.equal(guardianStatus.body.result.structuredContent.liveScopeUsed, false);
+  assert.equal(guardianStatus.body.result.structuredContent.publicChainUsed, false);
 
   const scorecards = await mcp('tools/call', { name: 'strategy_promotion_scorecards', arguments: { limit: 5 } }, {
     key: keyReadOnly.key, name: 'strategy_promotion_scorecards',

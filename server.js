@@ -779,7 +779,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.30.0';
+const DISCOVERY_VERSION = '1.31.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -836,6 +836,7 @@ const OPENAPI_PATHS = {
   '/api/signals/feed': { get: { summary: 'Public signal feed with on-chain proof status', tags: ['agents'], security: [] } },
   '/api/autopilot/proposals': { get: { summary: 'Pending human-in-the-loop proposals with full reasoning', tags: ['autonomy'], security: [] } },
   '/api/paper': { get: { summary: 'Account + open positions + journal (mark-to-market)', tags: ['execution'] } },
+  '/api/position-guardian': { get: { summary: 'Private server-enforced paper bracket/OCO protection and watchdog health', tags: ['execution'] } },
   '/api/paper/preflight': { post: { summary: 'Read-only paper trade preflight with multi-venue quote integrity, price-protected execution-quality routing, estimated cost and authorization evidence', tags: ['execution'] } },
   '/api/paper/open': { post: { summary: 'Open paper trade', tags: ['execution'] } },
   '/api/paper/close': { post: { summary: 'Close paper trade', tags: ['execution'] } },
@@ -1005,7 +1006,9 @@ an MCP-resource-bound bearer token adds private evaluation/account tools,
 including \`paper_execution_receipts\` and \`paper_execution_intents\` with
 tamper-evident execution evidence and replay-safe intent status. The read-only
 \`strategy_promotion_scorecards\` tool returns evidence-bound paper lifecycle
-recommendations without changing agent authority. The
+recommendations without changing agent authority. The read-only
+\`paper_position_guardian\` tool reports server-enforced bracket/OCO coverage,
+fresh-quote watchdog health and automatic risk-reducing exit evidence. The
 \`trade-paper\` scope adds read-only \`paper_trade_preflight\` plus
 \`paper_trade_open\` and \`paper_trade_close\`.
 Both require a unique \`intentId\`; exact retries return the original terminal
@@ -1171,6 +1174,7 @@ async function mcpToolCall(req, name, args) {
     case 'agent_authorization_status': return mcpAuthorizationStatus(req);
     case 'paper_account': return await markToMarket(accountFor(req).accountId);
     case 'paper_stats': return journalStats(accountFor(req).accountId);
+    case 'paper_position_guardian': return management.positionGuardianStatus(accountFor(req).accountId);
     case 'paper_execution_receipts': return executionReceipts.listExecutionReceipts(accountFor(req).accountId, args?.limit);
     case 'paper_execution_intents': {
       const accountId = accountFor(req).accountId;
@@ -1623,6 +1627,12 @@ app.get('/api/portfolio', async (req, res) => {
 app.get('/api/paper', requireUser, async (req, res) => {
   try { res.json(await markToMarket(accountFor(req).accountId)); }
   catch (e) { res.status(502).json({ error: e.message }); }
+});
+
+app.get('/api/position-guardian', requireUser, (req, res) => {
+  if (req.userAgent && !userAgentHas(req, 'read')) return res.status(403).json({ error: 'read scope required' });
+  res.set('Cache-Control', 'private, no-store');
+  res.json(management.positionGuardianStatus(accountFor(req).accountId));
 });
 
 app.post('/api/paper/preflight', requireUser, async (req, res) => {
@@ -3645,6 +3655,7 @@ const API_INDEX = {
   execution: [
     { path: '/api/account', method: 'GET', purpose: 'light per-account snapshot for UI topbar: cash, equity, openPositions, lastTrades' },
     { path: '/api/paper', method: 'GET', purpose: 'account + open positions + journal (mark-to-market)' },
+    { path: '/api/position-guardian', method: 'GET', purpose: 'private server-enforced paper bracket/OCO coverage, fresh-quote watchdog health and automatic-exit status' },
     { path: '/api/paper/preflight', method: 'POST', body: '{intentId,symbol,side,size,entry,maxSlippageBps,stop?,target?,walletId,pactId,missionId?,recipient?,protocol?}', purpose: 'read-only one-intent paper execution preflight; crypto quote integrity, best trusted bid/ask, GARCH or trusted-range volatility, dynamic portfolio capacity, exposure/concentration/correlation/drawdown/daily-loss/stop risk, server-fill notional and authorization rails' },
     { path: '/api/paper/open', method: 'POST', body: '{intentId,preflightFingerprint,symbol,side,size,entry,maxSlippageBps,stop?,target?,reason?,confidence?,walletId,pactId,missionId?,recipient?,protocol?}', purpose: 'idempotent server-priced paper open; agents require a protective stop and matching unexpired quote-integrity, portfolio-risk and wallet/Pact evidence; crypto longs use the best consensus-approved ask and shorts the best bid' },
     { path: '/api/paper/close', method: 'POST', body: '{intentId,positionId}', purpose: 'idempotent close at a server-observed price (client exit prices are ignored)' },
@@ -4013,18 +4024,19 @@ app.post('/api/autopilot/proposals/:id/reject', requireUser, autopilotOwner, (re
 // autonomy loop: 60s cadence, no human needed
 setInterval(() => { tickAutopilot().catch(() => {}); }, 60_000);
 
-// ---------- v1.13 position management (trailing stops/TP + DCA) ----------
-// Sweep every 60s over ALL paper accounts: ratchets trailing stops, locks
-// trailing take-profits, and (optionally score-gated) averages down via DCA.
-// Every action is a normal journaled close/add with an honest reason.
+// ---------- v1.31 Position Guardian + position management ----------
+// A 10s server watchdog protects paper positions even when their agent is
+// disconnected. Fresh execution-side quotes drive deterministic bracket/OCO
+// exits and verified receipts. Trailing/DCA management shares the same sweep.
 let mgmtRunning = false;
-setInterval(async () => {
+const runManagementSweep = async () => {
   if (mgmtRunning) return;
   mgmtRunning = true;
   try { await management.sweepManagement(); } catch (e) { console.error('[mgmt] sweep error:', e.message); }
   finally { mgmtRunning = false; }
-}, 60_000);
-management.sweepManagement().catch(() => {}); // run once at boot
+};
+setInterval(runManagementSweep, 10_000);
+runManagementSweep(); // run once at boot through the same overlap guard
 
 // ---------- v1.14 triggers/alerts ----------
 // Same 60s cadence. Price triggers via getTicker; score triggers via the same

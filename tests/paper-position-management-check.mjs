@@ -27,12 +27,14 @@ try {
   assert.deepEqual(checkStaticExit(opened.position, 111), { exit: true, reason: 'take-profit (110)' });
 
   const swept = await sweepManagement({ priceFn: async () => 111 });
-  assert.equal(swept.trailingExits.some((x) => x.reason === 'take-profit (110)'), true);
+  assert.equal(swept.trailingExits.some((x) => x.reason === 'guardian take-profit (110)'), true);
   const state = getState('owner-position');
   assert.equal(state.positions.length, 0);
   assert.equal(state.journal[0].status, 'closed');
-  assert.equal(state.journal[0].exitReason, 'take-profit (110)');
-  assert.equal(state.journal[0].exitAuthority, 'management-observed-price');
+  assert.equal(state.journal[0].exitReason, 'guardian take-profit (110)');
+  assert.match(state.journal[0].exitAuthority, /^guardian-/);
+  assert.equal(state.journal[0].guardian.legs.takeProfit.status, 'filled');
+  assert.equal(state.journal[0].guardian.legs.stopLoss.status, 'cancelled');
 
   const again = await openTrade({ symbol: 'AAPL', side: 'long', size: 1, entry: 100, accountId: 'owner-position' });
   assert.equal(again.ok, true);
