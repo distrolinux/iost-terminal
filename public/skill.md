@@ -78,6 +78,10 @@ its mission checkpoint and keep new mission exposure ready. Poll the private
 read-only `agent_runtime_status` tool for readiness. After a disconnect, a new
 session must resume from the exact last checkpoint; heartbeats never expand
 authority, and Position Guardian continues protecting existing positions.
+Poll the private read-only `agent_incident_status` tool for deduplicated runtime
+warnings, offline quarantines, recovery readiness and owner-review state. An
+agent cannot acknowledge, resolve or release its own quarantine; the runtime
+must recover first and the owner must review it in Agent Control Center.
 MCP Apps clients can render the private `evaluation_review` evidence panel with
 history, comparison charts and deterministic JSON/CSV exports; see
 `/docs/OWNER_MCP_APP_TESTING.md` for the owner test flow.

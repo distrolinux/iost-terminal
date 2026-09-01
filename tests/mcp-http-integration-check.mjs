@@ -183,11 +183,15 @@ try {
   assert.equal(guardianTool.annotations.idempotentHint, true);
   const runtimeStatusTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_runtime_status');
   const runtimeHeartbeatTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_runtime_heartbeat');
+  const incidentStatusTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_incident_status');
   assert.equal(runtimeStatusTool.annotations.readOnlyHint, true);
   assert.equal(runtimeStatusTool.annotations.destructiveHint, false);
   assert.equal(runtimeHeartbeatTool.annotations.readOnlyHint, false);
   assert.equal(runtimeHeartbeatTool.annotations.destructiveHint, false);
   assert.equal(runtimeHeartbeatTool.annotations.idempotentHint, true);
+  assert.equal(incidentStatusTool.annotations.readOnlyHint, true);
+  assert.equal(incidentStatusTool.annotations.destructiveHint, false);
+  assert.equal(incidentStatusTool.annotations.idempotentHint, true);
   const promotionTool = privateTools.body.result.tools.find((tool) => tool.name === 'strategy_promotion_scorecards');
   assert.equal(promotionTool.annotations.readOnlyHint, true);
   assert.equal(promotionTool.annotations.destructiveHint, false);
@@ -246,6 +250,18 @@ try {
     key: keyA.key, name: 'agent_runtime_status',
   });
   assert.equal(runtimeBefore.body.result.structuredContent.status, 'not-enrolled');
+  const incidentsBefore = await mcp('tools/call', { name: 'agent_incident_status', arguments: {} }, {
+    key: keyA.key, name: 'agent_incident_status',
+  });
+  assert.equal(incidentsBefore.body.result.structuredContent.mode, 'paper-only');
+  assert.equal(incidentsBefore.body.result.structuredContent.counts.open, 0);
+  assert.equal(incidentsBefore.body.result.structuredContent.guarantees.authorityExpanded, false);
+  assert.equal(incidentsBefore.body.result.structuredContent.liveScopeUsed, false);
+  assert.equal(incidentsBefore.body.result.structuredContent.publicChainUsed, false);
+  const otherIncidents = await mcp('tools/call', { name: 'agent_incident_status', arguments: {} }, {
+    key: keyB.key, name: 'agent_incident_status',
+  });
+  assert.equal(otherIncidents.body.result.structuredContent.counts.total, 0, 'incident state must not cross owners');
   const heartbeatArguments = {
     sessionId: 'mcp-runtime-session-0001', sequence: 1, state: 'ready', stage: 'idle',
   };
@@ -310,7 +326,7 @@ try {
   const preflightIntentsBefore = await mcp('tools/call', { name: 'paper_execution_intents', arguments: { limit: 20 } }, {
     key: keyA.key, name: 'paper_execution_intents',
   });
-  const preflightStateFiles = ['accounts.json', 'limits.json', 'pacts.json', 'missions.json', 'agent-runtimes.json', 'execution-intents.json', 'execution-receipts.jsonl'];
+  const preflightStateFiles = ['accounts.json', 'limits.json', 'pacts.json', 'missions.json', 'agent-runtimes.json', 'agent-incidents.json', 'execution-intents.json', 'execution-receipts.jsonl'];
   const preflightFilesBefore = new Map(preflightStateFiles.map((name) => {
     const path = join(SCRATCH, name);
     return [name, existsSync(path) ? readFileSync(path, 'utf8') : null];

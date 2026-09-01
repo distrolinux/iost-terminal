@@ -1184,6 +1184,9 @@ async function renderAgentControl() {
   const runtime = s.runtime || { counts: { total: 0, ready: 0, degraded: 0, offline: 0, draining: 0 }, runtimes: [], policy: {} };
   const runtimeCounts = runtime.counts || {};
   const runtimeHealthy = !(runtimeCounts.degraded || runtimeCounts.offline) && (runtimeCounts.ready || !runtimeCounts.total);
+  const incidents = s.incidents || { counts: { total: 0, open: 0, critical: 0, recoveryReady: 0, quarantined: 0 }, incidents: [], policy: {} };
+  const incidentCounts = incidents.counts || {};
+  const incidentHealthy = !(incidentCounts.open || incidentCounts.quarantined);
   const moneyInput = (minor) => ((Number(minor || 0) / 100).toFixed(2));
   el.innerHTML = `
     <div class="section-title">Agent Control Center <span class="sub">owner-only operations · server-enforced limits</span></div>
@@ -1215,6 +1218,27 @@ async function renderAgentControl() {
       </div>
       ${runtime.runtimes?.length ? `<div class="runtime-list">${runtime.runtimes.map((item) => `<article><div><strong>${esc(item.name || 'Agent')}</strong><span class="mono muted">${esc(item.runtimeRef || '')}</span></div><span class="chip ${item.status === 'ready' ? 'bull' : item.status === 'degraded' ? 'warn' : 'bear'}">${esc(item.status)}</span><dl><div><dt>Heartbeat</dt><dd>${item.heartbeat?.lastAt ? timeAgo(item.heartbeat.lastAt) : 'never'}</dd></div><div><dt>Checkpoint</dt><dd>${esc(item.checkpoint?.stage || 'none')}</dd></div><div><dt>Recovery</dt><dd>${item.session?.recoveryCount || 0}</dd></div><div><dt>New exposure</dt><dd>${item.execution?.newMissionExposureAllowed ? 'ready' : 'blocked'}</dd></div></dl></article>`).join('')}</div>` : '<p class="muted">No runtime has enrolled yet. Existing agents remain compatible; after the first heartbeat, stale or mismatched sessions fail closed for new mission exposure.</p>'}
       <p class="runtime-note">Open positions remain protected by Position Guardian even if an agent disconnects. Recovery requires the exact last checkpoint and never expands wallet, Pact, mission, or trading authority.</p>
+    </section>
+    <section class="card incident-recovery ${incidentHealthy ? 'is-healthy' : 'is-active'}" aria-labelledby="incidentRecoveryTitle">
+      <div class="section-title" id="incidentRecoveryTitle">Agent Incident &amp; Recovery Center <span class="sub">deduplicated alerts · fail-closed quarantine · owner release</span><span class="receipt-chain ${incidentHealthy ? 'is-valid' : 'is-invalid'}">${incidentHealthy ? 'all clear' : `${incidentCounts.open || 0} active`}</span></div>
+      <div class="incident-grid">
+        <div><span>Active</span><strong>${incidentCounts.open || 0}</strong><small>${incidentCounts.critical || 0} critical</small></div>
+        <div><span>Quarantined</span><strong>${incidentCounts.quarantined || 0}</strong><small>new mission exposure blocked</small></div>
+        <div><span>Recovery ready</span><strong>${incidentCounts.recoveryReady || 0}</strong><small>awaiting owner review</small></div>
+        <div><span>Failure threshold</span><strong>${incidentCounts.open ? (incidents.policy?.recoveryFailureQuarantineThreshold || 3) : 'armed'}</strong><small>${Math.round((incidents.policy?.recoveryFailureWindowMs || 600000) / 60000)} minute window</small></div>
+      </div>
+      ${incidents.incidents?.length ? `<div class="incident-list">${incidents.incidents.map((incident) => {
+        const active = incident.status !== 'resolved';
+        const acknowledged = Boolean(incident.acknowledgedAt);
+        const severityClass = incident.severity === 'critical' ? 'bear' : incident.status === 'resolved' ? 'bull' : 'warn';
+        return `<article class="incident-item ${active ? 'is-open' : 'is-resolved'}">
+          <div class="incident-head"><div><strong>${esc(incident.agentName || 'Agent')}</strong><span class="mono muted">${esc(incident.category || 'runtime-incident')} · ${esc(incident.incidentRef || '')}</span></div><div><span class="chip ${severityClass}">${esc(incident.severity)}</span><span class="chip ${incident.status === 'resolved' ? 'bull' : 'neut'}">${esc(incident.status)}</span></div></div>
+          <p>${esc(incident.summary || incident.reasonCode || 'Runtime safety incident')}</p>
+          <dl><div><dt>First seen</dt><dd>${incident.openedAt ? timeAgo(incident.openedAt) : 'unknown'}</dd></div><div><dt>Occurrences</dt><dd>${incident.occurrenceCount || 1}</dd></div><div><dt>Quarantine</dt><dd>${incident.quarantineApplied ? 'applied' : 'not required'}</dd></div><div><dt>Review</dt><dd>${acknowledged ? 'acknowledged' : active ? 'required' : 'complete'}</dd></div></dl>
+          ${active ? `<div class="incident-actions">${acknowledged ? '' : `<button class="btn sm ghost" data-incident-action="acknowledge" data-incident-ref="${esc(incident.incidentRef)}">Acknowledge</button>`}<button class="btn sm green" data-incident-action="resolve" data-incident-ref="${esc(incident.incidentRef)}" ${!incident.recoveryReady || !acknowledged ? 'disabled' : ''}>Resolve &amp; release</button><span>${incident.recoveryReady ? acknowledged ? 'Runtime recovered; owner release is available.' : 'Runtime recovered; acknowledge before release.' : 'Release stays locked until runtime health is ready.'}</span></div>` : ''}
+        </article>`;
+      }).join('')}</div>` : '<div class="empty incident-empty">No runtime incidents. Monitoring remains active in the server even when this page is closed.</div>'}
+      <p class="runtime-note">Incident controls can only reduce or restore previously granted paper authority. They cannot enable live trading, move funds, or bypass wallet, Pact, mission, preflight, risk, and Position Guardian controls.</p>
     </section>
     <section class="card" aria-labelledby="controlKeysTitle">
       <div class="section-title" id="controlKeysTitle">Permissions <span class="sub">scoped keys · secrets never displayed here</span></div>
@@ -1310,6 +1334,15 @@ async function renderAgentControl() {
     toast(ap.enabled ? '⏸ Paper agent paused' : '▶ Paper agent started');
     renderAgentControl();
   });
+  el.querySelectorAll('[data-incident-action]').forEach((button) => button.addEventListener('click', async () => {
+    const action = button.dataset.incidentAction;
+    if (action === 'resolve' && !confirm('Resolve this recovered incident and release only its runtime quarantine? Existing paper authority and all other safety gates remain unchanged.')) return;
+    try {
+      await post(`/api/agent-incidents/${button.dataset.incidentRef}/${action}`, {});
+      toast(action === 'acknowledge' ? 'Incident acknowledged' : '✓ Recovered incident resolved');
+      renderAgentControl();
+    } catch (e) { toast(`Incident action failed: ${esc(e.message)}`); }
+  }));
   $('#missionCreateForm', el)?.addEventListener('submit', async (event) => {
     event.preventDefault();
     const [walletId, pactId] = $('#missionAuthority', el).value.split('|');

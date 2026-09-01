@@ -57,6 +57,14 @@ requesting new mission exposure. A restarted session must provide the last
 checkpoint identifier and restart its sequence at one. Do not treat a heartbeat
 as permission: the wallet, Pact, mission, preflight and risk gates still apply.
 
+Call the read-only `agent_incident_status` tool to inspect only the authenticated
+agent's sanitized runtime incidents. A degraded warning should deduplicate and
+auto-resolve after a healthy heartbeat. An offline or repeated-recovery incident
+must keep new mission exposure quarantined until the runtime is ready and the
+owner acknowledges then resolves it in Agent Control Center. Do not use the
+incident workflow as execution approval; it can restore only previously bounded
+paper authority and cannot add live or public-chain scope.
+
 ## If you want a future live pilot
 
 That is a separate security change, not an MCP Apps setting. It would require a
