@@ -74,8 +74,8 @@ function contrast(a, b) {
 pass('Terminal dim text meets WCAG AA contrast on cards', dim && surface && contrast(dim, surface) >= 4.5);
 
 pass('security and accessibility assets are cache-versioned',
-  /\/css\/style\.css\?v=2\.23/.test(app)
-  && /\/js\/app\.js\?v=2\.34\.0/.test(app)
+  /\/css\/style\.css\?v=2\.24/.test(app)
+  && /\/js\/app\.js\?v=2\.35\.0/.test(app)
   && /\/js\/auth\.js\?v=2\.10\.0/.test(app));
 
 console.log('\nPR #30 security and accessibility contracts passed');

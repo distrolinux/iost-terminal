@@ -1181,6 +1181,9 @@ async function renderAgentControl() {
   const activePacts = pacts.filter((p) => p.status === 'active');
   const missionPairs = activePacts.map((pact) => ({ pact, wallet: paperWallets.find((wallet) => wallet.walletId === pact.agentWalletId) })).filter((pair) => pair.wallet);
   const missions = s.missions || [];
+  const runtime = s.runtime || { counts: { total: 0, ready: 0, degraded: 0, offline: 0, draining: 0 }, runtimes: [], policy: {} };
+  const runtimeCounts = runtime.counts || {};
+  const runtimeHealthy = !(runtimeCounts.degraded || runtimeCounts.offline) && (runtimeCounts.ready || !runtimeCounts.total);
   const moneyInput = (minor) => ((Number(minor || 0) / 100).toFixed(2));
   el.innerHTML = `
     <div class="section-title">Agent Control Center <span class="sub">owner-only operations · server-enforced limits</span></div>
@@ -1201,6 +1204,17 @@ async function renderAgentControl() {
         <button class="btn sm ghost" id="controlApproval">${ap.config?.requireApproval ? 'Approval required' : 'Require approval'}</button>
         <button class="btn sm danger" id="controlEmergency">Emergency stop</button>
       </div>
+    </section>
+    <section class="card runtime-reliability ${runtimeHealthy ? 'is-healthy' : 'is-degraded'}" aria-labelledby="runtimeReliabilityTitle">
+      <div class="section-title" id="runtimeReliabilityTitle">Agent Runtime Reliability <span class="sub">liveness · readiness · durable recovery</span><span class="receipt-chain ${runtimeHealthy ? 'is-valid' : 'is-invalid'}">${runtimeHealthy ? 'runtime safe' : 'attention required'}</span></div>
+      <div class="runtime-grid">
+        <div><span>Enrolled</span><strong>${runtimeCounts.total || 0}</strong><small>identity-bound runtimes</small></div>
+        <div><span>Ready</span><strong>${runtimeCounts.ready || 0}</strong><small>${runtimeCounts.degraded || 0} degraded</small></div>
+        <div><span>Offline</span><strong>${runtimeCounts.offline || 0}</strong><small>${runtimeCounts.draining || 0} draining</small></div>
+        <div><span>Lease policy</span><strong>${Math.round((runtime.policy?.offlineAfterMs || 90000) / 1000)}s</strong><small>${Math.round((runtime.policy?.heartbeatIntervalMs || 30000) / 1000)}s heartbeat</small></div>
+      </div>
+      ${runtime.runtimes?.length ? `<div class="runtime-list">${runtime.runtimes.map((item) => `<article><div><strong>${esc(item.name || 'Agent')}</strong><span class="mono muted">${esc(item.runtimeRef || '')}</span></div><span class="chip ${item.status === 'ready' ? 'bull' : item.status === 'degraded' ? 'warn' : 'bear'}">${esc(item.status)}</span><dl><div><dt>Heartbeat</dt><dd>${item.heartbeat?.lastAt ? timeAgo(item.heartbeat.lastAt) : 'never'}</dd></div><div><dt>Checkpoint</dt><dd>${esc(item.checkpoint?.stage || 'none')}</dd></div><div><dt>Recovery</dt><dd>${item.session?.recoveryCount || 0}</dd></div><div><dt>New exposure</dt><dd>${item.execution?.newMissionExposureAllowed ? 'ready' : 'blocked'}</dd></div></dl></article>`).join('')}</div>` : '<p class="muted">No runtime has enrolled yet. Existing agents remain compatible; after the first heartbeat, stale or mismatched sessions fail closed for new mission exposure.</p>'}
+      <p class="runtime-note">Open positions remain protected by Position Guardian even if an agent disconnects. Recovery requires the exact last checkpoint and never expands wallet, Pact, mission, or trading authority.</p>
     </section>
     <section class="card" aria-labelledby="controlKeysTitle">
       <div class="section-title" id="controlKeysTitle">Permissions <span class="sub">scoped keys · secrets never displayed here</span></div>
