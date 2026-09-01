@@ -31,6 +31,7 @@
 - Watchlist: 16 crypto (IOST, BTC, ETH, SOL, XRP, DOGE, ADA, AVAX, LINK, DOT, SUI, ARB, OP, TON, NEAR, LTC) + 9 equities (AAPL, MSFT, NVDA, TSLA, AMZN, GOOGL, META, SPY, QQQ)
 - AI trade score: 0-100 composite over momentum, technical setup, volume, news sentiment, on-chain activity, risk
 - Position Guardian: server-enforced paper bracket/OCO stops and targets, fresh-quote watchdog health, and verified automatic-exit receipts that do not depend on the agent staying online
+- Agent Runtime Reliability: owner-bound 30-second heartbeats, readiness leases, mission checkpoints, exact-checkpoint restart recovery, and fail-closed new mission exposure for enrolled agents
 - Every page ships a machine layer: server-rendered data table, JSON-LD knowledge graph (Schema.org FinancialProduct/Stock/Offer, ISO 8601 dates, explicit priceCurrency), and a `<script type="application/json" id="agent-state">` state blob
 
 ## Important caveats

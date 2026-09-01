@@ -40,6 +40,7 @@ import * as trust from './lib/trust.js';
 import * as arena from './lib/arena.js';
 import * as pacts from './lib/pacts.js';
 import * as missions from './lib/missions.js';
+import * as agentRuntime from './lib/agent-runtime.js';
 import * as executionReceipts from './lib/execution-receipts.js';
 import * as executionIntents from './lib/execution-intents.js';
 import { buildPaperTradePreflight } from './lib/trade-preflight.js';
@@ -124,7 +125,7 @@ try {
     'iost_accounts.json', 'pending_pins.json', 'signals.json', 'follows.json', 'triggers.json',
     'payments.json', 'fee-config.json', 'live-proposals.json', 'agent-audit.jsonl',
     'live-audit.jsonl', 'arena-audit.jsonl', 'mcp-tasks.json', 'missions.json', 'execution-receipts.jsonl',
-    'execution-intents.json',
+    'execution-intents.json', 'agent-runtimes.json',
   ]) {
     const p = join(DATA_DIR, f);
     if (existsSync(p)) {
@@ -136,6 +137,7 @@ try {
   missions.secureMissionPermissions();
   executionReceipts.secureReceiptPermissions();
   executionIntents.secureExecutionIntentPermissions();
+  agentRuntime.secureAgentRuntimePermissions();
 } catch (e) {
   console.error(`[security] refusing boot: sensitive store permissions could not be secured (${e.message})`);
   throw e;
@@ -779,7 +781,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.31.0';
+const DISCOVERY_VERSION = '1.32.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -852,6 +854,8 @@ const OPENAPI_PATHS = {
   '/api/agent-missions/{id}/pause': { post: { summary: 'Pause an owner paper mission', tags: ['autonomy'] } },
   '/api/agent-missions/{id}/stop': { post: { summary: 'Permanently stop an owner paper mission', tags: ['autonomy'] } },
   '/api/agent-missions/{id}/checkpoint': { post: { summary: 'Append a bounded user-agent mission checkpoint', tags: ['autonomy'] } },
+  '/api/agent-runtime': { get: { summary: 'Private agent heartbeat, readiness, recovery and durable-checkpoint status', tags: ['autonomy'] } },
+  '/api/agent-runtime/heartbeat': { post: { summary: 'Renew an authenticated user-agent runtime lease without expanding authority', tags: ['autonomy'] } },
 };
 app.get('/openapi.json', (req, res) => {
   res.set('Access-Control-Allow-Origin', '*');
@@ -1009,6 +1013,9 @@ tamper-evident execution evidence and replay-safe intent status. The read-only
 recommendations without changing agent authority. The read-only
 \`paper_position_guardian\` tool reports server-enforced bracket/OCO coverage,
 fresh-quote watchdog health and automatic risk-reducing exit evidence. The
+\`agent_runtime_status\` and idempotent \`agent_runtime_heartbeat\` tools add
+owner-bound liveness, readiness, exact-checkpoint recovery and fail-closed
+mission execution leases without expanding the agent's authority. The
 \`trade-paper\` scope adds read-only \`paper_trade_preflight\` plus
 \`paper_trade_open\` and \`paper_trade_close\`.
 Both require a unique \`intentId\`; exact retries return the original terminal
@@ -1175,6 +1182,21 @@ async function mcpToolCall(req, name, args) {
     case 'paper_account': return await markToMarket(accountFor(req).accountId);
     case 'paper_stats': return journalStats(accountFor(req).accountId);
     case 'paper_position_guardian': return management.positionGuardianStatus(accountFor(req).accountId);
+    case 'agent_runtime_status': {
+      if (req.userAgent) return agentRuntime.agentRuntimeStatus(req.userAgent.userId, req.userAgent.keyId);
+      if (req.session?.userId) return agentRuntime.ownerRuntimeStatus(req.session.userId);
+      throw Object.assign(new Error('user-bound runtime access required'), { protocolCode: -32602 });
+    }
+    case 'agent_runtime_heartbeat': {
+      if (!req.userAgent || !userAgentHas(req, 'read')) {
+        throw Object.assign(new Error('user agent read scope required'), { protocolCode: -32602 });
+      }
+      return agentRuntime.recordAgentHeartbeat({
+        ...(args || {}),
+        ownerId: req.userAgent.userId, keyId: req.userAgent.keyId,
+        agentName: req.userAgent.name,
+      });
+    }
     case 'paper_execution_receipts': return executionReceipts.listExecutionReceipts(accountFor(req).accountId, args?.limit);
     case 'paper_execution_intents': {
       const accountId = accountFor(req).accountId;
@@ -2571,10 +2593,16 @@ async function paperTradePreflight(req, order = {}) {
   });
   const ownerId = missionOwnerId(req);
   const missionId = String(effectiveOrder?.missionId || '').trim();
-  const mission = missionId ? missions.previewMissionTrade({
+  let mission = missionId ? missions.previewMissionTrade({
     missionId, ownerId, walletId: effectiveOrder?.walletId, pactId: effectiveOrder?.pactId,
     symbol, notionalMinor,
   }) : null;
+  if (mission?.ok && req.userAgent) {
+    const runtimeGate = agentRuntime.missionRuntimeGate({
+      ownerId: req.userAgent.userId, keyId: req.userAgent.keyId, missionId,
+    }, now);
+    if (!runtimeGate.ok) mission = { ok: false, reason: runtimeGate.reason };
+  }
   let accountId = 'default';
   if (req.session?.userId && auth.findById(req.session.userId)) accountId = `user:${req.session.userId}`;
   else if (req.userAgent?.userId) accountId = `user:${req.userAgent.userId}`;
@@ -2873,6 +2901,21 @@ async function executePaperOpenOnce(req, order, source = 'rest') {
   const preflight = await enforcePaperPreflightBinding(req, order, source, attempt);
   const fill = serverPaperFill(preflight, order);
   notionalMinor = fill.fillPrice > 0 && size > 0 ? Math.ceil(fill.fillPrice * size * 100) : 0;
+
+  if (missionId && req.userAgent) {
+    const runtimeGate = agentRuntime.missionRuntimeGate({
+      ownerId: req.userAgent.userId, keyId: req.userAgent.keyId, missionId,
+    });
+    if (!runtimeGate.ok) {
+      attempt.authorizationMs = Date.now() - authorizationStartedAt;
+      const receipt = writePaperReceipt(req, attempt, {
+        outcome: 'rejected', execution: { status: 'not-filled' },
+        missionAuthorized: false, reasonCode: runtimeGate.reason,
+        detail: 'The enrolled agent runtime is not ready for new mission exposure.',
+      });
+      throw rejectedPaperError('agent runtime is not ready for new mission exposure', 409, runtimeGate.reason, receipt);
+    }
+  }
 
   if (missionId) {
     missionReservation = missions.reserveMissionTrade({
@@ -3731,6 +3774,8 @@ const API_INDEX = {
     { path: '/api/agent-missions', method: 'GET|POST', purpose: 'owner-only Mission Control: list or create a paused supervised paper mission bound to an exact active wallet and Pact' },
     { path: '/api/agent-missions/:id/start | /pause | /stop', method: 'POST', purpose: 'owner-only mission lifecycle controls; start revalidates the paper wallet and Pact' },
     { path: '/api/agent-missions/:id/checkpoint', method: 'POST', body: '{stage,detail,latencyMs?}', purpose: 'user-bound agent trace checkpoint; cannot expand mission authority' },
+    { path: '/api/agent-runtime', method: 'GET', purpose: 'private owner or self view of agent liveness, readiness, lease age and exact-checkpoint recovery status' },
+    { path: '/api/agent-runtime/heartbeat', method: 'POST', body: '{sessionId,sequence,state,stage,missionId?,cursor?,resumeFromCheckpointId?}', purpose: 'idempotent user-agent heartbeat and durable checkpoint; never starts missions, trades or expands authority' },
     { path: '/api/autopilot', method: 'GET', purpose: 'autopilot status + config + action audit trail + pending proposals' },
     { path: '/api/autopilot/start', method: 'POST', body: '{config?}', purpose: 'enable autonomous trading loop' },
     { path: '/api/autopilot/stop', method: 'POST', purpose: 'disable autonomous loop' },
@@ -3864,6 +3909,31 @@ app.get('/api/audit', requireUser, (req, res) => {
   res.json({ agent, count: entries.length, entries: entries.slice(-limit).reverse() });
 });
 
+// Agent Runtime Reliability: user-agent heartbeats are identity-bound,
+// idempotent and durable. Owner reads aggregate health; an agent sees only its
+// own lease. Heartbeats never start missions or expand execution authority.
+app.get('/api/agent-runtime', requireUser, (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (req.userAgent) {
+    if (!userAgentHas(req, 'read')) return res.status(403).json({ error: 'read scope required' });
+    return res.json(agentRuntime.agentRuntimeStatus(req.userAgent.userId, req.userAgent.keyId));
+  }
+  if (!isOwnerSession(req) || !req.session?.userId) return res.status(403).json({ error: 'owner or user agent required' });
+  return res.json(agentRuntime.ownerRuntimeStatus(req.session.userId));
+});
+
+app.post('/api/agent-runtime/heartbeat', requireUser, (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (!req.userAgent || !userAgentHas(req, 'read')) return res.status(403).json({ error: 'user agent read scope required' });
+  try {
+    return res.json(agentRuntime.recordAgentHeartbeat({
+      ...(req.body || {}),
+      ownerId: req.userAgent.userId, keyId: req.userAgent.keyId,
+      agentName: req.userAgent.name,
+    }));
+  } catch (error) { return res.status(409).json({ ok: false, error: error.message }); }
+});
+
 // Mission Control: owner-created, paper-only envelopes that a user-bound agent
 // may observe and checkpoint. Authority expansion remains human-only.
 app.get('/api/agent-missions', requireUser, (req, res) => {
@@ -3943,6 +4013,7 @@ app.get('/api/agent-control', requireUser, (req, res) => {
   const pendingLive = liveProposals.listProposals({ userId: req.session.userId, status: 'pending', limit: 100 });
   const pendingPaper = getProposals();
   const ownerMissions = missions.listMissions(`user:${req.session.userId}`);
+  const runtimeStatus = agentRuntime.ownerRuntimeStatus(req.session.userId);
   const lastAction = ap.actions[0] || null;
   res.json({
     ok: true,
@@ -3966,6 +4037,7 @@ app.get('/api/agent-control', requireUser, (req, res) => {
       paused: ownerMissions.filter((mission) => mission.status === 'paused').length,
       stopped: ownerMissions.filter((mission) => ['stopped', 'expired'].includes(mission.status)).length,
     },
+    runtime: runtimeStatus,
     keys,
     keyStats: { active: keys.filter((k) => !k.revokedAt).length, revoked: keys.filter((k) => !!k.revokedAt).length },
     parentWallet,

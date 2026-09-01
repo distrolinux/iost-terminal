@@ -181,6 +181,13 @@ try {
   assert.equal(guardianTool.annotations.readOnlyHint, true);
   assert.equal(guardianTool.annotations.destructiveHint, false);
   assert.equal(guardianTool.annotations.idempotentHint, true);
+  const runtimeStatusTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_runtime_status');
+  const runtimeHeartbeatTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_runtime_heartbeat');
+  assert.equal(runtimeStatusTool.annotations.readOnlyHint, true);
+  assert.equal(runtimeStatusTool.annotations.destructiveHint, false);
+  assert.equal(runtimeHeartbeatTool.annotations.readOnlyHint, false);
+  assert.equal(runtimeHeartbeatTool.annotations.destructiveHint, false);
+  assert.equal(runtimeHeartbeatTool.annotations.idempotentHint, true);
   const promotionTool = privateTools.body.result.tools.find((tool) => tool.name === 'strategy_promotion_scorecards');
   assert.equal(promotionTool.annotations.readOnlyHint, true);
   assert.equal(promotionTool.annotations.destructiveHint, false);
@@ -235,6 +242,53 @@ try {
   assert.equal(guardianStatus.body.result.structuredContent.liveScopeUsed, false);
   assert.equal(guardianStatus.body.result.structuredContent.publicChainUsed, false);
 
+  const runtimeBefore = await mcp('tools/call', { name: 'agent_runtime_status', arguments: {} }, {
+    key: keyA.key, name: 'agent_runtime_status',
+  });
+  assert.equal(runtimeBefore.body.result.structuredContent.status, 'not-enrolled');
+  const heartbeatArguments = {
+    sessionId: 'mcp-runtime-session-0001', sequence: 1, state: 'ready', stage: 'idle',
+  };
+  const runtimeHeartbeat = await mcp('tools/call', { name: 'agent_runtime_heartbeat', arguments: heartbeatArguments }, {
+    key: keyA.key, name: 'agent_runtime_heartbeat',
+  });
+  assert.equal(runtimeHeartbeat.status, 200);
+  assert.equal(runtimeHeartbeat.body.result.isError, false);
+  assert.equal(runtimeHeartbeat.body.result.structuredContent.status, 'ready');
+  assert.equal(runtimeHeartbeat.body.result.structuredContent.execution.authorityExpanded, false);
+  assert.equal(runtimeHeartbeat.body.result.structuredContent.liveScopeUsed, false);
+  assert.equal(runtimeHeartbeat.body.result.structuredContent.publicChainUsed, false);
+  const runtimeReplay = await mcp('tools/call', { name: 'agent_runtime_heartbeat', arguments: heartbeatArguments }, {
+    key: keyA.key, name: 'agent_runtime_heartbeat',
+  });
+  assert.equal(runtimeReplay.body.result.structuredContent.heartbeat.replayed, true);
+  assert.equal(runtimeReplay.body.result.structuredContent.checkpoint.checkpointId, runtimeHeartbeat.body.result.structuredContent.checkpoint.checkpointId);
+  const otherRuntime = await mcp('tools/call', { name: 'agent_runtime_status', arguments: {} }, {
+    key: keyB.key, name: 'agent_runtime_status',
+  });
+  assert.equal(otherRuntime.body.result.structuredContent.status, 'not-enrolled', 'runtime state must not cross owners');
+  const runtimeRestStatus = await fetch(`${BASE}/api/agent-runtime`, {
+    headers: { 'X-API-Key': keyA.key },
+  });
+  assert.equal(runtimeRestStatus.status, 200);
+  assert.match(runtimeRestStatus.headers.get('cache-control') || '', /no-store/);
+  assert.equal((await runtimeRestStatus.json()).status, 'ready');
+  const runtimeRestHeartbeat = await fetch(`${BASE}/api/agent-runtime/heartbeat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-API-Key': keyA.key },
+    body: JSON.stringify({ ...heartbeatArguments, sequence: 2, stage: 'observe', ownerId: 'different-user', keyId: keyB.entry.id }),
+  });
+  assert.equal(runtimeRestHeartbeat.status, 200);
+  const runtimeRestHeartbeatBody = await runtimeRestHeartbeat.json();
+  assert.equal(runtimeRestHeartbeatBody.heartbeat.sequence, 2);
+  assert.equal(runtimeRestHeartbeatBody.execution.authorityExpanded, false);
+  assert.equal(runtimeRestHeartbeatBody.liveScopeUsed, false);
+  assert.equal(runtimeRestHeartbeatBody.publicChainUsed, false);
+  const otherRuntimeAfterSpoof = await mcp('tools/call', { name: 'agent_runtime_status', arguments: {} }, {
+    key: keyB.key, name: 'agent_runtime_status',
+  });
+  assert.equal(otherRuntimeAfterSpoof.body.result.structuredContent.status, 'not-enrolled', 'REST payload must not override authenticated runtime identity');
+
   const scorecards = await mcp('tools/call', { name: 'strategy_promotion_scorecards', arguments: { limit: 5 } }, {
     key: keyReadOnly.key, name: 'strategy_promotion_scorecards',
   });
@@ -256,7 +310,7 @@ try {
   const preflightIntentsBefore = await mcp('tools/call', { name: 'paper_execution_intents', arguments: { limit: 20 } }, {
     key: keyA.key, name: 'paper_execution_intents',
   });
-  const preflightStateFiles = ['accounts.json', 'limits.json', 'pacts.json', 'missions.json', 'execution-intents.json', 'execution-receipts.jsonl'];
+  const preflightStateFiles = ['accounts.json', 'limits.json', 'pacts.json', 'missions.json', 'agent-runtimes.json', 'execution-intents.json', 'execution-receipts.jsonl'];
   const preflightFilesBefore = new Map(preflightStateFiles.map((name) => {
     const path = join(SCRATCH, name);
     return [name, existsSync(path) ? readFileSync(path, 'utf8') : null];

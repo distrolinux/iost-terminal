@@ -73,6 +73,11 @@ recommendations without changing agent or execution authority.
 The private read-only `paper_position_guardian` tool reports server-enforced
 paper bracket/OCO coverage, fresh-quote watchdog health and automatic-exit
 receipt evidence. Protection continues when the initiating agent disconnects.
+Use `agent_runtime_heartbeat` every 30 seconds to enroll a paper agent, publish
+its mission checkpoint and keep new mission exposure ready. Poll the private
+read-only `agent_runtime_status` tool for readiness. After a disconnect, a new
+session must resume from the exact last checkpoint; heartbeats never expand
+authority, and Position Guardian continues protecting existing positions.
 MCP Apps clients can render the private `evaluation_review` evidence panel with
 history, comparison charts and deterministic JSON/CSV exports; see
 `/docs/OWNER_MCP_APP_TESTING.md` for the owner test flow.

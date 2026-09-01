@@ -50,6 +50,13 @@ authorization checks. If it allows the request, call
 `preflightFingerprint`, then close it with `paper_trade_close`. Confirm the result
 in the Paper account and revoke the agent key when finished.
 
+For a mission-running agent, call `agent_runtime_heartbeat` every 30 seconds
+with a stable session identifier, increasing sequence, `ready` state, current
+stage and exact `missionId`. Confirm `agent_runtime_status` remains ready before
+requesting new mission exposure. A restarted session must provide the last
+checkpoint identifier and restart its sequence at one. Do not treat a heartbeat
+as permission: the wallet, Pact, mission, preflight and risk gates still apply.
+
 ## If you want a future live pilot
 
 That is a separate security change, not an MCP Apps setting. It would require a
