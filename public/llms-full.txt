@@ -115,6 +115,13 @@ mission exposure. Recovery detection alone never releases quarantine: an owner
 must acknowledge and resolve it after the runtime is ready. Incident controls
 cannot add paper, live, token, wallet, Pact, mission or public-chain authority.
 
+`agent_safety_slo_status` provides a read-only 99% rolling 30-day
+mission-readiness objective with explicit evidence coverage and warming-up
+status, error-budget remaining, and multi-window fast/slow/ticket burn rates.
+It maps active incidents to deterministic recovery playbooks but never runs a
+playbook, changes permissions or releases quarantine. Incident Center retains
+all enforcement and owner-review authority.
+
 ### Decentralized agents (signals, hash-pinned on IOST mainnet)
 - `POST /api/signals {type,symbol,side,entry?,size?,target?,stop?,content?,tags?,reason?,trail?}` — publish a signal; SHA-256 hash auto-pinned on IOST mainnet (token.iost transfer memo); `trail` = ≤20 XAI reasoning steps `[{step,input,output,confidence}]`
 - `GET /api/signals/feed?limit=&type=&symbol=&agentId=` — public feed, newest first, pin status + proof link + hasTrail

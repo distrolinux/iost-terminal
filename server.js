@@ -42,6 +42,7 @@ import * as pacts from './lib/pacts.js';
 import * as missions from './lib/missions.js';
 import * as agentRuntime from './lib/agent-runtime.js';
 import * as agentIncidents from './lib/agent-incidents.js';
+import * as agentSafetySlo from './lib/agent-safety-slo.js';
 import * as executionReceipts from './lib/execution-receipts.js';
 import * as executionIntents from './lib/execution-intents.js';
 import { buildPaperTradePreflight } from './lib/trade-preflight.js';
@@ -126,7 +127,7 @@ try {
     'iost_accounts.json', 'pending_pins.json', 'signals.json', 'follows.json', 'triggers.json',
     'payments.json', 'fee-config.json', 'live-proposals.json', 'agent-audit.jsonl',
     'live-audit.jsonl', 'arena-audit.jsonl', 'mcp-tasks.json', 'missions.json', 'execution-receipts.jsonl',
-    'execution-intents.json', 'agent-runtimes.json', 'agent-incidents.json',
+    'execution-intents.json', 'agent-runtimes.json', 'agent-incidents.json', 'agent-slo-observation.json',
   ]) {
     const p = join(DATA_DIR, f);
     if (existsSync(p)) {
@@ -144,6 +145,8 @@ try {
   console.error(`[security] refusing boot: sensitive store permissions could not be secured (${e.message})`);
   throw e;
 }
+
+const AGENT_SLO_OBSERVATION_STARTED_AT = agentSafetySlo.ensureSloObservationEpoch(DATA_DIR);
 
 const app = express();
 app.disable('x-powered-by'); // no framework fingerprinting
@@ -783,7 +786,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.33.0';
+const DISCOVERY_VERSION = '1.34.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -861,6 +864,7 @@ const OPENAPI_PATHS = {
   '/api/agent-incidents': { get: { summary: 'Private deduplicated agent incidents, quarantine and recovery readiness', tags: ['autonomy'] } },
   '/api/agent-incidents/{id}/acknowledge': { post: { summary: 'Owner acknowledgement of an agent incident without releasing quarantine', tags: ['autonomy'] } },
   '/api/agent-incidents/{id}/resolve': { post: { summary: 'Owner resolution and quarantine release after runtime recovery', tags: ['autonomy'] } },
+  '/api/agent-safety-slo': { get: { summary: 'Private read-only agent mission-readiness SLO, error-budget burn and recovery playbooks', tags: ['autonomy'] } },
 };
 app.get('/openapi.json', (req, res) => {
   res.set('Access-Control-Allow-Origin', '*');
@@ -1023,7 +1027,9 @@ owner-bound liveness, readiness, exact-checkpoint recovery and fail-closed
 mission execution leases without expanding the agent's authority. The
 read-only \`agent_incident_status\` tool reports deduplicated runtime incidents,
 automatic quarantine, recovery readiness and owner-review requirements without
-acknowledging or resolving an incident. The
+acknowledging or resolving an incident. The read-only
+\`agent_safety_slo_status\` tool reports honest evidence coverage, mission-readiness
+error-budget burn and deterministic recovery playbooks without applying actions. The
 \`trade-paper\` scope adds read-only \`paper_trade_preflight\` plus
 \`paper_trade_open\` and \`paper_trade_close\`.
 Both require a unique \`intentId\`; exact retries return the original terminal
@@ -1200,6 +1206,22 @@ async function mcpToolCall(req, name, args) {
       if (req.userAgent) return agentIncidents.agentIncidentStatus(req.userAgent.userId, req.userAgent.keyId);
       if (req.session?.userId) return agentIncidents.ownerIncidentStatus(req.session.userId);
       throw Object.assign(new Error('user-bound incident access required'), { protocolCode: -32602 });
+    }
+    case 'agent_safety_slo_status': {
+      if (req.userAgent) {
+        const current = agentRuntime.agentRuntimeStatus(req.userAgent.userId, req.userAgent.keyId);
+        return agentSafetySlo.buildAgentSafetySlo({
+          runtime: { runtimes: current.enrolled ? [current] : [] },
+          incidents: agentIncidents.agentIncidentStatus(req.userAgent.userId, req.userAgent.keyId),
+          observationStartedAt: AGENT_SLO_OBSERVATION_STARTED_AT,
+        });
+      }
+      if (req.session?.userId) return agentSafetySlo.buildAgentSafetySlo({
+        runtime: agentRuntime.ownerRuntimeStatus(req.session.userId),
+        incidents: agentIncidents.ownerIncidentStatus(req.session.userId),
+        observationStartedAt: AGENT_SLO_OBSERVATION_STARTED_AT,
+      });
+      throw Object.assign(new Error('user-bound safety SLO access required'), { protocolCode: -32602 });
     }
     case 'agent_runtime_heartbeat': {
       if (!req.userAgent || !userAgentHas(req, 'read')) {
@@ -3806,6 +3828,7 @@ const API_INDEX = {
     { path: '/api/agent-runtime/heartbeat', method: 'POST', body: '{sessionId,sequence,state,stage,missionId?,cursor?,resumeFromCheckpointId?}', purpose: 'idempotent user-agent heartbeat and durable checkpoint; never starts missions, trades or expands authority' },
     { path: '/api/agent-incidents', method: 'GET', purpose: 'private owner or self view of deduplicated runtime incidents, quarantine and recovery readiness' },
     { path: '/api/agent-incidents/:id/acknowledge | /resolve', method: 'POST', purpose: 'owner-only incident review; resolution releases quarantine only after runtime readiness recovers' },
+    { path: '/api/agent-safety-slo', method: 'GET', purpose: 'private read-only mission-readiness SLO, error-budget burn rates and deterministic incident playbooks' },
     { path: '/api/autopilot', method: 'GET', purpose: 'autopilot status + config + action audit trail + pending proposals' },
     { path: '/api/autopilot/start', method: 'POST', body: '{config?}', purpose: 'enable autonomous trading loop' },
     { path: '/api/autopilot/stop', method: 'POST', purpose: 'disable autonomous loop' },
@@ -3987,6 +4010,25 @@ app.get('/api/agent-incidents', requireUser, (req, res) => {
   return res.json(agentIncidents.ownerIncidentStatus(req.session.userId));
 });
 
+app.get('/api/agent-safety-slo', requireUser, (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (req.userAgent) {
+    if (!userAgentHas(req, 'read')) return res.status(403).json({ error: 'read scope required' });
+    const current = agentRuntime.agentRuntimeStatus(req.userAgent.userId, req.userAgent.keyId);
+    return res.json(agentSafetySlo.buildAgentSafetySlo({
+      runtime: { runtimes: current.enrolled ? [current] : [] },
+      incidents: agentIncidents.agentIncidentStatus(req.userAgent.userId, req.userAgent.keyId),
+      observationStartedAt: AGENT_SLO_OBSERVATION_STARTED_AT,
+    }));
+  }
+  if (!isOwnerSession(req) || !req.session?.userId) return res.status(403).json({ error: 'owner or user agent required' });
+  return res.json(agentSafetySlo.buildAgentSafetySlo({
+    runtime: agentRuntime.ownerRuntimeStatus(req.session.userId),
+    incidents: agentIncidents.ownerIncidentStatus(req.session.userId),
+    observationStartedAt: AGENT_SLO_OBSERVATION_STARTED_AT,
+  }));
+});
+
 for (const action of ['acknowledge', 'resolve']) {
   app.post(`/api/agent-incidents/:id/${action}`, requireUser, (req, res) => {
     res.set('Cache-Control', 'private, no-store');
@@ -4082,6 +4124,10 @@ app.get('/api/agent-control', requireUser, (req, res) => {
   const ownerMissions = missions.listMissions(`user:${req.session.userId}`);
   const incidentStatus = agentIncidents.ownerIncidentStatus(req.session.userId);
   const runtimeStatus = agentRuntime.ownerRuntimeStatus(req.session.userId);
+  const safetySlo = agentSafetySlo.buildAgentSafetySlo({
+    runtime: runtimeStatus, incidents: incidentStatus,
+    observationStartedAt: AGENT_SLO_OBSERVATION_STARTED_AT,
+  });
   const lastAction = ap.actions[0] || null;
   res.json({
     ok: true,
@@ -4107,6 +4153,7 @@ app.get('/api/agent-control', requireUser, (req, res) => {
     },
     runtime: runtimeStatus,
     incidents: incidentStatus,
+    safetySlo,
     keys,
     keyStats: { active: keys.filter((k) => !k.revokedAt).length, revoked: keys.filter((k) => !!k.revokedAt).length },
     parentWallet,

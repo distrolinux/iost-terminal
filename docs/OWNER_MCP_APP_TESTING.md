@@ -65,6 +65,13 @@ owner acknowledges then resolves it in Agent Control Center. Do not use the
 incident workflow as execution approval; it can restore only previously bounded
 paper authority and cannot add live or public-chain scope.
 
+Call `agent_safety_slo_status` to review the authenticated agent's 99% rolling
+30-day mission-readiness objective, observation coverage, remaining error budget,
+multi-window burn rates and active deterministic playbooks. Treat `warming-up`
+as insufficient evidence, not success. Confirm `executionPermissionsChanged`,
+`liveScopeUsed` and `publicChainUsed` remain false. Do not interpret a playbook as
+approval to restart, release quarantine or execute a trade.
+
 ## If you want a future live pilot
 
 That is a separate security change, not an MCP Apps setting. It would require a
