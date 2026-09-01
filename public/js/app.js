@@ -2801,10 +2801,11 @@ async function renderJournal() {
   const el = $('#view-journal');
   let p;
   try { p = await api('/api/paper'); state.paper = p; } catch (e) { el.innerHTML = `<div class="card empty">Journal unavailable: ${esc(e.message)}</div>`; return; }
-  const [stats, receiptData, intentData] = await Promise.all([
+  const [stats, receiptData, intentData, guardianData] = await Promise.all([
     api('/api/paper/stats').catch(() => null),
     api('/api/execution-receipts?limit=12').catch(() => null),
     api('/api/execution-intents?limit=12').catch(() => null),
+    api('/api/position-guardian').catch(() => null),
   ]);
   const j = p.journal || [];
   const receipts = receiptData?.receipts || [];
@@ -2826,6 +2827,9 @@ async function renderJournal() {
       <td>${e.status === 'open' ? `<button class="btn ghost sm" data-close="${e.id}">Close</button>` : `<span class="muted" title="${esc(e.exitReason || e.exitAuthority || '')}">${esc(e.exitReason || timeAgo(e.closedAt || e.openedAt))}</span>`}</td>
     </tr>`).join('');
   const openPos = p.positions || [];
+  const guardianCoverage = guardianData?.coverage || { total: openPos.length, protected: 0, armed: 0, degraded: 0, unprotected: openPos.length };
+  const guardianWatchdog = guardianData?.watchdog || {};
+  const guardianHealthy = ['healthy', 'idle'].includes(guardianWatchdog.status) && !guardianCoverage.degraded;
   el.innerHTML = `
     <div class="section-title">AI Trading Journal <span class="sub">every trade recorded — reason, confidence, result</span>
       <span style="margin-left:auto;display:flex;gap:8px">
@@ -2840,16 +2844,32 @@ async function renderJournal() {
       <div class="card kpi"><span class="k-label">Net P&L</span><span class="k-value ${(stats?.totalPnl || 0) >= 0 ? 'up' : 'down'}">$${fmtNum(stats?.totalPnl)}</span><span class="k-sub">avg win $${fmtNum(stats?.avgWin)} · avg loss $${fmtNum(stats?.avgLoss)}</span></div>
       <div class="card kpi"><span class="k-label">Account</span><span class="k-value">$${fmtNum(p.account?.cash)}</span><span class="k-sub">cash · ${fmtNum(p.account?.initialCash)} initial</span></div>
     </div>
+    <section class="card position-guardian ${guardianHealthy ? 'is-healthy' : 'is-degraded'}">
+      <div class="section-title">Position Guardian <span class="sub">server-enforced bracket/OCO protection · survives agent disconnects</span>
+        <span class="receipt-chain ${guardianHealthy ? 'is-valid' : 'is-invalid'}">${guardianHealthy ? 'watchdog healthy' : esc(guardianWatchdog.status || 'status unavailable')}</span>
+      </div>
+      <div class="guardian-grid">
+        <div><span>Protected</span><strong>${guardianCoverage.protected}/${guardianCoverage.total}</strong><small>${guardianCoverage.armed} armed · ${guardianCoverage.unprotected} unprotected</small></div>
+        <div><span>Heartbeat</span><strong>${guardianWatchdog.lastHeartbeatAt ? timeAgo(guardianWatchdog.lastHeartbeatAt) : 'starting'}</strong><small>${fmtNum((guardianWatchdog.cadenceMs || 10000) / 1000, 0)}s server cadence</small></div>
+        <div><span>Market evidence</span><strong>${guardianCoverage.degraded ? 'DEGRADED' : 'FRESH-ONLY'}</strong><small>${guardianWatchdog.staleQuotes || 0} stale · ${guardianWatchdog.quorumFailures || 0} quorum failure(s)</small></div>
+        <div><span>Exit proof</span><strong>${guardianWatchdog.receiptErrors ? 'REVIEW' : 'VERIFIED'}</strong><small>automatic exits join the receipt chain</small></div>
+      </div>
+      <p>Stops and take-profits are monitored by the platform, not by the AI session. A filled leg cancels its OCO sibling; stale or untrusted quotes cannot fabricate a paper exit.</p>
+    </section>
     ${openPos.length ? `<div class="card" style="margin-bottom:16px">
-      <div class="section-title" style="margin-bottom:8px">Open positions <span class="sub">${openPos.length} · trailing stops/TP + DCA auto-managed every 60s</span></div>
-      <div class="table-wrap"><table><thead><tr><th>Symbol</th><th>Side</th><th>Entry</th><th>Size</th><th>Last</th><th>Unrealized</th><th>Trail</th><th>DCA</th><th></th></tr></thead>
+      <div class="section-title" style="margin-bottom:8px">Open positions <span class="sub">${openPos.length} · server-enforced protection checked every 10s</span></div>
+      <div class="table-wrap"><table><thead><tr><th>Symbol</th><th>Side</th><th>Entry</th><th>Size</th><th>Last</th><th>Unrealized</th><th>Guardian</th><th>Trail</th><th>DCA</th><th></th></tr></thead>
       <tbody>${openPos.map(pos => {
         const u = (pos.lastPrice - pos.entry) * pos.size * (pos.side === 'long' ? 1 : -1);
         const trail = [];
         if (pos.trailStopPct) trail.push(`<span class="chip warn" title="Trailing stop — exits on ${(pos.trailStopPct * 100).toFixed(1)}% retrace from peak ${fmtPrice(pos.trailPeak ?? pos.entry, pos.type)}">TS ${(pos.trailStopPct * 100).toFixed(1)}%</span>`);
         if (pos.trailTpPct) trail.push(`<span class="chip bull" title="Trailing take-profit — locks profit ${(pos.trailTpPct * 100).toFixed(1)}% below peak">TP ${(pos.trailTpPct * 100).toFixed(1)}%</span>`);
         const dca = pos.dca?.enabled ? `<span class="chip live" title="Auto average-down: ${(pos.dca.triggerPct * 100).toFixed(0)}% dip · ${pos.dca.sizeFactor}× · cooldown ${pos.dca.cooldownMin}m">DCA ${pos.dcaCount}/${pos.dca.maxTrades}</span>` : '—';
-        return `<tr><td><strong>${pos.symbol}</strong></td><td>${pos.side}</td><td class="mono">${fmtPrice(pos.entry, pos.type)}</td><td class="mono">${fmtNum(pos.size, 0)}</td><td class="mono">${fmtPrice(pos.lastPrice, pos.type)}</td><td class="mono ${u >= 0 ? 'up' : 'down'}">$${fmtNum(u)}</td><td>${trail.join(' ') || '—'}</td><td>${dca}</td><td style="white-space:nowrap"><button class="btn sm ghost" data-mgmt="${pos.id}">⚙ Manage</button> <button class="btn red sm" data-close="${pos.id}">Close</button></td></tr>`;
+        const guardian = pos.guardian || {};
+        const guardianClass = guardian.status === 'armed' ? 'bull' : guardian.status === 'degraded' ? 'bear' : 'neut';
+        const guardianText = guardian.status === 'armed' ? (guardian.orderClass === 'bracket-oco' ? 'OCO ARMED' : 'PROTECTED') : String(guardian.status || 'unprotected').toUpperCase();
+        const guardianDetail = `stop ${pos.stop == null ? '—' : fmtPrice(pos.stop, pos.type)} · target ${pos.target == null ? '—' : fmtPrice(pos.target, pos.type)}${guardian.lastDecision ? ` · ${guardian.lastDecision}` : ''}`;
+        return `<tr><td><strong>${pos.symbol}</strong></td><td>${pos.side}</td><td class="mono">${fmtPrice(pos.entry, pos.type)}</td><td class="mono">${fmtNum(pos.size, 0)}</td><td class="mono">${fmtPrice(pos.lastPrice, pos.type)}</td><td class="mono ${u >= 0 ? 'up' : 'down'}">$${fmtNum(u)}</td><td><span class="chip ${guardianClass}">${esc(guardianText)}</span><small class="guardian-detail">${esc(guardianDetail)}</small></td><td>${trail.join(' ') || '—'}</td><td>${dca}</td><td style="white-space:nowrap"><button class="btn sm ghost" data-mgmt="${pos.id}">⚙ Manage</button> <button class="btn red sm" data-close="${pos.id}">Close</button></td></tr>`;
       }).join('')}</tbody></table></div></div>` : ''}
     <div class="card execution-receipts">
       <div class="section-title">Verified Execution Receipts <span class="sub">paper truth layer · quote age · authorization · cost · latency</span>
@@ -3053,7 +3073,7 @@ function openPositionManagement(positionId, positions) {
       <button class="btn green" id="mSave">Save</button>
       <button class="btn ghost" id="mCancel">Cancel</button>
     </div>
-    <div class="dim" style="font-size:11px;margin-top:10px">Trailing levels ratchet with price and are re-checked every 60s. DCA triggers only when the score stays ≥ 55 — the AI won't average down into a dying setup.</div>`;
+    <div class="dim" style="font-size:11px;margin-top:10px">Server protection checks fixed bracket exits every 10s using fresh execution-side quotes. Trailing levels share that watchdog. DCA triggers only when the score stays ≥ 55.</div>`;
   openDetailDialog(`Manage ${pos.symbol} paper position`);
   $('#detailBody .modal-close').onclick = closeDetail;
   $('#mCancel').onclick = closeDetail;
