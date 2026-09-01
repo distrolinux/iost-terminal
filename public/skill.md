@@ -82,6 +82,10 @@ Poll the private read-only `agent_incident_status` tool for deduplicated runtime
 warnings, offline quarantines, recovery readiness and owner-review state. An
 agent cannot acknowledge, resolve or release its own quarantine; the runtime
 must recover first and the owner must review it in Agent Control Center.
+Use the private read-only `agent_safety_slo_status` tool to inspect honest
+mission-readiness evidence coverage, the 30-day 99% objective, remaining error
+budget, multi-window burn rates and deterministic recovery playbooks. Playbooks
+never execute actions or change authority; Incident Center remains authoritative.
 MCP Apps clients can render the private `evaluation_review` evidence panel with
 history, comparison charts and deterministic JSON/CSV exports; see
 `/docs/OWNER_MCP_APP_TESTING.md` for the owner test flow.

@@ -1187,6 +1187,8 @@ async function renderAgentControl() {
   const incidents = s.incidents || { counts: { total: 0, open: 0, critical: 0, recoveryReady: 0, quarantined: 0 }, incidents: [], policy: {} };
   const incidentCounts = incidents.counts || {};
   const incidentHealthy = !(incidentCounts.open || incidentCounts.quarantined);
+  const slo = s.safetySlo || { status: 'not-enrolled', objective: {}, evidence: {}, sli: {}, errorBudget: {}, burnRates: [], playbooks: [], guarantees: {} };
+  const sloHealthy = ['healthy', 'not-enrolled', 'warming-up'].includes(slo.status);
   const moneyInput = (minor) => ((Number(minor || 0) / 100).toFixed(2));
   el.innerHTML = `
     <div class="section-title">Agent Control Center <span class="sub">owner-only operations · server-enforced limits</span></div>
@@ -1239,6 +1241,18 @@ async function renderAgentControl() {
         </article>`;
       }).join('')}</div>` : '<div class="empty incident-empty">No runtime incidents. Monitoring remains active in the server even when this page is closed.</div>'}
       <p class="runtime-note">Incident controls can only reduce or restore previously granted paper authority. They cannot enable live trading, move funds, or bypass wallet, Pact, mission, preflight, risk, and Position Guardian controls.</p>
+    </section>
+    <section class="card safety-slo ${sloHealthy ? 'is-healthy' : 'is-burning'}" aria-labelledby="safetySloTitle">
+      <div class="section-title" id="safetySloTitle">Agent Safety Playbook &amp; SLO Center <span class="sub">mission readiness · error budget · deterministic recovery</span><span class="receipt-chain ${sloHealthy ? 'is-valid' : 'is-invalid'}">${esc(slo.status || 'unknown')}</span></div>
+      <div class="slo-grid">
+        <div><span>Availability</span><strong>${slo.sli?.availabilityPercent == null ? '—' : `${Number(slo.sli.availabilityPercent).toFixed(2)}%`}</strong><small>${slo.objective?.targetPercent || 99}% objective</small></div>
+        <div><span>Error budget</span><strong>${slo.errorBudget?.remainingPercent == null ? '—' : `${Number(slo.errorBudget.remainingPercent).toFixed(1)}%`}</strong><small>${slo.errorBudget?.exhausted ? 'exhausted' : 'remaining'}</small></div>
+        <div><span>Evidence</span><strong>${slo.evidence?.sufficient ? 'ready' : slo.evidence?.runtimeCount ? 'warming' : 'none'}</strong><small>${Number(slo.evidence?.coveragePercent || 0).toFixed(2)}% of 30-day window</small></div>
+        <div><span>Owner action</span><strong>${slo.decision?.ownerActionRequired ? 'required' : 'none'}</strong><small>${esc(slo.reasonCode || 'not evaluated')}</small></div>
+      </div>
+      ${slo.burnRates?.length ? `<div class="burn-grid">${slo.burnRates.map((burn) => `<article class="${burn.firing ? 'is-firing' : ''}"><div><strong>${esc(burn.name)}</strong><span>${esc(burn.notification)}</span></div><span class="chip ${burn.firing ? 'bear' : 'bull'}">${burn.firing ? 'firing' : 'clear'}</span><dl><div><dt>Long burn</dt><dd>${Number(burn.long?.burnRate || 0).toFixed(2)}×</dd></div><div><dt>Short burn</dt><dd>${Number(burn.short?.burnRate || 0).toFixed(2)}×</dd></div><div><dt>Threshold</dt><dd>${Number(burn.threshold || 0).toFixed(1)}×</dd></div></dl></article>`).join('')}</div>` : ''}
+      ${slo.playbooks?.length ? `<div class="playbook-list">${slo.playbooks.map((book) => `<article><div><strong>${esc(book.playbook)}</strong><span class="chip ${book.severity === 'critical' ? 'bear' : 'warn'}">${esc(book.severity)}</span></div><ol>${(book.actions || []).map((action) => `<li>${esc(action)}</li>`).join('')}</ol><small>${book.ownerActionRequired ? 'Owner review required.' : 'Monitor for automatic recovery.'} No automatic action was applied.</small></article>`).join('')}</div>` : '<p class="muted slo-empty">No active recovery playbook. Burn-rate monitoring remains active on the server.</p>'}
+      <p class="runtime-note">SLO calculations are read-only and evidence-bound. Incident Center controls quarantine and owner release; Position Guardian protects existing positions. This panel never starts, pauses, approves, or executes a trade.</p>
     </section>
     <section class="card" aria-labelledby="controlKeysTitle">
       <div class="section-title" id="controlKeysTitle">Permissions <span class="sub">scoped keys · secrets never displayed here</span></div>

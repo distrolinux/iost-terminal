@@ -184,6 +184,7 @@ try {
   const runtimeStatusTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_runtime_status');
   const runtimeHeartbeatTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_runtime_heartbeat');
   const incidentStatusTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_incident_status');
+  const safetySloTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_safety_slo_status');
   assert.equal(runtimeStatusTool.annotations.readOnlyHint, true);
   assert.equal(runtimeStatusTool.annotations.destructiveHint, false);
   assert.equal(runtimeHeartbeatTool.annotations.readOnlyHint, false);
@@ -192,6 +193,9 @@ try {
   assert.equal(incidentStatusTool.annotations.readOnlyHint, true);
   assert.equal(incidentStatusTool.annotations.destructiveHint, false);
   assert.equal(incidentStatusTool.annotations.idempotentHint, true);
+  assert.equal(safetySloTool.annotations.readOnlyHint, true);
+  assert.equal(safetySloTool.annotations.destructiveHint, false);
+  assert.equal(safetySloTool.annotations.idempotentHint, true);
   const promotionTool = privateTools.body.result.tools.find((tool) => tool.name === 'strategy_promotion_scorecards');
   assert.equal(promotionTool.annotations.readOnlyHint, true);
   assert.equal(promotionTool.annotations.destructiveHint, false);
@@ -274,6 +278,21 @@ try {
   assert.equal(runtimeHeartbeat.body.result.structuredContent.execution.authorityExpanded, false);
   assert.equal(runtimeHeartbeat.body.result.structuredContent.liveScopeUsed, false);
   assert.equal(runtimeHeartbeat.body.result.structuredContent.publicChainUsed, false);
+  const safetySlo = await mcp('tools/call', { name: 'agent_safety_slo_status', arguments: {} }, {
+    key: keyA.key, name: 'agent_safety_slo_status',
+  });
+  assert.equal(safetySlo.body.result.structuredContent.mode, 'paper-only');
+  assert.equal(safetySlo.body.result.structuredContent.status, 'warming-up');
+  assert.equal(safetySlo.body.result.structuredContent.objective.targetPercent, 99);
+  assert.equal(safetySlo.body.result.structuredContent.evidence.runtimeCount, 1);
+  assert.equal(safetySlo.body.result.structuredContent.decision.executionPermissionsChanged, false);
+  assert.equal(safetySlo.body.result.structuredContent.guarantees.quarantineAuthority, 'agent-incident-center');
+  assert.equal(safetySlo.body.result.structuredContent.liveScopeUsed, false);
+  assert.equal(safetySlo.body.result.structuredContent.publicChainUsed, false);
+  const otherSafetySlo = await mcp('tools/call', { name: 'agent_safety_slo_status', arguments: {} }, {
+    key: keyB.key, name: 'agent_safety_slo_status',
+  });
+  assert.equal(otherSafetySlo.body.result.structuredContent.status, 'not-enrolled', 'SLO evidence must not cross owners');
   const runtimeReplay = await mcp('tools/call', { name: 'agent_runtime_heartbeat', arguments: heartbeatArguments }, {
     key: keyA.key, name: 'agent_runtime_heartbeat',
   });
