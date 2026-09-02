@@ -185,6 +185,7 @@ try {
   const runtimeHeartbeatTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_runtime_heartbeat');
   const incidentStatusTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_incident_status');
   const safetySloTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_safety_slo_status');
+  const ownerAlertTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_owner_alert_status');
   assert.equal(runtimeStatusTool.annotations.readOnlyHint, true);
   assert.equal(runtimeStatusTool.annotations.destructiveHint, false);
   assert.equal(runtimeHeartbeatTool.annotations.readOnlyHint, false);
@@ -198,6 +199,9 @@ try {
   assert.equal(safetySloTool.annotations.readOnlyHint, true);
   assert.equal(safetySloTool.annotations.destructiveHint, false);
   assert.equal(safetySloTool.annotations.idempotentHint, true);
+  assert.equal(ownerAlertTool.annotations.readOnlyHint, true);
+  assert.equal(ownerAlertTool.annotations.destructiveHint, false);
+  assert.equal(ownerAlertTool.annotations.idempotentHint, true);
   const promotionTool = privateTools.body.result.tools.find((tool) => tool.name === 'strategy_promotion_scorecards');
   assert.equal(promotionTool.annotations.readOnlyHint, true);
   assert.equal(promotionTool.annotations.destructiveHint, false);
@@ -298,6 +302,28 @@ try {
     key: keyB.key, name: 'agent_safety_slo_status',
   });
   assert.equal(otherSafetySlo.body.result.structuredContent.status, 'not-enrolled', 'SLO evidence must not cross owners');
+  const ownerAlerts = await mcp('tools/call', { name: 'agent_owner_alert_status', arguments: {} }, {
+    key: keyA.key, name: 'agent_owner_alert_status',
+  });
+  assert.equal(ownerAlerts.status, 200);
+  assert.equal(ownerAlerts.body.result.structuredContent.mode, 'paper-only');
+  assert.equal(ownerAlerts.body.result.structuredContent.channels.ownerControlCenter.enabled, true);
+  assert.equal(ownerAlerts.body.result.structuredContent.channels.signedWebhook.enabled, false);
+  assert.equal(ownerAlerts.body.result.structuredContent.receiptChain.verified, true);
+  assert.equal(ownerAlerts.body.result.structuredContent.guarantees.notificationOnly, true);
+  assert.equal(ownerAlerts.body.result.structuredContent.guarantees.executionPermissionsChanged, false);
+  assert.equal(ownerAlerts.body.result.structuredContent.liveScopeUsed, false);
+  assert.equal(ownerAlerts.body.result.structuredContent.publicChainUsed, false);
+  const otherOwnerAlerts = await mcp('tools/call', { name: 'agent_owner_alert_status', arguments: {} }, {
+    key: keyB.key, name: 'agent_owner_alert_status',
+  });
+  assert.equal(otherOwnerAlerts.body.result.structuredContent.counts.total, 0, 'alert state must not cross owners');
+  const alertRestResponse = await fetch(`${BASE}/api/agent-alerts`, { headers: { 'X-API-Key': keyA.key } });
+  assert.equal(alertRestResponse.status, 200);
+  assert.match(alertRestResponse.headers.get('cache-control') || '', /private/);
+  assert.match(alertRestResponse.headers.get('cache-control') || '', /no-store/);
+  const alertRest = await alertRestResponse.json();
+  assert.equal(alertRest.guarantees.notificationOnly, true);
   const runtimeReplay = await mcp('tools/call', { name: 'agent_runtime_heartbeat', arguments: heartbeatArguments }, {
     key: keyA.key, name: 'agent_runtime_heartbeat',
   });

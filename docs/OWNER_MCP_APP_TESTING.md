@@ -77,6 +77,12 @@ as insufficient evidence, not success. Confirm `executionPermissionsChanged`,
 `liveScopeUsed` and `publicChainUsed` remain false. Do not interpret a playbook as
 approval to restart, release quarantine or execute a trade.
 
+Call `agent_owner_alert_status` to verify the private Control Center inbox,
+configured-channel state, bounded retry/dead-letter counters and receipt-chain
+verification. The tool is read-only. Do not configure a webhook or create an
+incident merely for acceptance testing; confirm `notificationOnly` and that
+`executionPermissionsChanged`, `liveScopeUsed` and `publicChainUsed` are false.
+
 ## If you want a future live pilot
 
 That is a separate security change, not an MCP Apps setting. It would require a

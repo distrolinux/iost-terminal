@@ -1189,6 +1189,9 @@ async function renderAgentControl() {
   const incidentHealthy = !(incidentCounts.open || incidentCounts.quarantined);
   const slo = s.safetySlo || { status: 'not-enrolled', objective: {}, evidence: {}, sli: {}, errorBudget: {}, burnRates: [], playbooks: [], guarantees: {} };
   const sloHealthy = ['healthy', 'not-enrolled', 'warming-up'].includes(slo.status);
+  const alerts = s.alerts || { counts: { total: 0, critical: 0, pending: 0, delivered: 0, deadLetter: 0 }, channels: {}, alerts: [], receiptChain: {} };
+  const alertCounts = alerts.counts || {};
+  const alertHealthy = !(alertCounts.pending || alertCounts.deadLetter);
   const moneyInput = (minor) => ((Number(minor || 0) / 100).toFixed(2));
   el.innerHTML = `
     <div class="section-title">Agent Control Center <span class="sub">owner-only operations · server-enforced limits</span></div>
@@ -1253,6 +1256,23 @@ async function renderAgentControl() {
       ${slo.burnRates?.length ? `<div class="burn-grid">${slo.burnRates.map((burn) => `<article class="${burn.firing ? 'is-firing' : ''}"><div><strong>${esc(burn.name)}</strong><span>${esc(burn.notification)}</span></div><span class="chip ${burn.firing ? 'bear' : 'bull'}">${burn.firing ? 'firing' : 'clear'}</span><dl><div><dt>Long burn</dt><dd>${Number(burn.long?.burnRate || 0).toFixed(2)}×</dd></div><div><dt>Short burn</dt><dd>${Number(burn.short?.burnRate || 0).toFixed(2)}×</dd></div><div><dt>Threshold</dt><dd>${Number(burn.threshold || 0).toFixed(1)}×</dd></div></dl></article>`).join('')}</div>` : ''}
       ${slo.playbooks?.length ? `<div class="playbook-list">${slo.playbooks.map((book) => `<article><div><strong>${esc(book.playbook)}</strong><span class="chip ${book.severity === 'critical' ? 'bear' : 'warn'}">${esc(book.severity)}</span></div><ol>${(book.actions || []).map((action) => `<li>${esc(action)}</li>`).join('')}</ol><small>${book.ownerActionRequired ? 'Owner review required.' : 'Monitor for automatic recovery.'} No automatic action was applied.</small></article>`).join('')}</div>` : '<p class="muted slo-empty">No active recovery playbook. Burn-rate monitoring remains active on the server.</p>'}
       <p class="runtime-note">SLO calculations are read-only and evidence-bound. Incident Center controls quarantine and owner release; Position Guardian protects existing positions. This panel never starts, pauses, approves, or executes a trade.</p>
+    </section>
+    <section class="card owner-alert-router ${alertHealthy ? 'is-healthy' : 'is-attention'}" aria-labelledby="ownerAlertRouterTitle">
+      <div class="section-title" id="ownerAlertRouterTitle">Owner Alert Delivery &amp; Escalation Router <span class="sub">durable inbox · signed webhook · bounded retry</span><span class="receipt-chain ${alertHealthy ? 'is-valid' : 'is-invalid'}">${alertHealthy ? 'delivery healthy' : 'delivery attention'}</span></div>
+      <div class="alert-router-grid">
+        <div><span>Alerts</span><strong>${alertCounts.total || 0}</strong><small>${alertCounts.critical || 0} critical</small></div>
+        <div><span>Pending</span><strong>${alertCounts.pending || 0}</strong><small>bounded retry queue</small></div>
+        <div><span>Delivered</span><strong>${alertCounts.delivered || 0}</strong><small>external webhook receipts</small></div>
+        <div><span>Receipt chain</span><strong>${alerts.receiptChain?.verified ? 'verified' : 'unverified'}</strong><small>${alerts.receiptChain?.count || 0} private receipts</small></div>
+      </div>
+      <div class="alert-channels"><span class="chip bull">Control Center · always on</span><span class="chip ${alerts.channels?.signedWebhook?.enabled ? 'bull' : 'neut'}">Signed webhook · ${alerts.channels?.signedWebhook?.enabled ? 'enabled' : 'not configured'}</span><span class="chip neut">CloudEvents 1.0</span><span class="chip neut">RFC 9421 HMAC</span></div>
+      ${alerts.alerts?.length ? `<div class="alert-router-list">${alerts.alerts.slice(0, 8).map((alert) => `<article>
+        <div><strong>${esc(alert.title || 'Agent safety alert')}</strong><span class="mono muted">${esc(alert.source)} · ${alert.createdAt ? timeAgo(alert.createdAt) : 'unknown'}</span></div>
+        <span class="chip ${alert.severity === 'critical' ? 'bear' : alert.severity === 'warning' ? 'warn' : 'bull'}">${esc(alert.severity)}</span>
+        <p>${esc(alert.summary || alert.reasonCode)}</p>
+        <dl><div><dt>Inbox</dt><dd>${esc(alert.delivery?.controlCenter || 'unknown')}</dd></div><div><dt>Webhook</dt><dd>${esc(alert.delivery?.webhook || 'disabled')}</dd></div><div><dt>Attempts</dt><dd>${alert.delivery?.attempts || 0}</dd></div><div><dt>Replay key</dt><dd>${alert.eventId ? 'present' : 'missing'}</dd></div></dl>
+      </article>`).join('')}</div>` : '<p class="muted alert-router-empty">No agent safety alerts have been emitted. The private owner inbox and delivery worker remain armed.</p>'}
+      <p class="runtime-note">Alert delivery is notification-only. It cannot acknowledge incidents, release quarantine, recover an agent, change execution authority, place trades, move funds, or perform public-chain actions.</p>
     </section>
     <section class="card" aria-labelledby="controlKeysTitle">
       <div class="section-title" id="controlKeysTitle">Permissions <span class="sub">scoped keys · secrets never displayed here</span></div>
