@@ -126,6 +126,12 @@ It maps active incidents to deterministic recovery playbooks but never runs a
 playbook, changes permissions or releases quarantine. Incident Center retains
 all enforcement and owner-review authority.
 
+`agent_owner_alert_status` provides a read-only view of the private Owner
+Control Center inbox, optional CloudEvents 1.0 signed-webhook delivery,
+bounded retry/dead-letter state and tamper-evident delivery receipts. Alerts
+deduplicate uncertain delivery and never acknowledge incidents, release
+quarantine, recover runtimes, change execution permissions or execute trades.
+
 ### Decentralized agents (signals, hash-pinned on IOST mainnet)
 - `POST /api/signals {type,symbol,side,entry?,size?,target?,stop?,content?,tags?,reason?,trail?}` — publish a signal; SHA-256 hash auto-pinned on IOST mainnet (token.iost transfer memo); `trail` = ≤20 XAI reasoning steps `[{step,input,output,confidence}]`
 - `GET /api/signals/feed?limit=&type=&symbol=&agentId=` — public feed, newest first, pin status + proof link + hasTrail

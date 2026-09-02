@@ -43,6 +43,7 @@ import * as missions from './lib/missions.js';
 import * as agentRuntime from './lib/agent-runtime.js';
 import * as agentIncidents from './lib/agent-incidents.js';
 import * as agentSafetySlo from './lib/agent-safety-slo.js';
+import * as ownerAlerts from './lib/owner-alert-router.js';
 import * as executionReceipts from './lib/execution-receipts.js';
 import * as executionIntents from './lib/execution-intents.js';
 import { buildPaperTradePreflight } from './lib/trade-preflight.js';
@@ -127,7 +128,7 @@ try {
     'iost_accounts.json', 'pending_pins.json', 'signals.json', 'follows.json', 'triggers.json',
     'payments.json', 'fee-config.json', 'live-proposals.json', 'agent-audit.jsonl',
     'live-audit.jsonl', 'arena-audit.jsonl', 'mcp-tasks.json', 'missions.json', 'execution-receipts.jsonl',
-    'execution-intents.json', 'agent-runtimes.json', 'agent-incidents.json', 'agent-slo-observation.json',
+    'execution-intents.json', 'agent-runtimes.json', 'agent-incidents.json', 'agent-slo-observation.json', 'owner-alert-router.json',
   ]) {
     const p = join(DATA_DIR, f);
     if (existsSync(p)) {
@@ -141,12 +142,31 @@ try {
   executionIntents.secureExecutionIntentPermissions();
   agentRuntime.secureAgentRuntimePermissions();
   agentIncidents.secureAgentIncidentPermissions();
+  ownerAlerts.secureOwnerAlertPermissions();
 } catch (e) {
   console.error(`[security] refusing boot: sensitive store permissions could not be secured (${e.message})`);
   throw e;
 }
 
 const AGENT_SLO_OBSERVATION_STARTED_AT = agentSafetySlo.ensureSloObservationEpoch(DATA_DIR);
+
+function agentSafetyEvidence(ownerId, keyId = null, now = Date.now()) {
+  const runtime = keyId ? agentRuntime.agentRuntimeStatus(ownerId, keyId, now) : agentRuntime.ownerRuntimeStatus(ownerId, now);
+  const incidents = keyId ? agentIncidents.agentIncidentStatus(ownerId, keyId, now) : agentIncidents.ownerIncidentStatus(ownerId, now);
+  const safetySlo = agentSafetySlo.buildAgentSafetySlo({
+    runtime: keyId ? { runtimes: runtime.enrolled ? [runtime] : [] } : runtime,
+    incidents, now, observationStartedAt: AGENT_SLO_OBSERVATION_STARTED_AT,
+  });
+  return { runtime, incidents, safetySlo };
+}
+
+function reconcileOwnerAlertsFor(ownerId, keyId = null, now = Date.now()) {
+  const evidence = agentSafetyEvidence(ownerId, keyId, now);
+  const routingIncidents = keyId ? evidence.incidents
+    : { incidents: agentIncidents.incidentAlertInputsForRouting(ownerId) };
+  ownerAlerts.reconcileOwnerAlerts({ ownerId, keyId, incidents: routingIncidents, safetySlo: evidence.safetySlo }, now);
+  return { ...evidence, alerts: ownerAlerts.ownerAlertStatus(ownerId, keyId) };
+}
 
 const app = express();
 app.disable('x-powered-by'); // no framework fingerprinting
@@ -786,7 +806,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.35.0';
+const DISCOVERY_VERSION = '1.36.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -865,6 +885,7 @@ const OPENAPI_PATHS = {
   '/api/agent-incidents/{id}/acknowledge': { post: { summary: 'Owner acknowledgement of an agent incident without releasing quarantine', tags: ['autonomy'] } },
   '/api/agent-incidents/{id}/resolve': { post: { summary: 'Owner resolution and quarantine release after runtime recovery', tags: ['autonomy'] } },
   '/api/agent-safety-slo': { get: { summary: 'Private read-only agent mission-readiness SLO, error-budget burn and recovery playbooks', tags: ['autonomy'] } },
+  '/api/agent-alerts': { get: { summary: 'Private read-only owner alert inbox, delivery, retry and receipt-chain status', tags: ['autonomy'] } },
 };
 app.get('/openapi.json', (req, res) => {
   res.set('Access-Control-Allow-Origin', '*');
@@ -1032,6 +1053,9 @@ automatic quarantine, recovery readiness and owner-review requirements without
 acknowledging or resolving an incident. The read-only
 \`agent_safety_slo_status\` tool reports honest evidence coverage, mission-readiness
 error-budget burn and deterministic recovery playbooks without applying actions. The
+read-only \`agent_owner_alert_status\` tool reports the durable private owner inbox,
+signed delivery, bounded retry/dead-letter state and receipt verification without
+acknowledging incidents, recovering agents or changing authority. The
 \`trade-paper\` scope adds read-only \`paper_trade_preflight\` plus
 \`paper_trade_open\` and \`paper_trade_close\`.
 Both require a unique \`intentId\`; exact retries return the original terminal
@@ -1224,6 +1248,11 @@ async function mcpToolCall(req, name, args) {
         observationStartedAt: AGENT_SLO_OBSERVATION_STARTED_AT,
       });
       throw Object.assign(new Error('user-bound safety SLO access required'), { protocolCode: -32602 });
+    }
+    case 'agent_owner_alert_status': {
+      if (req.userAgent) return ownerAlerts.ownerAlertStatus(req.userAgent.userId, req.userAgent.keyId);
+      if (req.session?.userId) return ownerAlerts.ownerAlertStatus(req.session.userId);
+      throw Object.assign(new Error('user-bound alert delivery access required'), { protocolCode: -32602 });
     }
     case 'agent_runtime_heartbeat': {
       if (!req.userAgent || !userAgentHas(req, 'read')) {
@@ -3831,6 +3860,7 @@ const API_INDEX = {
     { path: '/api/agent-incidents', method: 'GET', purpose: 'private owner or self view of deduplicated runtime incidents, quarantine and recovery readiness' },
     { path: '/api/agent-incidents/:id/acknowledge | /resolve', method: 'POST', purpose: 'owner-only incident review; resolution releases quarantine only after runtime readiness recovers' },
     { path: '/api/agent-safety-slo', method: 'GET', purpose: 'private read-only mission-readiness SLO, error-budget burn rates and deterministic incident playbooks' },
+    { path: '/api/agent-alerts', method: 'GET', purpose: 'private read-only owner alert inbox, signed delivery, retry/dead-letter and receipt-chain status' },
     { path: '/api/autopilot', method: 'GET', purpose: 'autopilot status + config + action audit trail + pending proposals' },
     { path: '/api/autopilot/start', method: 'POST', body: '{config?}', purpose: 'enable autonomous trading loop' },
     { path: '/api/autopilot/stop', method: 'POST', purpose: 'disable autonomous loop' },
@@ -4031,6 +4061,16 @@ app.get('/api/agent-safety-slo', requireUser, (req, res) => {
   }));
 });
 
+app.get('/api/agent-alerts', requireUser, (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (req.userAgent) {
+    if (!userAgentHas(req, 'read')) return res.status(403).json({ error: 'read scope required' });
+    return res.json(ownerAlerts.ownerAlertStatus(req.userAgent.userId, req.userAgent.keyId));
+  }
+  if (!isOwnerSession(req) || !req.session?.userId) return res.status(403).json({ error: 'owner or user agent required' });
+  return res.json(ownerAlerts.ownerAlertStatus(req.session.userId));
+});
+
 for (const action of ['acknowledge', 'resolve']) {
   app.post(`/api/agent-incidents/:id/${action}`, requireUser, (req, res) => {
     res.set('Cache-Control', 'private, no-store');
@@ -4130,6 +4170,7 @@ app.get('/api/agent-control', requireUser, (req, res) => {
     runtime: runtimeStatus, incidents: incidentStatus,
     observationStartedAt: AGENT_SLO_OBSERVATION_STARTED_AT,
   });
+  const alertStatus = ownerAlerts.ownerAlertStatus(req.session.userId);
   const lastAction = ap.actions[0] || null;
   res.json({
     ok: true,
@@ -4156,6 +4197,7 @@ app.get('/api/agent-control', requireUser, (req, res) => {
     runtime: runtimeStatus,
     incidents: incidentStatus,
     safetySlo,
+    alerts: alertStatus,
     keys,
     keyStats: { active: keys.filter((k) => !k.revokedAt).length, revoked: keys.filter((k) => !!k.revokedAt).length },
     parentWallet,
@@ -4518,14 +4560,25 @@ async function pushTick() {
 }
 setInterval(pushTick, 20_000);
 
-// Runtime incidents are evaluated independently of dashboard traffic so an
-// offline agent is quarantined even when no owner has the Control Center open.
-function incidentSweep() {
-  try { agentIncidents.reconcileRuntimeIncidents(); }
-  catch (error) { console.error(`[agent-incidents] sweep failed: ${error.message}`); }
+// Runtime incidents and owner alerts are evaluated independently of dashboard
+// traffic, so quarantine and notification continue while the UI is closed.
+let incidentSweepRunning = false;
+async function incidentSweep() {
+  if (incidentSweepRunning) return;
+  incidentSweepRunning = true;
+  try {
+    agentIncidents.reconcileRuntimeIncidents();
+    const ownerIds = new Set([
+      ...agentIncidents.incidentOwnerIdsForRouting(),
+      ...agentRuntime.runtimeIncidentInputs().map((runtime) => runtime.ownerId),
+    ]);
+    for (const ownerId of ownerIds) reconcileOwnerAlertsFor(ownerId);
+    await ownerAlerts.dispatchPendingAlerts();
+  } catch (error) { console.error(`[agent-alerts] sweep failed: ${error.message}`); }
+  finally { incidentSweepRunning = false; }
 }
-incidentSweep();
-setInterval(incidentSweep, 10_000);
+incidentSweep().catch(() => {});
+setInterval(() => { incidentSweep().catch(() => {}); }, 10_000);
 
 // ---------- serve ----------
 // JSON 404 for API paths AND any path where the client prefers JSON

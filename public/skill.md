@@ -90,6 +90,10 @@ Use the private read-only `agent_safety_slo_status` tool to inspect honest
 mission-readiness evidence coverage, the 30-day 99% objective, remaining error
 budget, multi-window burn rates and deterministic recovery playbooks. Playbooks
 never execute actions or change authority; Incident Center remains authoritative.
+Use the private read-only `agent_owner_alert_status` tool to inspect the durable
+owner inbox, optional signed-webhook delivery, bounded retry/dead-letter state
+and tamper-evident receipts. Alerts are notification-only: they cannot recover
+an agent, release quarantine, change permissions, trade or use a public chain.
 MCP Apps clients can render the private `evaluation_review` evidence panel with
 history, comparison charts and deterministic JSON/CSV exports; see
 `/docs/OWNER_MCP_APP_TESTING.md` for the owner test flow.
