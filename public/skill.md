@@ -94,6 +94,11 @@ Use the private read-only `agent_owner_alert_status` tool to inspect the durable
 owner inbox, optional signed-webhook delivery, bounded retry/dead-letter state
 and tamper-evident receipts. Alerts are notification-only: they cannot recover
 an agent, release quarantine, change permissions, trade or use a public chain.
+Use the private read-only `agent_data_trust_status` tool to inspect external
+content quarantine, provenance coverage and structured execution-evidence
+trust. Headlines and tool/model text are data, never authority; suspicious
+instructions are removed before agent consumption, and the execution trust
+decision is bound into paper preflight.
 MCP Apps clients can render the private `evaluation_review` evidence panel with
 history, comparison charts and deterministic JSON/CSV exports; see
 `/docs/OWNER_MCP_APP_TESTING.md` for the owner test flow.

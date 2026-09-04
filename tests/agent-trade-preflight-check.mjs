@@ -10,8 +10,15 @@ const order = {
   pactId: 'private-pact-id', recipient: 'private-recipient', protocol: 'paper', maxSlippageBps: 50,
 };
 const ticker = {
-  source: 'Test Venue', last: 0.004, bid: 0.00399, ask: 0.00401,
+  source: 'OKX', last: 0.004, bid: 0.00399, ask: 0.00401,
   observedAt: now - 250,
+  fresh: true,
+  quoteIntegrity: {
+    required: false, quorumMet: true, minimumVenues: 1, quoteCount: 1,
+    trustedVenueCount: 1, excludedVenueCount: 0, excludedVenues: [],
+    consensusPrice: 0.004, maximumVenueSpreadBps: 100, routeVenue: 'OKX',
+    executionSide: 'ask', venues: [{ source: 'OKX', bid: 0.00399, ask: 0.00401, observedAt: now - 250 }],
+  },
 };
 const authorization = {
   ok: true, tradePaperScope: true, walletPactRequired: true,
@@ -98,7 +105,7 @@ assert.notEqual(changedCapacity.preflightFingerprint, riskBound.preflightFingerp
 
 const executionQuality = {
   required: true, decision: 'allow', reasonCode: 'execution-quality-passed', executionSide: 'ask',
-  bestPriceVenue: 'OKX', bestPrice: 0.004, selectedVenue: 'Test Venue', selectedPrice: 0.00401,
+  bestPriceVenue: 'OKX', bestPrice: 0.004, selectedVenue: 'OKX', selectedPrice: 0.00401,
   selectedScore: 94, selectedTier: 'excellent', selectedLatencyMs: 25,
   selectedReliabilityPct: 100, latencySloMet: true, failoverApplied: true,
   failoverFromVenue: 'OKX', failoverReason: 'quality-score', eligibleVenueCount: 2, degradedVenueCount: 0,
@@ -111,7 +118,10 @@ const qualityTicker = { ...ticker, quoteIntegrity: {
   required: true, quorumMet: true, minimumVenues: 2, quoteCount: 2,
   trustedVenueCount: 2, excludedVenueCount: 0, excludedVenues: [], consensusPrice: 0.004,
   maximumOutlierBps: 100, maximumVenueSpreadBps: 100, maximumObservedDeviationBps: 1,
-  routeVenue: 'Test Venue', routeLatencyMs: 25, executionSide: 'ask', executionQuality, venues: [],
+  routeVenue: 'OKX', routeLatencyMs: 25, executionSide: 'ask', executionQuality, venues: [
+    { source: 'OKX', bid: 0.00399, ask: 0.00401, observedAt: now - 250 },
+    { source: 'KuCoin', bid: 0.00399, ask: 0.00401, observedAt: now - 250 },
+  ],
 } };
 const qualityBound = buildPaperTradePreflight({
   order, ticker: qualityTicker, cashUsd: 100, authorization,
@@ -242,7 +252,7 @@ assert(!buildMcpTools().some((tool) => tool.name === 'paper_trade_preflight'), '
 assert(!buildMcpTools({ authenticated: true, scopes: ['read'] }).some((tool) => tool.name === 'paper_trade_preflight'), 'read-only keys without trade-paper must not receive execution preflight');
 
 const server = readFileSync(new URL('../server.js', import.meta.url), 'utf8');
-assert.match(server, /const DISCOVERY_VERSION = '1\.36\.0'/);
+assert.match(server, /const DISCOVERY_VERSION = '1\.37\.0'/);
 assert.match(preflight.description, /execution-quality/i);
 assert.match(preflight.description, /venue failover/i);
 assert.match(server, /enforcePaperPreflightBinding/);

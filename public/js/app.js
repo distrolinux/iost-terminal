@@ -1192,6 +1192,9 @@ async function renderAgentControl() {
   const alerts = s.alerts || { counts: { total: 0, critical: 0, pending: 0, delivered: 0, deadLetter: 0 }, channels: {}, alerts: [], receiptChain: {} };
   const alertCounts = alerts.counts || {};
   const alertHealthy = !(alertCounts.pending || alertCounts.deadLetter);
+  const dataTrust = s.dataTrust || { status: 'unknown', externalContent: {} };
+  const trustContent = dataTrust.externalContent || {};
+  const dataTrustHealthy = !trustContent.quarantined && dataTrust.status === 'healthy';
   const moneyInput = (minor) => ((Number(minor || 0) / 100).toFixed(2));
   el.innerHTML = `
     <div class="section-title">Agent Control Center <span class="sub">owner-only operations · server-enforced limits</span></div>
@@ -1273,6 +1276,17 @@ async function renderAgentControl() {
         <dl><div><dt>Inbox</dt><dd>${esc(alert.delivery?.controlCenter || 'unknown')}</dd></div><div><dt>Webhook</dt><dd>${esc(alert.delivery?.webhook || 'disabled')}</dd></div><div><dt>Attempts</dt><dd>${alert.delivery?.attempts || 0}</dd></div><div><dt>Replay key</dt><dd>${alert.eventId ? 'present' : 'missing'}</dd></div></dl>
       </article>`).join('')}</div>` : '<p class="muted alert-router-empty">No agent safety alerts have been emitted. The private owner inbox and delivery worker remain armed.</p>'}
       <p class="runtime-note">Alert delivery is notification-only. It cannot acknowledge incidents, release quarantine, recover an agent, change execution authority, place trades, move funds, or perform public-chain actions.</p>
+    </section>
+    <section class="card data-trust-firewall ${dataTrustHealthy ? 'is-healthy' : 'is-quarantining'}" aria-labelledby="dataTrustTitle">
+      <div class="section-title" id="dataTrustTitle">Agent Data Trust Firewall <span class="sub">provenance · prompt-injection quarantine · fail-closed execution</span><span class="receipt-chain ${dataTrustHealthy ? 'is-valid' : 'is-invalid'}">${esc(dataTrust.status || 'unknown')}</span></div>
+      <div class="data-trust-grid">
+        <div><span>External evidence</span><strong>${trustContent.total || 0}</strong><small>${trustContent.trusted || 0} trusted</small></div>
+        <div><span>Quarantined</span><strong>${trustContent.quarantined || 0}</strong><small>${trustContent.instructionLike || 0} instruction-like</small></div>
+        <div><span>Provenance</span><strong>${Number(trustContent.provenanceCoveragePercent ?? 100).toFixed(0)}%</strong><small>SHA-256 evidence coverage</small></div>
+        <div><span>Authority</span><strong>data only</strong><small>content cannot authorize execution</small></div>
+      </div>
+      <div class="alert-channels"><span class="chip bull">Deterministic policy</span><span class="chip bull">Schema validated</span><span class="chip ${trustContent.quarantined ? 'warn' : 'bull'}">${trustContent.quarantined ? 'Threats isolated' : 'Sources clean'}</span><span class="chip neut">Fail closed</span></div>
+      <p class="runtime-note">News, webpages, model output and tool text remain untrusted data. Suspicious instructions are removed before agent consumption; paper execution relies only on fresh structured server evidence whose trust decision is bound into the preflight fingerprint.</p>
     </section>
     <section class="card" aria-labelledby="controlKeysTitle">
       <div class="section-title" id="controlKeysTitle">Permissions <span class="sub">scoped keys · secrets never displayed here</span></div>
