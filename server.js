@@ -44,6 +44,7 @@ import * as agentRuntime from './lib/agent-runtime.js';
 import * as agentIncidents from './lib/agent-incidents.js';
 import * as agentSafetySlo from './lib/agent-safety-slo.js';
 import * as ownerAlerts from './lib/owner-alert-router.js';
+import { buildAgentDataTrustStatus, buildExecutionDataTrust } from './lib/agent-data-trust.js';
 import * as executionReceipts from './lib/execution-receipts.js';
 import * as executionIntents from './lib/execution-intents.js';
 import { buildPaperTradePreflight } from './lib/trade-preflight.js';
@@ -806,7 +807,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.36.0';
+const DISCOVERY_VERSION = '1.37.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -886,6 +887,7 @@ const OPENAPI_PATHS = {
   '/api/agent-incidents/{id}/resolve': { post: { summary: 'Owner resolution and quarantine release after runtime recovery', tags: ['autonomy'] } },
   '/api/agent-safety-slo': { get: { summary: 'Private read-only agent mission-readiness SLO, error-budget burn and recovery playbooks', tags: ['autonomy'] } },
   '/api/agent-alerts': { get: { summary: 'Private read-only owner alert inbox, delivery, retry and receipt-chain status', tags: ['autonomy'] } },
+  '/api/agent-data-trust': { get: { summary: 'Read-only external-content quarantine, provenance and execution-evidence trust status', tags: ['autonomy'] } },
 };
 app.get('/openapi.json', (req, res) => {
   res.set('Access-Control-Allow-Origin', '*');
@@ -1253,6 +1255,15 @@ async function mcpToolCall(req, name, args) {
       if (req.userAgent) return ownerAlerts.ownerAlertStatus(req.userAgent.userId, req.userAgent.keyId);
       if (req.session?.userId) return ownerAlerts.ownerAlertStatus(req.session.userId);
       throw Object.assign(new Error('user-bound alert delivery access required'), { protocolCode: -32602 });
+    }
+    case 'agent_data_trust_status': {
+      const symbol = String(args?.symbol || 'IOST').trim().toUpperCase();
+      if (![...WATCHLIST.crypto, ...WATCHLIST.stocks].includes(symbol)) {
+        throw Object.assign(new Error('unsupported symbol'), { protocolCode: -32602 });
+      }
+      let ticker = null;
+      try { ticker = await getExecutionTicker(symbol, 'long', Date.now()); } catch { /* reported as unavailable */ }
+      return buildAgentDataTrustStatus({ news: await getNews(), ticker });
     }
     case 'agent_runtime_heartbeat': {
       if (!req.userAgent || !userAgentHas(req, 'read')) {
@@ -2704,10 +2715,11 @@ async function paperTradePreflight(req, order = {}) {
     volatility,
     now,
   });
+  const dataTrust = buildExecutionDataTrust({ ticker, now });
   return buildPaperTradePreflight({
     order: effectiveOrder, ticker, cashUsd: accountState.account.cash,
     authorization, mission, accountScope: accountId,
-    portfolioRisk,
+    portfolioRisk, dataTrust,
     supportedSymbols, now, bindingSecret: PAPER_PREFLIGHT_BINDING_SECRET,
   });
 }
@@ -2803,6 +2815,7 @@ function beginPaperReceipt(req, order, action, source) {
     preflightRequired: action === 'open' && (source === 'mcp' || !!req.userAgent || !!req.agentKey),
     preflightAuthorized: action !== 'open' || !(source === 'mcp' || req.userAgent || req.agentKey),
     portfolioRisk: null,
+    dataTrust: null,
   };
 }
 
@@ -2818,6 +2831,7 @@ function writePaperReceipt(req, attempt, {
     request: attempt.request,
     market: attempt.market,
     portfolioRisk: attempt.portfolioRisk,
+    dataTrust: attempt.dataTrust,
     execution,
     authorization: {
       principal: receiptPrincipal(req),
@@ -2901,6 +2915,7 @@ async function enforcePaperPreflightBinding(req, order, source, attempt) {
 
   const current = await paperTradePreflight(req, order);
   attempt.portfolioRisk = current.portfolioRisk || null;
+  attempt.dataTrust = current.dataTrust || null;
   if (current.decision !== 'allow') {
     preflightBindingError(req, attempt, 'paper execution preflight no longer allows this request', 409,
       'preflight-denied', `Current preflight denied: ${current.reasonCode || 'policy-denied'}.`);
@@ -3861,6 +3876,7 @@ const API_INDEX = {
     { path: '/api/agent-incidents/:id/acknowledge | /resolve', method: 'POST', purpose: 'owner-only incident review; resolution releases quarantine only after runtime readiness recovers' },
     { path: '/api/agent-safety-slo', method: 'GET', purpose: 'private read-only mission-readiness SLO, error-budget burn rates and deterministic incident playbooks' },
     { path: '/api/agent-alerts', method: 'GET', purpose: 'private read-only owner alert inbox, signed delivery, retry/dead-letter and receipt-chain status' },
+    { path: '/api/agent-data-trust', method: 'GET', purpose: 'read-only external-content quarantine, provenance hashes and execution-evidence trust status' },
     { path: '/api/autopilot', method: 'GET', purpose: 'autopilot status + config + action audit trail + pending proposals' },
     { path: '/api/autopilot/start', method: 'POST', body: '{config?}', purpose: 'enable autonomous trading loop' },
     { path: '/api/autopilot/stop', method: 'POST', purpose: 'disable autonomous loop' },
@@ -4071,6 +4087,17 @@ app.get('/api/agent-alerts', requireUser, (req, res) => {
   return res.json(ownerAlerts.ownerAlertStatus(req.session.userId));
 });
 
+app.get('/api/agent-data-trust', requireUser, async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (req.userAgent && !userAgentHas(req, 'read')) return res.status(403).json({ error: 'read scope required' });
+  if (!req.userAgent && (!isOwnerSession(req) || !req.session?.userId)) return res.status(403).json({ error: 'owner or user agent required' });
+  const symbol = String(req.query?.symbol || 'IOST').trim().toUpperCase();
+  if (![...WATCHLIST.crypto, ...WATCHLIST.stocks].includes(symbol)) return res.status(400).json({ error: 'unsupported symbol' });
+  let ticker = null;
+  try { ticker = await getExecutionTicker(symbol, 'long', Date.now()); } catch { /* reported as unavailable */ }
+  return res.json(buildAgentDataTrustStatus({ news: await getNews(), ticker }));
+});
+
 for (const action of ['acknowledge', 'resolve']) {
   app.post(`/api/agent-incidents/:id/${action}`, requireUser, (req, res) => {
     res.set('Cache-Control', 'private, no-store');
@@ -4126,7 +4153,7 @@ app.post('/api/agent-missions/:id/checkpoint', requireUser, (req, res) => {
 
 // Owner operations cockpit. This composes existing server-enforced controls;
 // it never returns key material, hashes, venue credentials or raw audit files.
-app.get('/api/agent-control', requireUser, (req, res) => {
+app.get('/api/agent-control', requireUser, async (req, res) => {
   if (!isOwnerSession(req) || !req.session?.userId) return res.status(403).json({ error: 'owner only' });
   const ident = signalIdentity(req);
   const ap = getAutopilot();
@@ -4171,6 +4198,7 @@ app.get('/api/agent-control', requireUser, (req, res) => {
     observationStartedAt: AGENT_SLO_OBSERVATION_STARTED_AT,
   });
   const alertStatus = ownerAlerts.ownerAlertStatus(req.session.userId);
+  const dataTrust = buildAgentDataTrustStatus({ news: await getNews() });
   const lastAction = ap.actions[0] || null;
   res.json({
     ok: true,
@@ -4198,6 +4226,7 @@ app.get('/api/agent-control', requireUser, (req, res) => {
     incidents: incidentStatus,
     safetySlo,
     alerts: alertStatus,
+    dataTrust,
     keys,
     keyStats: { active: keys.filter((k) => !k.revokedAt).length, revoked: keys.filter((k) => !!k.revokedAt).length },
     parentWallet,

@@ -186,6 +186,7 @@ try {
   const incidentStatusTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_incident_status');
   const safetySloTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_safety_slo_status');
   const ownerAlertTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_owner_alert_status');
+  const dataTrustTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_data_trust_status');
   assert.equal(runtimeStatusTool.annotations.readOnlyHint, true);
   assert.equal(runtimeStatusTool.annotations.destructiveHint, false);
   assert.equal(runtimeHeartbeatTool.annotations.readOnlyHint, false);
@@ -202,6 +203,9 @@ try {
   assert.equal(ownerAlertTool.annotations.readOnlyHint, true);
   assert.equal(ownerAlertTool.annotations.destructiveHint, false);
   assert.equal(ownerAlertTool.annotations.idempotentHint, true);
+  assert.equal(dataTrustTool.annotations.readOnlyHint, true);
+  assert.equal(dataTrustTool.annotations.destructiveHint, false);
+  assert.equal(dataTrustTool.annotations.idempotentHint, true);
   const promotionTool = privateTools.body.result.tools.find((tool) => tool.name === 'strategy_promotion_scorecards');
   assert.equal(promotionTool.annotations.readOnlyHint, true);
   assert.equal(promotionTool.annotations.destructiveHint, false);
@@ -324,6 +328,22 @@ try {
   assert.match(alertRestResponse.headers.get('cache-control') || '', /no-store/);
   const alertRest = await alertRestResponse.json();
   assert.equal(alertRest.guarantees.notificationOnly, true);
+  const dataTrustStatus = await mcp('tools/call', { name: 'agent_data_trust_status', arguments: { symbol: 'IOST' } }, {
+    key: keyA.key, name: 'agent_data_trust_status',
+  });
+  assert.equal(dataTrustStatus.status, 200);
+  assert.equal(dataTrustStatus.body.result.structuredContent.mode, 'paper-only');
+  assert.equal(dataTrustStatus.body.result.structuredContent.execution.decision, 'allow');
+  assert.equal(dataTrustStatus.body.result.structuredContent.policy.externalContentAuthority, 'data-only');
+  assert.equal(dataTrustStatus.body.result.structuredContent.guarantees.authorityExpanded, false);
+  assert.equal(dataTrustStatus.body.result.structuredContent.liveScopeUsed, false);
+  assert.equal(dataTrustStatus.body.result.structuredContent.publicChainUsed, false);
+  const trustRestResponse = await fetch(`${BASE}/api/agent-data-trust?symbol=IOST`, { headers: { 'X-API-Key': keyA.key } });
+  assert.equal(trustRestResponse.status, 200);
+  assert.match(trustRestResponse.headers.get('cache-control') || '', /private/);
+  assert.match(trustRestResponse.headers.get('cache-control') || '', /no-store/);
+  const trustRest = await trustRestResponse.json();
+  assert.equal(trustRest.executionPermissionsChanged, false);
   const runtimeReplay = await mcp('tools/call', { name: 'agent_runtime_heartbeat', arguments: heartbeatArguments }, {
     key: keyA.key, name: 'agent_runtime_heartbeat',
   });

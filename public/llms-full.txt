@@ -212,6 +212,13 @@ MCP Apps clients can render the private `evaluation_review` panel with evaluatio
 history, two-run comparison charts and deterministic JSON/CSV evidence exports.
 Owner testing instructions: `/docs/OWNER_MCP_APP_TESTING.md`.
 
+### Agent Data Trust Firewall
+- `GET /api/agent-data-trust?symbol=IOST` — private read-only quarantine, provenance and execution-evidence status
+- `agent_data_trust_status` — equivalent authenticated MCP status tool
+- External headlines and tool/model text are classified as data, never instructions or execution authority.
+- Suspicious instruction-like text and lookalike sources are quarantined and excluded before agent consumption.
+- Paper preflight requires allowlisted structured quote provenance; its hashes and trust decision are HMAC-bound into the preflight fingerprint.
+
 ## AITT — Agent Intelligence Trading Token
 
 ERC-20 on IOST L2 (chain 182), 1B fixed supply, 8 decimals. **Design draft — NOT issued yet.**
