@@ -40,6 +40,13 @@ try {
   assert.equal(router.ownerAlertStatus('owner-a', 'key-a').counts.total, 1, 'pre-router resolved history must not page the owner');
 
   const stored = JSON.parse(readFileSync(router.ownerAlertStorePathForTest, 'utf8'));
+  assert.equal(stored.alerts[0].status, 'active', 'open incidents must use the router active status');
+  const legacy = structuredClone(stored);
+  legacy.alerts[0].status = 'open';
+  writeFileSync(router.ownerAlertStorePathForTest, JSON.stringify(legacy), { mode: 0o600 });
+  const migrated = await import(`../lib/owner-alert-router.js?legacy=${Date.now()}`);
+  assert.equal(migrated.ownerAlertStatus('owner-a', 'key-a').alerts[0].status, 'active', 'legacy open alerts must reload as active');
+  assert.equal(JSON.parse(readFileSync(router.ownerAlertStorePathForTest, 'utf8')).alerts[0].status, 'active', 'legacy normalization must be durable');
   const request = router.buildSignedWebhookRequest(stored.alerts[0], process.env.IOST_OWNER_ALERT_WEBHOOK_URL, readFileSync(secretFile), now);
   assert.equal(request.headers['Idempotency-Key'], stored.alerts[0].eventId);
   assert.match(request.headers['Content-Digest'], /^sha-256=:[A-Za-z0-9+/]+=*:$/);
