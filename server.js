@@ -50,6 +50,7 @@ import { guardianCoverage } from './lib/position-guardian.js';
 import * as executionReceipts from './lib/execution-receipts.js';
 import * as executionIntents from './lib/execution-intents.js';
 import { buildExecutionReconciliation } from './lib/execution-reconciliation.js';
+import { buildAgentPortfolioOrchestrator, portfolioExecutionLaneStatus, runPortfolioExecution } from './lib/agent-portfolio-orchestrator.js';
 import { buildPaperTradePreflight } from './lib/trade-preflight.js';
 import { buildPortfolioRiskDecision } from './lib/portfolio-risk-governor.js';
 import { buildVolatilitySentinel } from './lib/volatility-sentinel.js';
@@ -810,7 +811,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.39.0';
+const DISCOVERY_VERSION = '1.40.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -875,6 +876,7 @@ const OPENAPI_PATHS = {
   '/api/execution-intents': { get: { summary: 'Private paper execution idempotency and replay status', tags: ['execution'] } },
   '/api/execution-intents/{intentId}': { get: { summary: 'Private status for one paper execution intent', tags: ['execution'] } },
   '/api/execution-reconciliation': { get: { summary: 'Private read-only reconciliation of paper intents, receipts, positions, journal and cash', tags: ['execution'] } },
+  '/api/agent-portfolio-orchestrator': { get: { summary: 'Private read-only multi-agent portfolio coordination, conflict and execution-lane status', tags: ['autonomy'] } },
   '/api/signals': { post: { summary: 'Publish a signal as the authenticated principal; SHA-256 pinned on IOST mainnet', tags: ['agents'] } },
   '/api/agent-keys': { get: { summary: 'My AI-agent API keys (scopes, prefixes)', tags: ['auth'] }, post: { summary: 'Mint a scoped AI-agent API key', tags: ['auth'] } },
   '/api/agent-control': { get: { summary: 'Owner-only agent operations snapshot: activity, permissions, budgets and safety state', tags: ['autonomy'] } },
@@ -1322,6 +1324,10 @@ async function mcpToolCall(req, name, args) {
     case 'paper_execution_reconciliation': {
       const accountId = accountFor(req).accountId;
       return executionReconciliationFor(accountId, getAccount(accountId));
+    }
+    case 'agent_portfolio_orchestrator_status': {
+      const accountId = accountFor(req).accountId;
+      return portfolioOrchestratorFor(accountId, missionOwnerId(req), getAccount(accountId));
     }
     case 'paper_missions': {
       const ownerId = missionOwnerId(req);
@@ -1847,6 +1853,12 @@ app.get('/api/execution-reconciliation', requireUser, (req, res) => {
   if (req.userAgent && !userAgentHas(req, 'read')) return res.status(403).json({ error: 'read scope required' });
   const accountId = accountFor(req).accountId;
   res.json(executionReconciliationFor(accountId, getAccount(accountId)));
+});
+app.get('/api/agent-portfolio-orchestrator', requireUser, (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (req.userAgent && !userAgentHas(req, 'read')) return res.status(403).json({ error: 'read scope required' });
+  const accountId = accountFor(req).accountId;
+  res.json(portfolioOrchestratorFor(accountId, missionOwnerId(req), getAccount(accountId)));
 });
 
 // ================= decentralized AI agents — Phase 1 =================
@@ -2727,6 +2739,19 @@ function executionReconciliationFor(accountId, accountState = null, now = Date.n
   });
 }
 
+function portfolioOrchestratorFor(accountId, ownerId, accountState = null, now = Date.now()) {
+  const state = accountState || getAccount(accountId) || { accountId, positions: [] };
+  const userId = String(ownerId || '').replace(/^user:/, '');
+  return buildAgentPortfolioOrchestrator({
+    account: state,
+    missions: ownerId ? missions.listMissions(ownerId) : [],
+    keys: userId ? agentKeys.listKeys(userId) : [],
+    runtimes: userId ? agentRuntime.ownerRuntimeStatus(userId, now) : null,
+    reconciliation: executionReconciliationFor(accountId, state, now),
+    lane: portfolioExecutionLaneStatus(accountId),
+  });
+}
+
 async function paperTradePreflight(req, order = {}) {
   const symbol = String(order?.symbol || '').trim().toUpperCase();
   const supportedSymbols = [...WATCHLIST.crypto, ...WATCHLIST.stocks];
@@ -3037,6 +3062,11 @@ function serverPaperFill(preflight, order) {
 }
 
 async function executePaperOpen(req, order, source = 'rest') {
+  const accountId = accountFor(req).accountId;
+  return runPortfolioExecution({ accountId, action: 'open' }, () => executePaperOpenInLane(req, order, source));
+}
+
+async function executePaperOpenInLane(req, order, source = 'rest') {
   // Current authorization is checked before looking up a cached result so a
   // lower-scope key cannot use a guessed intent ID as a private read channel.
   if (missingPaperExecutionScope(req, source)) return executePaperOpenOnce(req, order, source);
@@ -3200,6 +3230,11 @@ async function executePaperOpenOnce(req, order, source = 'rest') {
 }
 
 async function executePaperClose(req, order, source = 'rest') {
+  const accountId = accountFor(req).accountId;
+  return runPortfolioExecution({ accountId, action: 'close' }, () => executePaperCloseInLane(req, order, source));
+}
+
+async function executePaperCloseInLane(req, order, source = 'rest') {
   if (missingPaperExecutionScope(req, source)) return executePaperCloseOnce(req, order, source);
   const accountId = accountFor(req).accountId;
   const intentId = paperExecutionIntentId(req, order, source);
@@ -3878,6 +3913,7 @@ const API_INDEX = {
     { path: '/api/execution-intents', method: 'GET', query: 'limit=1..200', purpose: 'private replay-safe paper execution intent states; pending intents fail closed as outcome-unknown after restart' },
     { path: '/api/execution-intents/:intentId', method: 'GET', purpose: 'private status lookup for one paper execution intent' },
     { path: '/api/execution-reconciliation', method: 'GET', purpose: 'private read-only cross-ledger reconciliation; blocks new agent exposure on unknown or contradictory execution state' },
+    { path: '/api/agent-portfolio-orchestrator', method: 'GET', purpose: 'private read-only centralized multi-agent coordination, conflict and paper execution-lane status' },
     { path: '/api/paper/reset', method: 'POST', purpose: 'reset paper account' },
   ],
   agents: [
@@ -4294,6 +4330,7 @@ app.get('/api/agent-control', requireUser, async (req, res) => {
   const dataTrust = buildAgentDataTrustStatus({ news: await getNews() });
   const guardianStatus = management.positionGuardianStatus(`user:${req.session.userId}`);
   const reconciliation = executionReconciliationFor(`user:${req.session.userId}`);
+  const orchestrator = portfolioOrchestratorFor(`user:${req.session.userId}`, `user:${req.session.userId}`);
   const lastAction = ap.actions[0] || null;
   res.json({
     ok: true,
@@ -4324,6 +4361,7 @@ app.get('/api/agent-control', requireUser, async (req, res) => {
     dataTrust,
     guardian: guardianStatus,
     reconciliation,
+    orchestrator,
     keys,
     keyStats: { active: keys.filter((k) => !k.revokedAt).length, revoked: keys.filter((k) => !!k.revokedAt).length },
     parentWallet,

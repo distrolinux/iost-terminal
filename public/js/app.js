@@ -1210,6 +1210,8 @@ async function renderAgentControl() {
   const guardianHealthy = !(guardianCoverage.degraded || guardianCoverage.unprotected);
   const reconciliation = s.reconciliation || { status: 'unavailable', decision: 'deny', counts: {}, evidence: {} };
   const reconciliationHealthy = reconciliation.decision === 'allow';
+  const orchestrator = s.orchestrator || { status: 'unavailable', decision: 'deny', counts: {}, executionLane: {}, conflicts: [] };
+  const orchestratorHealthy = orchestrator.decision === 'allow';
   const supervisedReady = (runtime.runtimes || []).filter((item) => item.ready
     && item.supervisor?.managed && item.supervisor?.healthy && item.checkpoint
     && item.quarantine?.active !== true && item.execution?.newMissionExposureAllowed).length;
@@ -1248,6 +1250,17 @@ async function renderAgentControl() {
         <div><span>Cash invariant</span><strong class="${reconciliation.evidence?.cashInvariant ? 'up' : 'down'}">${reconciliation.evidence?.cashInvariant ? 'PASS' : 'BLOCK'}</strong></div>
       </div>
       <p>Reconciliation is read-only and fail-closed. Unknown execution outcomes are never retried automatically; contradictions block new exposure and require owner review while Position Guardian continues protecting existing positions.</p>
+    </section>
+    <section class="card execution-readiness ${orchestratorHealthy ? 'is-ready' : 'is-blocked'}" aria-labelledby="portfolioOrchestratorTitle">
+      <div class="section-title" id="portfolioOrchestratorTitle">Multi-Agent Portfolio Orchestrator <span class="sub">central arbiter · one paper writer per account</span><span class="receipt-chain ${orchestratorHealthy ? 'is-valid' : 'is-invalid'}">${esc(orchestrator.status)}</span></div>
+      <div class="readiness-grid">
+        <div><span>Execution lane</span><strong class="${orchestrator.executionLane?.active ? 'warn' : 'up'}">${orchestrator.executionLane?.active ? esc(orchestrator.executionLane.activeAction || 'active') : 'IDLE'}</strong></div>
+        <div><span>Queued operations</span><strong class="${orchestrator.executionLane?.queued ? 'warn' : 'up'}">${orchestrator.executionLane?.queued || 0}</strong></div>
+        <div><span>Opposing exposure</span><strong class="${orchestrator.counts?.opposingExposureConflicts ? 'down' : 'up'}">${orchestrator.counts?.opposingExposureConflicts || 0}</strong></div>
+        <div><span>Mandate overlaps</span><strong class="${orchestrator.counts?.overlappingMandates ? 'warn' : 'up'}">${orchestrator.counts?.overlappingMandates || 0}</strong></div>
+      </div>
+      <div class="alert-channels"><span class="chip bull">Close priority</span><span class="chip bull">Capability-bound routing</span><span class="chip bull">Deterministic conflicts</span><span class="chip neut">Owner-approved fallback</span></div>
+      <p>Every paper open and close is serialized through one account-level execution lane. Risk-reducing closes move ahead of queued opens, opposing same-symbol agent exposure fails closed, and no agent can silently substitute for another or inherit authority.</p>
     </section>
     <section class="card control-activity" aria-labelledby="controlActivityTitle">
       <div class="section-title" id="controlActivityTitle">Agent activity</div>
