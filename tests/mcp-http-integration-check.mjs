@@ -184,6 +184,11 @@ try {
   assert.equal(reconciliationTool.annotations.readOnlyHint, true);
   assert.equal(reconciliationTool.annotations.destructiveHint, false);
   assert.equal(reconciliationTool.annotations.idempotentHint, true);
+  const orchestratorTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_portfolio_orchestrator_status');
+  assert(orchestratorTool);
+  assert.equal(orchestratorTool.annotations.readOnlyHint, true);
+  assert.equal(orchestratorTool.annotations.destructiveHint, false);
+  assert.equal(orchestratorTool.annotations.idempotentHint, true);
   const guardianTool = privateTools.body.result.tools.find((tool) => tool.name === 'paper_position_guardian');
   assert(guardianTool);
   assert.equal(guardianTool.annotations.readOnlyHint, true);
@@ -643,7 +648,7 @@ try {
   // only by the same user's scoped key and an exact wallet-bound Pact.
   const accountWalletArguments = await boundOpenArguments('mcp-account-wallet-0003', {
     walletId: accountWallet.walletId, pactId: accountPact.pactId,
-    side: 'short',
+    side: 'long',
     reason: 'Owner-control wallet integration test',
   });
   const accountWalletOpened = await mcp('tools/call', {
@@ -652,11 +657,11 @@ try {
   }, { key: keyA.key, name: 'paper_trade_open' });
   assert.equal(accountWalletOpened.status, 200);
   assert.equal(accountWalletOpened.body.result.structuredContent.ok, true, JSON.stringify(accountWalletOpened.body));
-  assert.equal(accountWalletOpened.body.result.structuredContent.position.entry, 9.99);
-  assert.equal(accountWalletOpened.body.result.structuredContent.receipt.execution.fillPrice, 9.99);
-  assert.equal(accountWalletOpened.body.result.structuredContent.receipt.execution.fillAuthority, 'server-top-of-book-bid');
-  assert.equal(accountWalletOpened.body.result.structuredContent.receipt.execution.fillVenue, 'Gate');
-  assert.equal(accountWalletOpened.body.result.structuredContent.receipt.market.quoteIntegrity.routeVenue, 'Gate');
+  assert.equal(accountWalletOpened.body.result.structuredContent.position.entry, 10.01);
+  assert.equal(accountWalletOpened.body.result.structuredContent.receipt.execution.fillPrice, 10.01);
+  assert.equal(accountWalletOpened.body.result.structuredContent.receipt.execution.fillAuthority, 'server-top-of-book-ask');
+  assert.equal(accountWalletOpened.body.result.structuredContent.receipt.execution.fillVenue, 'KuCoin');
+  assert.equal(accountWalletOpened.body.result.structuredContent.receipt.market.quoteIntegrity.routeVenue, 'KuCoin');
 
   const closed = await mcp('tools/call', {
     name: 'paper_trade_close', arguments: { intentId: 'mcp-close-integration-0004', positionId, exitPrice: 11 },
@@ -704,6 +709,17 @@ try {
   assert.equal(reconciliation.body.result.structuredContent.execution.attempted, false);
   assert.equal(reconciliation.body.result.structuredContent.liveScopeUsed, false);
   assert.equal(reconciliation.body.result.structuredContent.publicChainUsed, false);
+
+  const orchestrator = await mcp('tools/call', {
+    name: 'agent_portfolio_orchestrator_status', arguments: {},
+  }, { key: keyA.key, name: 'agent_portfolio_orchestrator_status' });
+  assert.equal(orchestrator.body.result.structuredContent.ok, true);
+  assert.equal(orchestrator.body.result.structuredContent.mode, 'paper-only');
+  assert.equal(orchestrator.body.result.structuredContent.policy.centralArbiter, true);
+  assert.equal(orchestrator.body.result.structuredContent.guarantees.onePaperWriterPerAccount, true);
+  assert.equal(orchestrator.body.result.structuredContent.execution.attempted, false);
+  assert.equal(orchestrator.body.result.structuredContent.liveScopeUsed, false);
+  assert.equal(orchestrator.body.result.structuredContent.publicChainUsed, false);
 
   const taskCreated = await mcp('tools/call', {
     name: 'evaluation_run', arguments: {
