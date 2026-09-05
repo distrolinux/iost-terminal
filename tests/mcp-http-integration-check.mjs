@@ -67,6 +67,7 @@ const child = spawn(process.execPath, ['--import', './tests/market-fetch-fixture
     PORT: String(PORT),
     SITE_URL: BASE,
     SESSION_SECRET: 'mcp-http-integration-session-secret-32-bytes',
+    PUBLIC_RATE_LIMIT: '200',
     LIVE_TRADING_ENABLED: 'false',
     AITT_CONVERSION_ENABLED: 'false',
     PUBLIC_CHAIN_ACTIONS_ENABLED: 'false',
@@ -135,6 +136,8 @@ async function boundOpenArguments(intentId, overrides = {}, key = keyA.key) {
   assert.equal(preflight.body.result.structuredContent.portfolioRisk.volatility.venueCount, 2);
   assert(preflight.body.result.structuredContent.portfolioRisk.volatility.forecastVolDailyPct > 0);
   assert.equal(preflight.body.result.structuredContent.portfolioRisk.execution.attempted, false);
+  assert.equal(preflight.body.result.structuredContent.executionReadiness.decision, 'allow');
+  assert.equal(preflight.body.result.structuredContent.executionReadiness.reasonCode, 'agent-execution-ready');
   const quality = preflight.body.result.structuredContent.market.quoteIntegrity.executionQuality;
   assert.equal(quality.decision, 'allow');
   assert.equal(quality.selectedVenue, preflight.body.result.structuredContent.market.quoteIntegrity.routeVenue);
@@ -187,6 +190,7 @@ try {
   const safetySloTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_safety_slo_status');
   const ownerAlertTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_owner_alert_status');
   const dataTrustTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_data_trust_status');
+  const executionReadinessTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_execution_readiness');
   assert.equal(runtimeStatusTool.annotations.readOnlyHint, true);
   assert.equal(runtimeStatusTool.annotations.destructiveHint, false);
   assert.equal(runtimeHeartbeatTool.annotations.readOnlyHint, false);
@@ -206,6 +210,9 @@ try {
   assert.equal(dataTrustTool.annotations.readOnlyHint, true);
   assert.equal(dataTrustTool.annotations.destructiveHint, false);
   assert.equal(dataTrustTool.annotations.idempotentHint, true);
+  assert.equal(executionReadinessTool.annotations.readOnlyHint, true);
+  assert.equal(executionReadinessTool.annotations.destructiveHint, false);
+  assert.equal(executionReadinessTool.annotations.idempotentHint, true);
   const promotionTool = privateTools.body.result.tools.find((tool) => tool.name === 'strategy_promotion_scorecards');
   assert.equal(promotionTool.annotations.readOnlyHint, true);
   assert.equal(promotionTool.annotations.destructiveHint, false);
@@ -344,6 +351,27 @@ try {
   assert.match(trustRestResponse.headers.get('cache-control') || '', /no-store/);
   const trustRest = await trustRestResponse.json();
   assert.equal(trustRest.executionPermissionsChanged, false);
+  const executionReadiness = await mcp('tools/call', {
+    name: 'agent_execution_readiness', arguments: { symbol: 'IOST' },
+  }, { key: keyA.key, name: 'agent_execution_readiness' });
+  assert.equal(executionReadiness.status, 200);
+  assert.equal(executionReadiness.body.result.structuredContent.decision, 'allow');
+  assert.equal(executionReadiness.body.result.structuredContent.reasonCode, 'agent-execution-ready');
+  assert.equal(executionReadiness.body.result.structuredContent.evidence.runtime.supervised, true);
+  assert.equal(executionReadiness.body.result.structuredContent.evidence.incidents.open, 0);
+  assert.equal(executionReadiness.body.result.structuredContent.evidence.guardian.unprotected, 0);
+  assert.equal(executionReadiness.body.result.structuredContent.evidence.dataTrust.decision, 'allow');
+  assert.equal(executionReadiness.body.result.structuredContent.evidence.authorization.walletPactAuthorized, true);
+  assert.equal(executionReadiness.body.result.structuredContent.execution.attempted, false);
+  assert.equal(executionReadiness.body.result.structuredContent.liveScopeUsed, false);
+  assert.equal(executionReadiness.body.result.structuredContent.publicChainUsed, false);
+  const readinessRestResponse = await fetch(`${BASE}/api/agent-execution-readiness?symbol=IOST`, {
+    headers: { 'X-API-Key': keyA.key },
+  });
+  assert.equal(readinessRestResponse.status, 200);
+  assert.match(readinessRestResponse.headers.get('cache-control') || '', /private/);
+  assert.match(readinessRestResponse.headers.get('cache-control') || '', /no-store/);
+  assert.equal((await readinessRestResponse.json()).decision, 'allow');
   const runtimeReplay = await mcp('tools/call', { name: 'agent_runtime_heartbeat', arguments: heartbeatArguments }, {
     key: keyA.key, name: 'agent_runtime_heartbeat',
   });
@@ -519,6 +547,8 @@ try {
   assert.equal(opened.body.result.structuredContent.receipt.outcome, 'accepted');
   assert.equal(opened.body.result.structuredContent.receipt.authorization.walletPactAuthorized, true);
   assert.equal(opened.body.result.structuredContent.receipt.authorization.preflightAuthorized, true);
+  assert.equal(opened.body.result.structuredContent.receipt.executionReadiness.decision, 'allow');
+  assert.equal(opened.body.result.structuredContent.receipt.executionReadiness.reasonCode, 'agent-execution-ready');
   assert.equal(opened.body.result.structuredContent.receipt.order.preflightFingerprint, openArguments.preflightFingerprint);
   assert.equal(opened.body.result.structuredContent.position.entry, 10.01);
   assert.equal(opened.body.result.structuredContent.receipt.execution.fillPrice, 10.01);
@@ -675,7 +705,7 @@ try {
   const cancelled = await mcp('tasks/cancel', { taskId }, { key: keyA.key, name: taskId, tasks: true });
   assert.equal(cancelled.body.result.status, 'cancelled');
   const taskResult = await mcp('tasks/get', { taskId }, { key: keyA.key, name: taskId, tasks: true });
-  assert.equal(taskResult.body.result.status, 'cancelled');
+  assert.equal(taskResult.body.result?.status, 'cancelled', JSON.stringify(taskResult.body));
 
   console.log('MCP HTTP integration checks passed');
 } finally {

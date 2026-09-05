@@ -1195,6 +1195,21 @@ async function renderAgentControl() {
   const dataTrust = s.dataTrust || { status: 'unknown', externalContent: {} };
   const trustContent = dataTrust.externalContent || {};
   const dataTrustHealthy = !trustContent.quarantined && dataTrust.status === 'healthy';
+  const guardian = s.guardian || { coverage: {} };
+  const guardianCoverage = guardian.coverage || {};
+  const guardianHealthy = !(guardianCoverage.degraded || guardianCoverage.unprotected);
+  const supervisedReady = (runtime.runtimes || []).filter((item) => item.ready
+    && item.supervisor?.managed && item.supervisor?.healthy && item.checkpoint
+    && item.quarantine?.active !== true && item.execution?.newMissionExposureAllowed).length;
+  const readinessChecks = [
+    ['Supervised runtime', supervisedReady > 0],
+    ['Incidents clear', incidentHealthy],
+    ['Safety budget', ['healthy', 'warming-up'].includes(slo.status) && !slo.errorBudget?.exhausted],
+    ['Position Guardian', guardianHealthy],
+    ['Data trust', dataTrustHealthy],
+    ['Wallet + Pact', missionPairs.length > 0],
+  ];
+  const executionReady = readinessChecks.every(([, pass]) => pass);
   const moneyInput = (minor) => ((Number(minor || 0) / 100).toFixed(2));
   el.innerHTML = `
     <div class="section-title">Agent Control Center <span class="sub">owner-only operations · server-enforced limits</span></div>
@@ -1204,6 +1219,11 @@ async function renderAgentControl() {
       <div class="card kpi"><span class="k-label">Active access</span><span class="k-value">${s.keyStats?.active || 0}</span><span class="k-sub">agent keys · ${s.keyStats?.revoked || 0} revoked</span></div>
       <div class="card kpi"><span class="k-label">Pending approvals</span><span class="k-value">${(s.approvals?.paper || 0) + (s.approvals?.live || 0)}</span><span class="k-sub">${s.approvals?.paper || 0} paper · ${s.approvals?.live || 0} live (cannot auto-execute)</span></div>
     </div>
+    <section class="card execution-readiness ${executionReady ? 'is-ready' : 'is-blocked'}" aria-labelledby="executionReadinessTitle">
+      <div class="section-title" id="executionReadinessTitle">Agent Execution Readiness <span class="sub">every new agent paper position · fail closed</span><span class="receipt-chain ${executionReady ? 'is-valid' : 'is-invalid'}">${executionReady ? 'ready for preflight' : 'new exposure blocked'}</span></div>
+      <div class="readiness-grid">${readinessChecks.map(([label, pass]) => `<div><span>${esc(label)}</span><strong class="${pass ? 'up' : 'down'}">${pass ? 'PASS' : 'BLOCK'}</strong></div>`).join('')}</div>
+      <p>Before any agent open, the server recomputes runtime supervision, incident quarantine, SLO budget, existing-position protection, structured data trust, emergency freeze, and exact wallet/Pact authority. The result is bound into the preflight fingerprint and retained in the execution receipt.</p>
+    </section>
     <section class="card control-activity" aria-labelledby="controlActivityTitle">
       <div class="section-title" id="controlActivityTitle">Agent activity</div>
       <div class="control-activity-grid">

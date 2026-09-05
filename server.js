@@ -45,6 +45,8 @@ import * as agentIncidents from './lib/agent-incidents.js';
 import * as agentSafetySlo from './lib/agent-safety-slo.js';
 import * as ownerAlerts from './lib/owner-alert-router.js';
 import { buildAgentDataTrustStatus, buildExecutionDataTrust } from './lib/agent-data-trust.js';
+import { buildAgentExecutionReadiness } from './lib/agent-execution-readiness.js';
+import { guardianCoverage } from './lib/position-guardian.js';
 import * as executionReceipts from './lib/execution-receipts.js';
 import * as executionIntents from './lib/execution-intents.js';
 import { buildPaperTradePreflight } from './lib/trade-preflight.js';
@@ -807,7 +809,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.37.0';
+const DISCOVERY_VERSION = '1.38.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -888,6 +890,7 @@ const OPENAPI_PATHS = {
   '/api/agent-safety-slo': { get: { summary: 'Private read-only agent mission-readiness SLO, error-budget burn and recovery playbooks', tags: ['autonomy'] } },
   '/api/agent-alerts': { get: { summary: 'Private read-only owner alert inbox, delivery, retry and receipt-chain status', tags: ['autonomy'] } },
   '/api/agent-data-trust': { get: { summary: 'Read-only external-content quarantine, provenance and execution-evidence trust status', tags: ['autonomy'] } },
+  '/api/agent-execution-readiness': { get: { summary: 'Read-only fail-closed readiness for new agent paper exposure', tags: ['autonomy'] } },
 };
 app.get('/openapi.json', (req, res) => {
   res.set('Access-Control-Allow-Origin', '*');
@@ -1264,6 +1267,21 @@ async function mcpToolCall(req, name, args) {
       let ticker = null;
       try { ticker = await getExecutionTicker(symbol, 'long', Date.now()); } catch { /* reported as unavailable */ }
       return buildAgentDataTrustStatus({ news: await getNews(), ticker });
+    }
+    case 'agent_execution_readiness': {
+      const symbol = String(args?.symbol || 'IOST').trim().toUpperCase();
+      if (![...WATCHLIST.crypto, ...WATCHLIST.stocks].includes(symbol)) {
+        throw Object.assign(new Error('unsupported symbol'), { protocolCode: -32602 });
+      }
+      let ticker = null;
+      try { ticker = await getExecutionTicker(symbol, 'long', Date.now()); } catch { /* unavailable evidence fails closed */ }
+      const now = Date.now();
+      const dataTrust = buildExecutionDataTrust({ ticker, now });
+      const authorization = mcpAuthorizationStatus(req);
+      const accountState = getAccount(accountFor(req).accountId) || { positions: [] };
+      return agentExecutionReadinessFor(req, {
+        accountState, dataTrust, authorization: { ok: authorization.canOpenPaperTrade }, now,
+      });
     }
     case 'agent_runtime_heartbeat': {
       if (!req.userAgent || !userAgentHas(req, 'read')) {
@@ -2659,6 +2677,27 @@ function agentSpendPreflight(req, notionalMinor, { walletId = null, pactId = nul
   return { ...base, ok: true };
 }
 
+function agentExecutionReadinessFor(req, {
+  accountState, dataTrust, authorization, now = Date.now(),
+} = {}) {
+  const agentRequired = !!(req.userAgent || req.agentKey);
+  if (!agentRequired) return buildAgentExecutionReadiness({ agentRequired: false, now });
+  const runtime = req.userAgent
+    ? agentRuntime.agentRuntimeStatus(req.userAgent.userId, req.userAgent.keyId, now) : null;
+  const incidents = req.userAgent
+    ? agentIncidents.peekAgentIncidentStatus(req.userAgent.userId, req.userAgent.keyId, now)
+    : { counts: { open: 0, critical: 0, quarantined: 0, recoveryReady: 0 }, incidents: [] };
+  const safetySlo = agentSafetySlo.buildAgentSafetySlo({
+    runtime: { runtimes: runtime?.enrolled ? [runtime] : [] }, incidents, now,
+    observationStartedAt: AGENT_SLO_OBSERVATION_STARTED_AT,
+  });
+  return buildAgentExecutionReadiness({
+    agentRequired, runtime, incidents, safetySlo,
+    guardian: guardianCoverage(accountState?.positions || []),
+    dataTrust, authorization, emergencyFreeze: freeze.freezeState(), now,
+  });
+}
+
 async function paperTradePreflight(req, order = {}) {
   const symbol = String(order?.symbol || '').trim().toUpperCase();
   const supportedSymbols = [...WATCHLIST.crypto, ...WATCHLIST.stocks];
@@ -2716,10 +2755,13 @@ async function paperTradePreflight(req, order = {}) {
     now,
   });
   const dataTrust = buildExecutionDataTrust({ ticker, now });
+  const executionReadiness = agentExecutionReadinessFor(req, {
+    accountState, dataTrust, authorization, now,
+  });
   return buildPaperTradePreflight({
     order: effectiveOrder, ticker, cashUsd: accountState.account.cash,
     authorization, mission, accountScope: accountId,
-    portfolioRisk, dataTrust,
+    portfolioRisk, dataTrust, executionReadiness,
     supportedSymbols, now, bindingSecret: PAPER_PREFLIGHT_BINDING_SECRET,
   });
 }
@@ -2816,6 +2858,7 @@ function beginPaperReceipt(req, order, action, source) {
     preflightAuthorized: action !== 'open' || !(source === 'mcp' || req.userAgent || req.agentKey),
     portfolioRisk: null,
     dataTrust: null,
+    executionReadiness: null,
   };
 }
 
@@ -2832,6 +2875,7 @@ function writePaperReceipt(req, attempt, {
     market: attempt.market,
     portfolioRisk: attempt.portfolioRisk,
     dataTrust: attempt.dataTrust,
+    executionReadiness: attempt.executionReadiness,
     execution,
     authorization: {
       principal: receiptPrincipal(req),
@@ -2916,6 +2960,7 @@ async function enforcePaperPreflightBinding(req, order, source, attempt) {
   const current = await paperTradePreflight(req, order);
   attempt.portfolioRisk = current.portfolioRisk || null;
   attempt.dataTrust = current.dataTrust || null;
+  attempt.executionReadiness = current.executionReadiness || null;
   if (current.decision !== 'allow') {
     preflightBindingError(req, attempt, 'paper execution preflight no longer allows this request', 409,
       'preflight-denied', `Current preflight denied: ${current.reasonCode || 'policy-denied'}.`);
@@ -2926,7 +2971,7 @@ async function enforcePaperPreflightBinding(req, order, source, attempt) {
       && crypto.timingSafeEqual(Buffer.from(supplied, 'hex'), Buffer.from(expected, 'hex'));
     if (!matches) {
       preflightBindingError(req, attempt, 'paper execution preflight evidence changed', 409,
-        'preflight-evidence-changed', 'The order, quote, cash, wallet, Pact, mission, or spend-limit evidence changed. Run preflight again.');
+        'preflight-evidence-changed', 'The order, quote, cash, runtime readiness, wallet, Pact, mission, or spend-limit evidence changed. Run preflight again.');
     }
   }
   attempt.market = executionReceipts.marketEvidence({
@@ -3877,6 +3922,7 @@ const API_INDEX = {
     { path: '/api/agent-safety-slo', method: 'GET', purpose: 'private read-only mission-readiness SLO, error-budget burn rates and deterministic incident playbooks' },
     { path: '/api/agent-alerts', method: 'GET', purpose: 'private read-only owner alert inbox, signed delivery, retry/dead-letter and receipt-chain status' },
     { path: '/api/agent-data-trust', method: 'GET', purpose: 'read-only external-content quarantine, provenance hashes and execution-evidence trust status' },
+    { path: '/api/agent-execution-readiness', method: 'GET', purpose: 'read-only fail-closed readiness for new agent paper exposure across runtime, incident, SLO, guardian, data-trust and authority evidence' },
     { path: '/api/autopilot', method: 'GET', purpose: 'autopilot status + config + action audit trail + pending proposals' },
     { path: '/api/autopilot/start', method: 'POST', body: '{config?}', purpose: 'enable autonomous trading loop' },
     { path: '/api/autopilot/stop', method: 'POST', purpose: 'disable autonomous loop' },
@@ -4098,6 +4144,22 @@ app.get('/api/agent-data-trust', requireUser, async (req, res) => {
   return res.json(buildAgentDataTrustStatus({ news: await getNews(), ticker }));
 });
 
+app.get('/api/agent-execution-readiness', requireUser, async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (!req.userAgent || !userAgentHas(req, 'read')) return res.status(403).json({ error: 'user agent read scope required' });
+  const symbol = String(req.query?.symbol || 'IOST').trim().toUpperCase();
+  if (![...WATCHLIST.crypto, ...WATCHLIST.stocks].includes(symbol)) return res.status(400).json({ error: 'unsupported symbol' });
+  let ticker = null;
+  try { ticker = await getExecutionTicker(symbol, 'long', Date.now()); } catch { /* unavailable evidence fails closed */ }
+  const now = Date.now();
+  const authorization = mcpAuthorizationStatus(req);
+  return res.json(agentExecutionReadinessFor(req, {
+    accountState: getAccount(accountFor(req).accountId) || { positions: [] },
+    dataTrust: buildExecutionDataTrust({ ticker, now }),
+    authorization: { ok: authorization.canOpenPaperTrade }, now,
+  }));
+});
+
 for (const action of ['acknowledge', 'resolve']) {
   app.post(`/api/agent-incidents/:id/${action}`, requireUser, (req, res) => {
     res.set('Cache-Control', 'private, no-store');
@@ -4199,6 +4261,7 @@ app.get('/api/agent-control', requireUser, async (req, res) => {
   });
   const alertStatus = ownerAlerts.ownerAlertStatus(req.session.userId);
   const dataTrust = buildAgentDataTrustStatus({ news: await getNews() });
+  const guardianStatus = management.positionGuardianStatus(`user:${req.session.userId}`);
   const lastAction = ap.actions[0] || null;
   res.json({
     ok: true,
@@ -4227,6 +4290,7 @@ app.get('/api/agent-control', requireUser, async (req, res) => {
     safetySlo,
     alerts: alertStatus,
     dataTrust,
+    guardian: guardianStatus,
     keys,
     keyStats: { active: keys.filter((k) => !k.revokedAt).length, revoked: keys.filter((k) => !!k.revokedAt).length },
     parentWallet,
