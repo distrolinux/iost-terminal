@@ -28,6 +28,7 @@ const base = {
   },
   guardian: { total: 0, protected: 0, armed: 0, degraded: 0, unprotected: 0 },
   dataTrust: { decision: 'allow', reasonCode: 'data-trust-passed', evidence: { trustedCount: 3 } },
+  reconciliation: { decision: 'allow', status: 'healthy', counts: {}, evidence: { receiptChainVerified: true, cashInvariant: true } },
   emergencyFreeze: { frozen: false }, authorization: { ok: true }, now,
 };
 
@@ -64,6 +65,7 @@ const denyCases = [
   ['safety-burn-rate-clear', { safetySlo: { ...base.safetySlo, burnRates: [] } }],
   ['position-guardian-healthy', { guardian: { total: 1, protected: 0, armed: 0, degraded: 0, unprotected: 1 } }],
   ['data-trust-authorized', { dataTrust: { decision: 'deny', reasonCode: 'quote-quorum' } }],
+  ['execution-reconciliation-clear', { reconciliation: { decision: 'deny', reasonCode: 'cash-ledger-mismatch' } }],
   ['emergency-freeze-clear', { emergencyFreeze: { frozen: true } }],
   ['wallet-pact-authorized', { authorization: { ok: false } }],
 ];
@@ -119,7 +121,7 @@ assert.match(server, /peekAgentIncidentStatus/);
 assert.match(server, /agentExecutionReadinessFor/);
 assert.match(server, /case 'agent_execution_readiness'/);
 assert.match(server, /app\.get\('\/api\/agent-execution-readiness',\s*requireUser/);
-assert.match(server, /const DISCOVERY_VERSION = '1\.38\.1'/);
+assert.match(server, /const DISCOVERY_VERSION = '1\.39\.0'/);
 assert.match(preflight, /code: 'agent-execution-ready'/);
 assert.match(preflight, /executionReadiness: stableExecutionReadiness/);
 assert.match(preflight, /recoveryAgeMs: null/);

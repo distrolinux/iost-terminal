@@ -105,6 +105,10 @@ same fail-closed gate across supervised runtime health, incidents, SLO budget,
 Position Guardian, data trust, emergency freeze and exact wallet/Pact authority.
 The readiness evidence is bound into preflight and retained in the receipt;
 omitting a mission cannot bypass it.
+Before preflight, call `paper_execution_reconciliation`. Continue only when its
+decision is `allow`; `attention` may describe a non-blocking legacy coverage gap,
+while `blocked` requires owner review. Never automatically retry an
+`outcome-unknown` intent or attempt to repair ledger state from model inference.
 MCP Apps clients can render the private `evaluation_review` evidence panel with
 history, comparison charts and deterministic JSON/CSV exports; see
 `/docs/OWNER_MCP_APP_TESTING.md` for the owner test flow.

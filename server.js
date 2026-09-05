@@ -49,6 +49,7 @@ import { buildAgentExecutionReadiness } from './lib/agent-execution-readiness.js
 import { guardianCoverage } from './lib/position-guardian.js';
 import * as executionReceipts from './lib/execution-receipts.js';
 import * as executionIntents from './lib/execution-intents.js';
+import { buildExecutionReconciliation } from './lib/execution-reconciliation.js';
 import { buildPaperTradePreflight } from './lib/trade-preflight.js';
 import { buildPortfolioRiskDecision } from './lib/portfolio-risk-governor.js';
 import { buildVolatilitySentinel } from './lib/volatility-sentinel.js';
@@ -809,7 +810,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.38.1';
+const DISCOVERY_VERSION = '1.39.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -873,6 +874,7 @@ const OPENAPI_PATHS = {
   '/api/execution-receipts': { get: { summary: 'Private tamper-evident paper execution receipts and chain verification', tags: ['execution'] } },
   '/api/execution-intents': { get: { summary: 'Private paper execution idempotency and replay status', tags: ['execution'] } },
   '/api/execution-intents/{intentId}': { get: { summary: 'Private status for one paper execution intent', tags: ['execution'] } },
+  '/api/execution-reconciliation': { get: { summary: 'Private read-only reconciliation of paper intents, receipts, positions, journal and cash', tags: ['execution'] } },
   '/api/signals': { post: { summary: 'Publish a signal as the authenticated principal; SHA-256 pinned on IOST mainnet', tags: ['agents'] } },
   '/api/agent-keys': { get: { summary: 'My AI-agent API keys (scopes, prefixes)', tags: ['auth'] }, post: { summary: 'Mint a scoped AI-agent API key', tags: ['auth'] } },
   '/api/agent-control': { get: { summary: 'Owner-only agent operations snapshot: activity, permissions, budgets and safety state', tags: ['autonomy'] } },
@@ -1316,6 +1318,10 @@ async function mcpToolCall(req, name, args) {
         return { ok: true, mode: 'paper-only', intent };
       }
       return { ok: true, mode: 'paper-only', intents: executionIntents.listExecutionIntents(accountId, args?.limit) };
+    }
+    case 'paper_execution_reconciliation': {
+      const accountId = accountFor(req).accountId;
+      return executionReconciliationFor(accountId, getAccount(accountId));
     }
     case 'paper_missions': {
       const ownerId = missionOwnerId(req);
@@ -1835,6 +1841,12 @@ app.get('/api/execution-intents/:intentId', requireUser, (req, res) => {
   const intent = executionIntents.getExecutionIntent(accountFor(req).accountId, req.params.intentId);
   if (!intent) return res.status(404).json({ error: 'execution intent not found' });
   res.json({ ok: true, mode: 'paper-only', intent });
+});
+app.get('/api/execution-reconciliation', requireUser, (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (req.userAgent && !userAgentHas(req, 'read')) return res.status(403).json({ error: 'read scope required' });
+  const accountId = accountFor(req).accountId;
+  res.json(executionReconciliationFor(accountId, getAccount(accountId)));
 });
 
 // ================= decentralized AI agents — Phase 1 =================
@@ -2678,7 +2690,7 @@ function agentSpendPreflight(req, notionalMinor, { walletId = null, pactId = nul
 }
 
 function agentExecutionReadinessFor(req, {
-  accountState, dataTrust, authorization, now = Date.now(),
+  accountState, dataTrust, authorization, reconciliation = null, currentIntentId = null, now = Date.now(),
 } = {}) {
   const agentRequired = !!(req.userAgent || req.agentKey);
   if (!agentRequired) return buildAgentExecutionReadiness({ agentRequired: false, now });
@@ -2694,7 +2706,24 @@ function agentExecutionReadinessFor(req, {
   return buildAgentExecutionReadiness({
     agentRequired, runtime, incidents, safetySlo,
     guardian: guardianCoverage(accountState?.positions || []),
-    dataTrust, authorization, emergencyFreeze: freeze.freezeState(), now,
+    dataTrust, reconciliation: reconciliation || executionReconciliationFor(accountState?.accountId, accountState, now, currentIntentId),
+    authorization, emergencyFreeze: freeze.freezeState(), now,
+  });
+}
+
+function executionReconciliationFor(accountId, accountState = null, now = Date.now(), currentIntentId = null) {
+  const resolvedId = accountId || accountState?.accountId;
+  const state = accountState || (resolvedId ? getAccount(resolvedId) : null);
+  const currentRef = currentIntentId
+    ? executionIntents.executionIntentRef(resolvedId, currentIntentId) : null;
+  return buildExecutionReconciliation({
+    // During execution, the exact current intent is expected to be pending
+    // while its own preflight runs. No other pending/unknown intent is exempt.
+    intents: executionIntents.reconciliationExecutionIntents(resolvedId)
+      .filter((intent) => intent.intentRef !== currentRef),
+    receiptState: executionReceipts.reconciliationExecutionReceipts(resolvedId),
+    account: state,
+    now,
   });
 }
 
@@ -2756,7 +2785,7 @@ async function paperTradePreflight(req, order = {}) {
   });
   const dataTrust = buildExecutionDataTrust({ ticker, now });
   const executionReadiness = agentExecutionReadinessFor(req, {
-    accountState, dataTrust, authorization, now,
+    accountState, dataTrust, authorization, currentIntentId: effectiveOrder?.intentId, now,
   });
   return buildPaperTradePreflight({
     order: effectiveOrder, ticker, cashUsd: accountState.account.cash,
@@ -3096,6 +3125,7 @@ async function executePaperOpenOnce(req, order, source = 'rest') {
     const placed = await getBroker('paper').placeOrder({
       ...(order || {}), entry: fill.fillPrice, accountId: attempt.accountId,
     });
+    if (placed?.position?.id) attempt.request.positionId = placed.position.id;
     attempt.brokerMs = Date.now() - brokerStartedAt;
     const settlementStartedAt = Date.now();
     const settled = settleAgentSpend(gate, !!placed.ok);
@@ -3847,6 +3877,7 @@ const API_INDEX = {
     { path: '/api/execution-receipts', method: 'GET', query: 'limit=1..200', purpose: 'private SHA-256-chained paper execution receipts with pricing, venue quality/failover, volatility source/regime, dynamic portfolio capacity, authorization, cost and latency evidence' },
     { path: '/api/execution-intents', method: 'GET', query: 'limit=1..200', purpose: 'private replay-safe paper execution intent states; pending intents fail closed as outcome-unknown after restart' },
     { path: '/api/execution-intents/:intentId', method: 'GET', purpose: 'private status lookup for one paper execution intent' },
+    { path: '/api/execution-reconciliation', method: 'GET', purpose: 'private read-only cross-ledger reconciliation; blocks new agent exposure on unknown or contradictory execution state' },
     { path: '/api/paper/reset', method: 'POST', purpose: 'reset paper account' },
   ],
   agents: [
@@ -4262,6 +4293,7 @@ app.get('/api/agent-control', requireUser, async (req, res) => {
   const alertStatus = ownerAlerts.ownerAlertStatus(req.session.userId);
   const dataTrust = buildAgentDataTrustStatus({ news: await getNews() });
   const guardianStatus = management.positionGuardianStatus(`user:${req.session.userId}`);
+  const reconciliation = executionReconciliationFor(`user:${req.session.userId}`);
   const lastAction = ap.actions[0] || null;
   res.json({
     ok: true,
@@ -4291,6 +4323,7 @@ app.get('/api/agent-control', requireUser, async (req, res) => {
     alerts: alertStatus,
     dataTrust,
     guardian: guardianStatus,
+    reconciliation,
     keys,
     keyStats: { active: keys.filter((k) => !k.revokedAt).length, revoked: keys.filter((k) => !!k.revokedAt).length },
     parentWallet,
