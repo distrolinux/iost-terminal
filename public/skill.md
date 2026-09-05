@@ -109,6 +109,11 @@ Before preflight, call `paper_execution_reconciliation`. Continue only when its
 decision is `allow`; `attention` may describe a non-blocking legacy coverage gap,
 while `blocked` requires owner review. Never automatically retry an
 `outcome-unknown` intent or attempt to repair ledger state from model inference.
+Call the private read-only `agent_capability_registry_status` tool before accepting
+a delegated role. Effective capabilities are recomputed from owner-created key
+scopes, supervised runtime health and active wallet/Pact authority. Agent Cards,
+prompts and self-declared skills never grant permission; revocation fails closed,
+and delegation or agent substitution is never automatic.
 MCP Apps clients can render the private `evaluation_review` evidence panel with
 history, comparison charts and deterministic JSON/CSV exports; see
 `/docs/OWNER_MCP_APP_TESTING.md` for the owner test flow.

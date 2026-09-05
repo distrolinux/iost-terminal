@@ -51,6 +51,7 @@ import * as executionReceipts from './lib/execution-receipts.js';
 import * as executionIntents from './lib/execution-intents.js';
 import { buildExecutionReconciliation } from './lib/execution-reconciliation.js';
 import { buildAgentPortfolioOrchestrator, portfolioExecutionLaneStatus, runPortfolioExecution } from './lib/agent-portfolio-orchestrator.js';
+import { buildAgentCapabilityRegistry, registryEvidenceForPrincipal } from './lib/agent-capability-registry.js';
 import { buildPaperTradePreflight } from './lib/trade-preflight.js';
 import { buildPortfolioRiskDecision } from './lib/portfolio-risk-governor.js';
 import { buildVolatilitySentinel } from './lib/volatility-sentinel.js';
@@ -811,7 +812,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.40.0';
+const DISCOVERY_VERSION = '1.41.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -877,6 +878,7 @@ const OPENAPI_PATHS = {
   '/api/execution-intents/{intentId}': { get: { summary: 'Private status for one paper execution intent', tags: ['execution'] } },
   '/api/execution-reconciliation': { get: { summary: 'Private read-only reconciliation of paper intents, receipts, positions, journal and cash', tags: ['execution'] } },
   '/api/agent-portfolio-orchestrator': { get: { summary: 'Private read-only multi-agent portfolio coordination, conflict and execution-lane status', tags: ['autonomy'] } },
+  '/api/agent-capability-registry': { get: { summary: 'Private read-only effective agent capabilities and owner delegation evidence', tags: ['autonomy'] } },
   '/api/signals': { post: { summary: 'Publish a signal as the authenticated principal; SHA-256 pinned on IOST mainnet', tags: ['agents'] } },
   '/api/agent-keys': { get: { summary: 'My AI-agent API keys (scopes, prefixes)', tags: ['auth'] }, post: { summary: 'Mint a scoped AI-agent API key', tags: ['auth'] } },
   '/api/agent-control': { get: { summary: 'Owner-only agent operations snapshot: activity, permissions, budgets and safety state', tags: ['autonomy'] } },
@@ -1328,6 +1330,10 @@ async function mcpToolCall(req, name, args) {
     case 'agent_portfolio_orchestrator_status': {
       const accountId = accountFor(req).accountId;
       return portfolioOrchestratorFor(accountId, missionOwnerId(req), getAccount(accountId));
+    }
+    case 'agent_capability_registry_status': {
+      const registry = capabilityRegistryFor(req.userAgent?.userId || req.session?.userId);
+      return req.userAgent ? registryEvidenceForPrincipal(registry, req.userAgent.keyId) : registry;
     }
     case 'paper_missions': {
       const ownerId = missionOwnerId(req);
@@ -1859,6 +1865,13 @@ app.get('/api/agent-portfolio-orchestrator', requireUser, (req, res) => {
   if (req.userAgent && !userAgentHas(req, 'read')) return res.status(403).json({ error: 'read scope required' });
   const accountId = accountFor(req).accountId;
   res.json(portfolioOrchestratorFor(accountId, missionOwnerId(req), getAccount(accountId)));
+});
+
+app.get('/api/agent-capability-registry', requireUser, (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (req.userAgent && !userAgentHas(req, 'read')) return res.status(403).json({ error: 'read scope required' });
+  const registry = capabilityRegistryFor(req.userAgent?.userId || req.session?.userId);
+  res.json(req.userAgent ? registryEvidenceForPrincipal(registry, req.userAgent.keyId) : registry);
 });
 
 // ================= decentralized AI agents — Phase 1 =================
@@ -2749,6 +2762,21 @@ function portfolioOrchestratorFor(accountId, ownerId, accountState = null, now =
     runtimes: userId ? agentRuntime.ownerRuntimeStatus(userId, now) : null,
     reconciliation: executionReconciliationFor(accountId, state, now),
     lane: portfolioExecutionLaneStatus(accountId),
+  });
+}
+
+function capabilityRegistryFor(userId, now = Date.now()) {
+  if (!userId) return buildAgentCapabilityRegistry({ now });
+  const ownerId = `user:${userId}`;
+  const keys = agentKeys.listKeys(userId);
+  const tree = wallets.walletTree(ownerId);
+  return buildAgentCapabilityRegistry({
+    keys,
+    wallets: tree.agents,
+    pacts: pacts.listPacts(ownerId),
+    missions: missions.listMissions(ownerId),
+    runtimesByKey: Object.fromEntries(keys.map((key) => [key.id, agentRuntime.agentRuntimeStatus(userId, key.id, now)])),
+    now,
   });
 }
 
@@ -3990,6 +4018,7 @@ const API_INDEX = {
     { path: '/api/agent-alerts', method: 'GET', purpose: 'private read-only owner alert inbox, signed delivery, retry/dead-letter and receipt-chain status' },
     { path: '/api/agent-data-trust', method: 'GET', purpose: 'read-only external-content quarantine, provenance hashes and execution-evidence trust status' },
     { path: '/api/agent-execution-readiness', method: 'GET', purpose: 'read-only fail-closed readiness for new agent paper exposure across runtime, incident, SLO, guardian, data-trust and authority evidence' },
+    { path: '/api/agent-capability-registry', method: 'GET', purpose: 'private read-only effective agent capability and owner-delegation evidence' },
     { path: '/api/autopilot', method: 'GET', purpose: 'autopilot status + config + action audit trail + pending proposals' },
     { path: '/api/autopilot/start', method: 'POST', body: '{config?}', purpose: 'enable autonomous trading loop' },
     { path: '/api/autopilot/stop', method: 'POST', purpose: 'disable autonomous loop' },
@@ -4331,6 +4360,7 @@ app.get('/api/agent-control', requireUser, async (req, res) => {
   const guardianStatus = management.positionGuardianStatus(`user:${req.session.userId}`);
   const reconciliation = executionReconciliationFor(`user:${req.session.userId}`);
   const orchestrator = portfolioOrchestratorFor(`user:${req.session.userId}`, `user:${req.session.userId}`);
+  const capabilityRegistry = capabilityRegistryFor(req.session.userId);
   const lastAction = ap.actions[0] || null;
   res.json({
     ok: true,
@@ -4362,6 +4392,7 @@ app.get('/api/agent-control', requireUser, async (req, res) => {
     guardian: guardianStatus,
     reconciliation,
     orchestrator,
+    capabilityRegistry,
     keys,
     keyStats: { active: keys.filter((k) => !k.revokedAt).length, revoked: keys.filter((k) => !!k.revokedAt).length },
     parentWallet,

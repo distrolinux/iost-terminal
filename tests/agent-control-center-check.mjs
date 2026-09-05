@@ -31,7 +31,7 @@ assert.match(html, /data-view="control"/,
   'sidebar must expose the owner control center');
 assert.match(html, /id="view-control"/,
   'app must include the control-center view');
-assert.match(html, /\/js\/app\.js\?v=2\.42\.0/,
+assert.match(html, /\/js\/app\.js\?v=2\.43\.0/,
   'app asset cache key must be bumped');
 
 assert.match(app, /async function renderAgentControl\(\)/,
@@ -60,5 +60,9 @@ assert.match(app, /cumulative SLO budget remains visible as advisory history/,
   'control center must distinguish historical SLO evidence from present execution safety');
 assert.match(app, /content cannot authorize execution/,
   'control center must state that external content has no execution authority');
+assert.match(app, /Agent Capability &amp; Delegation Registry/,
+  'control center must expose effective agent capability evidence');
+assert.match(app, /Effective authority is derived[\s\S]{0,400}self-declared skills never grant permission/,
+  'control center must distinguish descriptive claims from server authority');
 
 console.log('agent control center checks passed');

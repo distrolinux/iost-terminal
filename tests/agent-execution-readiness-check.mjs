@@ -121,7 +121,7 @@ assert.match(server, /peekAgentIncidentStatus/);
 assert.match(server, /agentExecutionReadinessFor/);
 assert.match(server, /case 'agent_execution_readiness'/);
 assert.match(server, /app\.get\('\/api\/agent-execution-readiness',\s*requireUser/);
-assert.match(server, /const DISCOVERY_VERSION = '1\.40\.0'/);
+assert.match(server, /const DISCOVERY_VERSION = '1\.41\.0'/);
 assert.match(preflight, /code: 'agent-execution-ready'/);
 assert.match(preflight, /executionReadiness: stableExecutionReadiness/);
 assert.match(preflight, /recoveryAgeMs: null/);

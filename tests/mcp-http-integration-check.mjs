@@ -189,6 +189,11 @@ try {
   assert.equal(orchestratorTool.annotations.readOnlyHint, true);
   assert.equal(orchestratorTool.annotations.destructiveHint, false);
   assert.equal(orchestratorTool.annotations.idempotentHint, true);
+  const capabilityRegistryTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_capability_registry_status');
+  assert(capabilityRegistryTool);
+  assert.equal(capabilityRegistryTool.annotations.readOnlyHint, true);
+  assert.equal(capabilityRegistryTool.annotations.destructiveHint, false);
+  assert.equal(capabilityRegistryTool.annotations.idempotentHint, true);
   const guardianTool = privateTools.body.result.tools.find((tool) => tool.name === 'paper_position_guardian');
   assert(guardianTool);
   assert.equal(guardianTool.annotations.readOnlyHint, true);
@@ -720,6 +725,18 @@ try {
   assert.equal(orchestrator.body.result.structuredContent.execution.attempted, false);
   assert.equal(orchestrator.body.result.structuredContent.liveScopeUsed, false);
   assert.equal(orchestrator.body.result.structuredContent.publicChainUsed, false);
+
+  const capabilityRegistry = await mcp('tools/call', {
+    name: 'agent_capability_registry_status', arguments: {},
+  }, { key: keyA.key, name: 'agent_capability_registry_status' });
+  assert.equal(capabilityRegistry.body.result.structuredContent.ok, true);
+  assert.equal(capabilityRegistry.body.result.structuredContent.mode, 'paper-only');
+  assert.equal(capabilityRegistry.body.result.structuredContent.currentAgent.agentRef, undefined);
+  assert.equal(capabilityRegistry.body.result.structuredContent.currentAgent.name, undefined);
+  assert.equal(capabilityRegistry.body.result.structuredContent.guarantees.selfAssertedAuthorityAccepted, false);
+  assert.equal(capabilityRegistry.body.result.structuredContent.execution.attempted, false);
+  assert.equal(capabilityRegistry.body.result.structuredContent.liveScopeUsed, false);
+  assert.equal(capabilityRegistry.body.result.structuredContent.publicChainUsed, false);
 
   const taskCreated = await mcp('tools/call', {
     name: 'evaluation_run', arguments: {

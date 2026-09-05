@@ -232,6 +232,12 @@ Owner testing instructions: `/docs/OWNER_MCP_APP_TESTING.md`.
 - Unknown outcomes are never retried automatically. Receipt-chain failure, duplicate state-changing evidence, or ledger contradictions block new agent exposure for owner review.
 - Agent Execution Readiness consumes this result; the engine cannot repair state, place trades, change authority, use live scope or perform public-chain actions.
 
+### Agent Capability and Delegation Registry
+- `GET /api/agent-capability-registry` — private, no-store effective capability and delegation evidence
+- `agent_capability_registry_status` — equivalent authenticated, read-only MCP tool scoped to the calling agent
+- Effective capabilities are derived from the intersection of an owner-created credential, current key scopes, supervised runtime health, and an active wallet-bound Pact.
+- Agent names, prompts, model output, Agent Cards, and self-declared skills are descriptive only and never grant authority. Revocation fails closed immediately; delegation and agent substitution are never automatic.
+
 ## AITT — Agent Intelligence Trading Token
 
 ERC-20 on IOST L2 (chain 182), 1B fixed supply, 8 decimals. **Design draft — NOT issued yet.**
