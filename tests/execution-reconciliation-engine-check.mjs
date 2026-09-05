@@ -65,7 +65,7 @@ const server = readFileSync(new URL('../server.js', import.meta.url), 'utf8');
 const app = readFileSync(new URL('../public/js/app.js', import.meta.url), 'utf8');
 assert.match(server, /case 'paper_execution_reconciliation'/);
 assert.match(server, /app\.get\('\/api\/execution-reconciliation', requireUser/);
-assert.match(server, /const DISCOVERY_VERSION = '1\.40\.0'/);
+assert.match(server, /const DISCOVERY_VERSION = '1\.41\.0'/);
 assert.match(server, /attempt\.request\.positionId = placed\.position\.id/);
 assert.match(app, /Execution Reconciliation/);
 assert.match(app, /Unknown execution outcomes are never retried automatically/);

@@ -1212,6 +1212,8 @@ async function renderAgentControl() {
   const reconciliationHealthy = reconciliation.decision === 'allow';
   const orchestrator = s.orchestrator || { status: 'unavailable', decision: 'deny', counts: {}, executionLane: {}, conflicts: [] };
   const orchestratorHealthy = orchestrator.decision === 'allow';
+  const capabilityRegistry = s.capabilityRegistry || { status: 'unavailable', decision: 'deny', counts: {}, agents: [], policy: {} };
+  const capabilityRegistryHealthy = capabilityRegistry.decision === 'allow';
   const supervisedReady = (runtime.runtimes || []).filter((item) => item.ready
     && item.supervisor?.managed && item.supervisor?.healthy && item.checkpoint
     && item.quarantine?.active !== true && item.execution?.newMissionExposureAllowed).length;
@@ -1261,6 +1263,18 @@ async function renderAgentControl() {
       </div>
       <div class="alert-channels"><span class="chip bull">Close priority</span><span class="chip bull">Capability-bound routing</span><span class="chip bull">Deterministic conflicts</span><span class="chip neut">Owner-approved fallback</span></div>
       <p>Every paper open and close is serialized through one account-level execution lane. Risk-reducing closes move ahead of queued opens, opposing same-symbol agent exposure fails closed, and no agent can silently substitute for another or inherit authority.</p>
+    </section>
+    <section class="card execution-readiness ${capabilityRegistryHealthy ? 'is-ready' : 'is-blocked'}" aria-labelledby="capabilityRegistryTitle">
+      <div class="section-title" id="capabilityRegistryTitle">Agent Capability &amp; Delegation Registry <span class="sub">least privilege · owner authority · runtime evidence</span><span class="receipt-chain ${capabilityRegistryHealthy ? 'is-valid' : 'is-invalid'}">${esc(capabilityRegistry.status)}</span></div>
+      <div class="readiness-grid">
+        <div><span>Active agents</span><strong>${capabilityRegistry.counts?.active || 0}</strong></div>
+        <div><span>Execution ready</span><strong class="${capabilityRegistry.counts?.executionReady ? 'up' : ''}">${capabilityRegistry.counts?.executionReady || 0}</strong></div>
+        <div><span>Observe only</span><strong>${capabilityRegistry.counts?.observeOnly || 0}</strong></div>
+        <div><span>Authority bindings</span><strong class="${capabilityRegistry.counts?.activeWalletPactBindings ? 'up' : 'warn'}">${capabilityRegistry.counts?.activeWalletPactBindings || 0}</strong></div>
+      </div>
+      ${(capabilityRegistry.agents || []).length ? `<div class="runtime-list">${capabilityRegistry.agents.map((agent) => `<article><div><strong>${esc(agent.name || 'Agent')}</strong><span class="mono muted">${esc(agent.status)}</span></div><span class="chip ${agent.status === 'execution-ready' ? 'bull' : agent.status === 'revoked' ? 'bear' : 'neut'}">${esc(agent.status)}</span><dl><div><dt>Effective roles</dt><dd>${(agent.effectiveCapabilities || []).length}</dd></div><div><dt>Runtime</dt><dd>${agent.delegation?.runtimeReady ? 'verified' : 'not ready'}</dd></div><div><dt>Wallet + Pact</dt><dd>${agent.delegation?.walletPactAuthorityAvailable ? 'active' : 'not delegated'}</dd></div><div><dt>Self-claims</dt><dd>ignored</dd></div></dl></article>`).join('')}</div>` : '<div class="empty">No agent credentials are registered.</div>'}
+      <div class="alert-channels"><span class="chip bull">Scope minimized</span><span class="chip bull">Authority recomputed</span><span class="chip neut">No self-promotion</span><span class="chip neut">No automatic delegation</span></div>
+      <p>Effective authority is derived from the intersection of an owner-created credential, current key scopes, supervised runtime health, and an active wallet-bound Pact. Agent names, prompts, model output, and self-declared skills never grant permission.</p>
     </section>
     <section class="card control-activity" aria-labelledby="controlActivityTitle">
       <div class="section-title" id="controlActivityTitle">Agent activity</div>
