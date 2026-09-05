@@ -60,28 +60,46 @@ try {
   assert.equal(runtime.agentRuntimeStatus(ownerId, keyId, startedAt + 170_103).quarantine.active, false);
   assert.equal(runtime.missionRuntimeGate({ ownerId, keyId, missionId }, startedAt + 170_103).ok, true);
 
+  incidents.recordRuntimeFailure({
+    ownerId, keyId, runtimeRef: initial.runtimeRef, name: 'Incident Test Agent',
+    reasonCode: 'active runtime session conflict',
+  }, startedAt + 180_000);
+  status = incidents.ownerIncidentStatus(ownerId, startedAt + 180_001);
+  const warningFailure = status.incidents.find((incident) => incident.category === 'runtime-recovery-failure'
+    && incident.status !== 'resolved');
+  assert.equal(warningFailure.occurrenceCount, 1);
+  assert.equal(warningFailure.severity, 'warning');
+  assert.equal(warningFailure.quarantineApplied, false);
+  assert.equal(warningFailure.recoveryReady, false, 'unreviewed warning retains bounded automatic-expiry behavior');
+  assert.equal(warningFailure.ownerReviewRequired, true);
+  incidents.acknowledgeIncident(ownerId, warningFailure.incidentRef, startedAt + 180_002);
+  status = incidents.ownerIncidentStatus(ownerId, startedAt + 180_003);
+  const reviewedWarning = status.incidents.find((incident) => incident.incidentRef === warningFailure.incidentRef);
+  assert.equal(reviewedWarning.recoveryReady, true, 'acknowledged warning becomes reviewable when runtime is healthy');
+  incidents.resolveIncident(ownerId, warningFailure.incidentRef, startedAt + 180_003);
+
   for (let attempt = 0; attempt < 3; attempt++) {
     incidents.recordRuntimeFailure({
       ownerId, keyId, runtimeRef: initial.runtimeRef, name: 'Incident Test Agent',
       reasonCode: 'exact recovery checkpoint required',
-    }, startedAt + 180_000 + attempt);
+    }, startedAt + 190_000 + attempt);
   }
-  status = incidents.ownerIncidentStatus(ownerId, startedAt + 180_003);
+  status = incidents.ownerIncidentStatus(ownerId, startedAt + 190_003);
   const failures = status.incidents.find((incident) => incident.category === 'runtime-recovery-failure' && incident.status !== 'resolved');
   assert.equal(failures.occurrenceCount, 3);
   assert.equal(failures.severity, 'critical');
   assert.equal(failures.quarantineApplied, true);
   assert.equal(failures.recoveryReady, true);
-  assert.equal(runtime.agentRuntimeStatus(ownerId, keyId, startedAt + 180_003).execution.newMissionExposureAllowed, false);
-  incidents.acknowledgeIncident(ownerId, failures.incidentRef, startedAt + 180_004);
-  incidents.resolveIncident(ownerId, failures.incidentRef, startedAt + 180_005);
-  assert.equal(runtime.agentRuntimeStatus(ownerId, keyId, startedAt + 180_005).quarantine.active, false);
+  assert.equal(runtime.agentRuntimeStatus(ownerId, keyId, startedAt + 190_003).execution.newMissionExposureAllowed, false);
+  incidents.acknowledgeIncident(ownerId, failures.incidentRef, startedAt + 190_004);
+  incidents.resolveIncident(ownerId, failures.incidentRef, startedAt + 190_005);
+  assert.equal(runtime.agentRuntimeStatus(ownerId, keyId, startedAt + 190_005).quarantine.active, false);
 
-  const publicJson = JSON.stringify(incidents.ownerIncidentStatus(ownerId, startedAt + 180_006));
+  const publicJson = JSON.stringify(incidents.ownerIncidentStatus(ownerId, startedAt + 190_006));
   assert.equal(publicJson.includes(ownerId), false);
   assert.equal(publicJson.includes(keyId), false);
   assert.equal(publicJson.includes('incident-session'), false);
-  assert.equal(incidents.ownerIncidentStatus('other-owner', startedAt + 180_006).incidents.length, 0);
+  assert.equal(incidents.ownerIncidentStatus('other-owner', startedAt + 190_006).incidents.length, 0);
   assert.equal(statSync(incidents.incidentStorePathForTest).mode & 0o777, 0o600);
   assert.equal(statSync(runtime.runtimeStorePathForTest).mode & 0o777, 0o600);
   assert(readFileSync(incidents.incidentStorePathForTest, 'utf8').includes(keyId), 'private store retains identity binding');

@@ -14,7 +14,10 @@ Reliability without adding trading authority.
 - Three rejected session/checkpoint recovery attempts inside ten minutes also
   quarantine the runtime.
 - Recovery detection does not release quarantine. The runtime must be ready,
-  then an owner must acknowledge and resolve the incident.
+  then an owner must acknowledge and resolve the incident. Acknowledging a
+  non-quarantined recovery-failure warning makes it immediately reviewable
+  once runtime health is ready; leaving it untouched retains the bounded
+  ten-minute automatic-resolution window.
 - Acknowledgement and resolution are separate, audited owner actions. Multiple
   active incidents stack, so resolving one cannot release another incident's
   quarantine.
