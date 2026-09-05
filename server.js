@@ -52,6 +52,7 @@ import * as executionIntents from './lib/execution-intents.js';
 import { buildExecutionReconciliation } from './lib/execution-reconciliation.js';
 import { buildAgentPortfolioOrchestrator, portfolioExecutionLaneStatus, runPortfolioExecution } from './lib/agent-portfolio-orchestrator.js';
 import { buildAgentCapabilityRegistry, registryEvidenceForPrincipal } from './lib/agent-capability-registry.js';
+import * as ownerApprovals from './lib/owner-approval-queue.js';
 import { buildPaperTradePreflight } from './lib/trade-preflight.js';
 import { buildPortfolioRiskDecision } from './lib/portfolio-risk-governor.js';
 import { buildVolatilitySentinel } from './lib/volatility-sentinel.js';
@@ -134,7 +135,7 @@ try {
     'iost_accounts.json', 'pending_pins.json', 'signals.json', 'follows.json', 'triggers.json',
     'payments.json', 'fee-config.json', 'live-proposals.json', 'agent-audit.jsonl',
     'live-audit.jsonl', 'arena-audit.jsonl', 'mcp-tasks.json', 'missions.json', 'execution-receipts.jsonl',
-    'execution-intents.json', 'agent-runtimes.json', 'agent-incidents.json', 'agent-slo-observation.json', 'owner-alert-router.json',
+    'execution-intents.json', 'owner-approvals.json', 'agent-runtimes.json', 'agent-incidents.json', 'agent-slo-observation.json', 'owner-alert-router.json',
   ]) {
     const p = join(DATA_DIR, f);
     if (existsSync(p)) {
@@ -146,6 +147,7 @@ try {
   missions.secureMissionPermissions();
   executionReceipts.secureReceiptPermissions();
   executionIntents.secureExecutionIntentPermissions();
+  ownerApprovals.secureOwnerApprovalPermissions();
   agentRuntime.secureAgentRuntimePermissions();
   agentIncidents.secureAgentIncidentPermissions();
   ownerAlerts.secureOwnerAlertPermissions();
@@ -812,7 +814,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.41.0';
+const DISCOVERY_VERSION = '1.42.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -871,6 +873,10 @@ const OPENAPI_PATHS = {
   '/api/paper': { get: { summary: 'Account + open positions + journal (mark-to-market)', tags: ['execution'] } },
   '/api/position-guardian': { get: { summary: 'Private server-enforced paper bracket/OCO protection and watchdog health', tags: ['execution'] } },
   '/api/paper/preflight': { post: { summary: 'Read-only paper trade preflight with multi-venue quote integrity, price-protected execution-quality routing, estimated cost and authorization evidence', tags: ['execution'] } },
+  '/api/paper/approvals': { get: { summary: 'Owner-only exact paper approval and exception queue', tags: ['execution'] } },
+  '/api/paper/approvals/request': { post: { summary: 'Agent request for a short-lived exact paper owner approval', tags: ['execution'] } },
+  '/api/paper/approvals/{id}/approve': { post: { summary: 'Owner approval of one exact paper mandate', tags: ['execution'] } },
+  '/api/paper/approvals/{id}/reject': { post: { summary: 'Owner rejection of one exact paper mandate', tags: ['execution'] } },
   '/api/paper/open': { post: { summary: 'Open paper trade', tags: ['execution'] } },
   '/api/paper/close': { post: { summary: 'Close paper trade', tags: ['execution'] } },
   '/api/execution-receipts': { get: { summary: 'Private tamper-evident paper execution receipts and chain verification', tags: ['execution'] } },
@@ -1067,6 +1073,10 @@ error-budget burn and deterministic recovery playbooks without applying actions.
 read-only \`agent_owner_alert_status\` tool reports the durable private owner inbox,
 signed delivery, bounded retry/dead-letter state and receipt verification without
 acknowledging incidents, recovering agents or changing authority. The
+\`paper_approval_request\` and read-only \`paper_approval_requests\` tools add
+short-lived, exact, single-use owner mandates for mission policies that require
+human review. Agents cannot approve themselves, and approval never bypasses a
+current execution gate. The
 \`trade-paper\` scope adds read-only \`paper_trade_preflight\` plus
 \`paper_trade_open\` and \`paper_trade_close\`.
 Both require a unique \`intentId\`; exact retries return the original terminal
@@ -1327,6 +1337,11 @@ async function mcpToolCall(req, name, args) {
       const accountId = accountFor(req).accountId;
       return executionReconciliationFor(accountId, getAccount(accountId));
     }
+    case 'paper_approval_requests': {
+      const accountId = accountFor(req).accountId;
+      return { ok: true, mode: 'paper-only', approvals: ownerApprovals.listOwnerApprovals(accountId, args || {}),
+        chain: ownerApprovals.verifyOwnerApprovalChain(accountId), liveScopeUsed: false, publicChainUsed: false };
+    }
     case 'agent_portfolio_orchestrator_status': {
       const accountId = accountFor(req).accountId;
       return portfolioOrchestratorFor(accountId, missionOwnerId(req), getAccount(accountId));
@@ -1377,6 +1392,7 @@ async function mcpToolCall(req, name, args) {
     case 'paper_trade_preflight': {
       return paperTradePreflight(req, args || {});
     }
+    case 'paper_approval_request': return requestPaperOwnerApproval(req, args || {});
     case 'paper_trade_open': {
       return executePaperOpen(req, args || {}, 'mcp');
     }
@@ -1792,6 +1808,31 @@ app.post('/api/paper/preflight', requireUser, async (req, res) => {
   try { res.json(await paperTradePreflight(req, req.body || {})); }
   catch (e) { res.status(e.status || 502).json({ error: e.message }); }
 });
+
+app.get('/api/paper/approvals', requireUser, (req, res) => {
+  if (!isOwnerSession(req)) return res.status(403).json({ error: 'owner only' });
+  const accountId = accountFor(req).accountId;
+  res.set('Cache-Control', 'private, no-store');
+  res.json({ ok: true, mode: 'paper-only', approvals: ownerApprovals.listOwnerApprovals(accountId, req.query),
+    chain: ownerApprovals.verifyOwnerApprovalChain(accountId), liveScopeUsed: false, publicChainUsed: false });
+});
+
+app.post('/api/paper/approvals/request', requireUser, async (req, res) => {
+  try { res.json(await requestPaperOwnerApproval(req, req.body || {})); }
+  catch (e) { res.status(e.status || 409).json({ error: e.message, reason: e.reason || 'approval-request-rejected' }); }
+});
+
+function ownerApprovalDecision(req, res, decision) {
+  if (!isOwnerSession(req)) return res.status(403).json({ error: 'owner only' });
+  try {
+    const approval = ownerApprovals.decideOwnerApproval({ accountId: accountFor(req).accountId,
+      approvalId: req.params.id, decision,
+      expectedDigest: req.body?.expectedDigest });
+    res.json({ ok: true, mode: 'paper-only', approval, liveScopeUsed: false, publicChainUsed: false });
+  } catch (e) { res.status(409).json({ error: e.message }); }
+}
+app.post('/api/paper/approvals/:id/approve', requireUser, (req, res) => ownerApprovalDecision(req, res, 'approved'));
+app.post('/api/paper/approvals/:id/reject', requireUser, (req, res) => ownerApprovalDecision(req, res, 'rejected'));
 
 app.post('/api/paper/open', requireUser, async (req, res) => {
   try {
@@ -2840,12 +2881,62 @@ async function paperTradePreflight(req, order = {}) {
   const executionReadiness = agentExecutionReadinessFor(req, {
     accountState, dataTrust, authorization, currentIntentId: effectiveOrder?.intentId, now,
   });
-  return buildPaperTradePreflight({
+  const result = buildPaperTradePreflight({
     order: effectiveOrder, ticker, cashUsd: accountState.account.cash,
     authorization, mission, accountScope: accountId,
     portfolioRisk, dataTrust, executionReadiness,
     supportedSymbols, now, bindingSecret: PAPER_PREFLIGHT_BINDING_SECRET,
   });
+  result.ownerApproval = missionId ? missions.missionApprovalRequirement(missionId, ownerId, {
+    notionalMinor, confidence: effectiveOrder?.confidence, warnings: result.warnings,
+    volatilityRegime: result.portfolioRisk?.volatility?.regime,
+  }) : { required: false, mode: null, reasons: [] };
+  return result;
+}
+
+function approvalRequesterId(req) {
+  return req.userAgent?.keyId || req.agentKey?.id || null;
+}
+
+function approvalEvidence(preflight) {
+  return {
+    decision: preflight?.decision, reasonCode: preflight?.reasonCode,
+    quoteSource: preflight?.market?.quoteIntegrity?.routeVenue || preflight?.market?.source,
+    quoteAgeMs: preflight?.market?.quoteAgeMs,
+    estimatedFillPrice: preflight?.market?.estimatedFillPrice,
+    estimatedTotalUsd: preflight?.costs?.estimatedTotalUsd,
+    riskDecision: preflight?.portfolioRisk?.decision,
+    dataTrustDecision: preflight?.dataTrust?.decision,
+  };
+}
+
+async function requestPaperOwnerApproval(req, order = {}) {
+  if (!req.userAgent || !userAgentHas(req, 'trade-paper')) {
+    throw Object.assign(new Error('user-bound trade-paper agent required'), { status: 403, reason: 'trade-paper-scope-required' });
+  }
+  const preflight = await paperTradePreflight(req, order);
+  if (preflight.decision !== 'allow') {
+    throw Object.assign(new Error(`paper preflight denied: ${preflight.reasonCode}`), { status: 409, reason: preflight.reasonCode });
+  }
+  const suppliedFingerprint = String(order.preflightFingerprint || '').toLowerCase();
+  const currentFingerprint = String(preflight.preflightFingerprint || '').toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(suppliedFingerprint) || !/^[a-f0-9]{64}$/.test(currentFingerprint)
+      || !crypto.timingSafeEqual(Buffer.from(suppliedFingerprint, 'hex'), Buffer.from(currentFingerprint, 'hex'))) {
+    throw Object.assign(new Error('paper preflight evidence changed; run preflight again'), { status: 409, reason: 'preflight-evidence-changed' });
+  }
+  const accountId = accountFor(req).accountId;
+  const fill = Number(preflight.market?.estimatedFillPrice);
+  const notionalMinor = fill > 0 && Number(order.size) > 0 ? Math.ceil(fill * Number(order.size) * 100) : 0;
+  const requirement = missions.missionApprovalRequirement(order.missionId, missionOwnerId(req), {
+    notionalMinor, confidence: order.confidence, warnings: preflight.warnings,
+    volatilityRegime: preflight.portfolioRisk?.volatility?.regime,
+  });
+  if (!requirement.required) {
+    throw Object.assign(new Error('owner approval is not required by this mission policy'), { status: 409, reason: 'approval-not-required' });
+  }
+  return { ...ownerApprovals.requestOwnerApproval({ accountId, requesterId: approvalRequesterId(req),
+    intentId: order.intentId, preflightFingerprint: order.preflightFingerprint, order,
+    evidence: approvalEvidence(preflight) }), requirement };
 }
 
 // A per-user agent key may use a paper wallet created by that same signed-in
@@ -2935,9 +3026,13 @@ function beginPaperReceipt(req, order, action, source) {
       intentId: String(order?.intentId || '').trim() || null,
       preflightProtected: !!String(order?.preflightFingerprint || '').trim(),
       preflightFingerprint: String(order?.preflightFingerprint || '').trim().toLowerCase() || null,
+      approvalProtected: !!String(order?.approvalId || '').trim(),
     },
     preflightRequired: action === 'open' && (source === 'mcp' || !!req.userAgent || !!req.agentKey),
     preflightAuthorized: action !== 'open' || !(source === 'mcp' || req.userAgent || req.agentKey),
+    approvalRequired: false,
+    approvalAuthorized: false,
+    approvalDigest: null,
     portfolioRisk: null,
     dataTrust: null,
     executionReadiness: null,
@@ -2968,6 +3063,9 @@ function writePaperReceipt(req, attempt, {
       missionAuthorized: !attempt.request.missionAttached || missionAuthorized,
       preflightRequired: attempt.preflightRequired === true,
       preflightAuthorized: attempt.preflightAuthorized === true,
+      approvalRequired: attempt.approvalRequired === true,
+      approvalAuthorized: attempt.approvalAuthorized === true,
+      approvalDigest: attempt.approvalDigest,
     },
     policy: {
       decision: decision || (outcome === 'accepted' ? 'allow' : 'deny'),
@@ -3129,6 +3227,30 @@ async function executePaperOpenOnce(req, order, source = 'rest') {
   const preflight = await enforcePaperPreflightBinding(req, order, source, attempt);
   const fill = serverPaperFill(preflight, order);
   notionalMinor = fill.fillPrice > 0 && size > 0 ? Math.ceil(fill.fillPrice * size * 100) : 0;
+  let approvalAuthorized = false;
+  if (missionId) {
+    const approvalRequirement = missions.missionApprovalRequirement(missionId, missionOwner, {
+      notionalMinor, confidence: order?.confidence, warnings: preflight?.warnings,
+      volatilityRegime: preflight?.portfolioRisk?.volatility?.regime,
+    });
+    if (approvalRequirement.required) {
+      attempt.approvalRequired = true;
+      try {
+        const consumedApproval = ownerApprovals.consumeOwnerApproval({
+          accountId: attempt.accountId, requesterId: approvalRequesterId(req), approvalId: order?.approvalId,
+          intentId: order?.intentId, preflightFingerprint: order?.preflightFingerprint, order,
+        });
+        approvalAuthorized = true;
+        attempt.approvalAuthorized = true;
+        attempt.approvalDigest = consumedApproval.mandateDigest;
+      } catch (error) {
+        attempt.authorizationMs = Date.now() - authorizationStartedAt;
+        const receipt = writePaperReceipt(req, attempt, { outcome: 'rejected', execution: { status: 'not-filled' },
+          missionAuthorized: false, reasonCode: 'owner-approval-required', detail: error.message });
+        throw rejectedPaperError('exact owner approval required', 428, 'owner-approval-required', receipt);
+      }
+    } else approvalAuthorized = true;
+  }
 
   if (missionId && req.userAgent) {
     const runtimeGate = agentRuntime.missionRuntimeGate({
@@ -3148,7 +3270,7 @@ async function executePaperOpenOnce(req, order, source = 'rest') {
   if (missionId) {
     missionReservation = missions.reserveMissionTrade({
       missionId, ownerId: missionOwner, walletId: order?.walletId,
-      pactId: order?.pactId, symbol: order?.symbol, notionalMinor,
+      pactId: order?.pactId, symbol: order?.symbol, notionalMinor, approvalAuthorized,
     });
     if (!missionReservation.ok) {
       attempt.authorizationMs = Date.now() - authorizationStartedAt;
@@ -4347,7 +4469,7 @@ app.get('/api/agent-control', requireUser, async (req, res) => {
     },
   }));
   const pendingLive = liveProposals.listProposals({ userId: req.session.userId, status: 'pending', limit: 100 });
-  const pendingPaper = getProposals();
+  const pendingPaper = ownerApprovals.listOwnerApprovals(`user:${req.session.userId}`, { status: 'pending' });
   const ownerMissions = missions.listMissions(`user:${req.session.userId}`);
   const incidentStatus = agentIncidents.ownerIncidentStatus(req.session.userId);
   const runtimeStatus = agentRuntime.ownerRuntimeStatus(req.session.userId);
@@ -4377,7 +4499,8 @@ app.get('/api/agent-control', requireUser, async (req, res) => {
       lastAction,
       config: ap.config,
     },
-    approvals: { paper: pendingPaper.length, live: pendingLive.length },
+    approvals: { paper: pendingPaper.length, live: pendingLive.length, queue: pendingPaper,
+      chain: ownerApprovals.verifyOwnerApprovalChain(`user:${req.session.userId}`) },
     missions: ownerMissions,
     missionStats: {
       running: ownerMissions.filter((mission) => mission.status === 'running').length,

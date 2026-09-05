@@ -77,7 +77,7 @@ assert.match(server, /runPortfolioExecution\(\{ accountId, action: 'open' \}/);
 assert.match(server, /runPortfolioExecution\(\{ accountId, action: 'close' \}/);
 assert.match(server, /case 'agent_portfolio_orchestrator_status'/);
 assert.match(server, /app\.get\('\/api\/agent-portfolio-orchestrator', requireUser/);
-assert.match(server, /const DISCOVERY_VERSION = '1\.41\.0'/);
+assert.match(server, /const DISCOVERY_VERSION = '1\.42\.0'/);
 assert.match(app, /Multi-Agent Portfolio Orchestrator/);
 assert.match(app, /Risk-reducing closes move ahead of queued opens/);
 

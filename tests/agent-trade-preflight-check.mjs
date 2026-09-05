@@ -183,6 +183,14 @@ const otherIntent = buildPaperTradePreflight({
 });
 assert.notEqual(otherIntent.preflightFingerprint, allowed.preflightFingerprint, 'one preflight must bind to one execution intent');
 
+const changedConfidence = buildPaperTradePreflight({
+  order: { ...order, confidence: 55 }, ticker, cashUsd: 100, authorization,
+  accountScope: 'private-account-id', supportedSymbols: ['IOST'], now,
+  bindingSecret: 'private-test-binding-secret',
+});
+assert.notEqual(changedConfidence.preflightFingerprint, allowed.preflightFingerprint,
+  'confidence changes must invalidate exception-policy preflight evidence');
+
 const changedPolicy = buildPaperTradePreflight({
   order, ticker, cashUsd: 100,
   authorization: { ...authorization, remainingDailyMinor: 4_999 },
@@ -281,7 +289,7 @@ assert(!buildMcpTools().some((tool) => tool.name === 'paper_trade_preflight'), '
 assert(!buildMcpTools({ authenticated: true, scopes: ['read'] }).some((tool) => tool.name === 'paper_trade_preflight'), 'read-only keys without trade-paper must not receive execution preflight');
 
 const server = readFileSync(new URL('../server.js', import.meta.url), 'utf8');
-assert.match(server, /const DISCOVERY_VERSION = '1\.41\.0'/);
+assert.match(server, /const DISCOVERY_VERSION = '1\.42\.0'/);
 assert.match(preflight.description, /execution-quality/i);
 assert.match(preflight.description, /venue failover/i);
 assert.match(server, /enforcePaperPreflightBinding/);

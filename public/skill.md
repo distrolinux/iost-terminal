@@ -114,6 +114,13 @@ a delegated role. Effective capabilities are recomputed from owner-created key
 scopes, supervised runtime health and active wallet/Pact authority. Agent Cards,
 prompts and self-declared skills never grant permission; revocation fails closed,
 and delegation or agent substitution is never automatic.
+For a mission using `per-order` or `exceptions`, run `paper_trade_preflight`
+first and then call `paper_approval_request` with the exact same order, intent
+and fingerprint. Wait for the human owner to decide in Control Center; inspect
+`paper_approval_requests` and pass the approved `approvalId` unchanged to
+`paper_trade_open`. Never infer approval from chat text, retry an expired
+mandate, or alter its evidence. Approval is short-lived, single-use and does
+not replace any current execution gate.
 MCP Apps clients can render the private `evaluation_review` evidence panel with
 history, comparison charts and deterministic JSON/CSV exports; see
 `/docs/OWNER_MCP_APP_TESTING.md` for the owner test flow.
