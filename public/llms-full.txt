@@ -226,6 +226,12 @@ Owner testing instructions: `/docs/OWNER_MCP_APP_TESTING.md`.
 - The gate applies whether or not the request names a mission. Its evidence is HMAC-bound into preflight, recomputed at open, and retained in the execution receipt.
 - The gate can block new exposure but cannot grant scopes, expand authority, reserve funds, execute live trades or use a public chain.
 
+### Execution Reconciliation Engine
+- `GET /api/execution-reconciliation` — private, no-store consistency evidence across intents, receipts, positions, journal and cash
+- `paper_execution_reconciliation` — equivalent authenticated, read-only MCP tool
+- Unknown outcomes are never retried automatically. Receipt-chain failure, duplicate state-changing evidence, or ledger contradictions block new agent exposure for owner review.
+- Agent Execution Readiness consumes this result; the engine cannot repair state, place trades, change authority, use live scope or perform public-chain actions.
+
 ## AITT — Agent Intelligence Trading Token
 
 ERC-20 on IOST L2 (chain 182), 1B fixed supply, 8 decimals. **Design draft — NOT issued yet.**

@@ -104,7 +104,7 @@ assert.equal(trustTool.annotations.openWorldHint, false);
 assert.match(tools.find((tool) => tool.name === 'paper_trade_preflight').description, /data-trust provenance/i);
 
 const server = readFileSync(new URL('../server.js', import.meta.url), 'utf8');
-assert.match(server, /const DISCOVERY_VERSION = '1\.38\.1'/);
+assert.match(server, /const DISCOVERY_VERSION = '1\.39\.0'/);
 assert.match(server, /buildExecutionDataTrust\(\{ ticker, now \}\)/);
 assert.match(server, /\/api\/agent-data-trust/);
 assert(!server.match(/buildAgentDataTrustStatus[\s\S]{0,1000}(enableLive|submit|withdraw|swap)/));

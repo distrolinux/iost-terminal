@@ -1208,6 +1208,8 @@ async function renderAgentControl() {
   const guardian = s.guardian || { coverage: {} };
   const guardianCoverage = guardian.coverage || {};
   const guardianHealthy = !(guardianCoverage.degraded || guardianCoverage.unprotected);
+  const reconciliation = s.reconciliation || { status: 'unavailable', decision: 'deny', counts: {}, evidence: {} };
+  const reconciliationHealthy = reconciliation.decision === 'allow';
   const supervisedReady = (runtime.runtimes || []).filter((item) => item.ready
     && item.supervisor?.managed && item.supervisor?.healthy && item.checkpoint
     && item.quarantine?.active !== true && item.execution?.newMissionExposureAllowed).length;
@@ -1218,6 +1220,7 @@ async function renderAgentControl() {
     ['Fast/slow burn clear', safetyEvidenceAvailable && operationalBurnClear],
     ['Position Guardian', guardianHealthy],
     ['Data trust', dataTrustHealthy],
+    ['Execution ledger', reconciliationHealthy],
     ['Emergency freeze', s.safety?.globalFreeze?.frozen !== true],
     ['Wallet + Pact', missionPairs.length > 0],
   ];
@@ -1235,6 +1238,16 @@ async function renderAgentControl() {
       <div class="section-title" id="executionReadinessTitle">Agent Execution Readiness <span class="sub">every new agent paper position · fail closed</span><span class="receipt-chain ${executionReady ? 'is-valid' : 'is-invalid'}">${executionReady ? 'ready for preflight' : 'new exposure blocked'}</span></div>
       <div class="readiness-grid">${readinessChecks.map(([label, pass]) => `<div><span>${esc(label)}</span><strong class="${pass ? 'up' : 'down'}">${pass ? 'PASS' : 'BLOCK'}</strong></div>`).join('')}</div>
       <p>Before any agent open, the server recomputes runtime supervision, incident quarantine, the 30-minute recovery probation, current fast/slow SLO burn, existing-position protection, structured data trust, emergency freeze, and exact wallet/Pact authority. The cumulative SLO budget remains visible as advisory history. The result is bound into the preflight fingerprint and retained in the execution receipt.</p>
+    </section>
+    <section class="card execution-readiness ${reconciliationHealthy ? 'is-ready' : 'is-blocked'}" aria-labelledby="executionReconciliationTitle">
+      <div class="section-title" id="executionReconciliationTitle">Execution Reconciliation <span class="sub">intents · receipts · positions · journal · cash</span><span class="receipt-chain ${reconciliationHealthy ? 'is-valid' : 'is-invalid'}">${esc(reconciliation.status)}</span></div>
+      <div class="readiness-grid">
+        <div><span>Receipt chain</span><strong class="${reconciliation.evidence?.receiptChainVerified ? 'up' : 'down'}">${reconciliation.evidence?.receiptChainVerified ? 'VERIFIED' : 'BLOCK'}</strong></div>
+        <div><span>Unknown outcomes</span><strong class="${reconciliation.counts?.outcomeUnknown ? 'down' : 'up'}">${reconciliation.counts?.outcomeUnknown || 0}</strong></div>
+        <div><span>Ledger findings</span><strong class="${reconciliation.counts?.criticalFindings ? 'down' : 'up'}">${reconciliation.counts?.criticalFindings || 0} critical</strong></div>
+        <div><span>Cash invariant</span><strong class="${reconciliation.evidence?.cashInvariant ? 'up' : 'down'}">${reconciliation.evidence?.cashInvariant ? 'PASS' : 'BLOCK'}</strong></div>
+      </div>
+      <p>Reconciliation is read-only and fail-closed. Unknown execution outcomes are never retried automatically; contradictions block new exposure and require owner review while Position Guardian continues protecting existing positions.</p>
     </section>
     <section class="card control-activity" aria-labelledby="controlActivityTitle">
       <div class="section-title" id="controlActivityTitle">Agent activity</div>

@@ -136,7 +136,7 @@ async function boundOpenArguments(intentId, overrides = {}, key = keyA.key) {
   assert.equal(preflight.body.result.structuredContent.portfolioRisk.volatility.venueCount, 2);
   assert(preflight.body.result.structuredContent.portfolioRisk.volatility.forecastVolDailyPct > 0);
   assert.equal(preflight.body.result.structuredContent.portfolioRisk.execution.attempted, false);
-  assert.equal(preflight.body.result.structuredContent.executionReadiness.decision, 'allow');
+  assert.equal(preflight.body.result.structuredContent.executionReadiness.decision, 'allow', JSON.stringify(preflight.body.result.structuredContent.executionReadiness));
   assert.equal(preflight.body.result.structuredContent.executionReadiness.reasonCode, 'agent-execution-ready');
   const quality = preflight.body.result.structuredContent.market.quoteIntegrity.executionQuality;
   assert.equal(quality.decision, 'allow');
@@ -179,6 +179,11 @@ try {
   assert.equal(preflightTool.annotations.destructiveHint, false);
   assert(privateTools.body.result.tools.some((tool) => tool.name === 'paper_execution_receipts'));
   assert(privateTools.body.result.tools.some((tool) => tool.name === 'paper_execution_intents'));
+  const reconciliationTool = privateTools.body.result.tools.find((tool) => tool.name === 'paper_execution_reconciliation');
+  assert(reconciliationTool);
+  assert.equal(reconciliationTool.annotations.readOnlyHint, true);
+  assert.equal(reconciliationTool.annotations.destructiveHint, false);
+  assert.equal(reconciliationTool.annotations.idempotentHint, true);
   const guardianTool = privateTools.body.result.tools.find((tool) => tool.name === 'paper_position_guardian');
   assert(guardianTool);
   assert.equal(guardianTool.annotations.readOnlyHint, true);
@@ -688,6 +693,17 @@ try {
   assert.equal(serializedReceipts.includes(wallet.walletId), false);
   assert.equal(serializedReceipts.includes(pact.pactId), false);
   assert.equal(serializedReceipts.includes(positionId), false);
+
+  const reconciliation = await mcp('tools/call', {
+    name: 'paper_execution_reconciliation', arguments: {},
+  }, { key: keyA.key, name: 'paper_execution_reconciliation' });
+  assert.equal(reconciliation.body.result.structuredContent.ok, true);
+  assert.equal(reconciliation.body.result.structuredContent.decision, 'allow');
+  assert.equal(reconciliation.body.result.structuredContent.evidence.receiptChainVerified, true);
+  assert.equal(reconciliation.body.result.structuredContent.evidence.cashInvariant, true);
+  assert.equal(reconciliation.body.result.structuredContent.execution.attempted, false);
+  assert.equal(reconciliation.body.result.structuredContent.liveScopeUsed, false);
+  assert.equal(reconciliation.body.result.structuredContent.publicChainUsed, false);
 
   const taskCreated = await mcp('tools/call', {
     name: 'evaluation_run', arguments: {
