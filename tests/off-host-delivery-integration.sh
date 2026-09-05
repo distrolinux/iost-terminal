@@ -2,6 +2,12 @@
 set -Eeuo pipefail
 umask 077
 
+if ! command -v flock >/dev/null || ! command -v sha256sum >/dev/null \
+   || ! stat -c '%a' "$0" >/dev/null 2>&1; then
+  echo 'SKIP  off-host delivery integration (Linux operational tools unavailable)'
+  exit 0
+fi
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/iost-delivery-test.XXXXXX")"
 cleanup() { rm -rf -- "$SCRATCH"; }

@@ -18,6 +18,8 @@ const candidateHealth = src.indexOf('wait_for_health "$CANDIDATE"');
 const oldPause = src.indexOf('docker_cmd pause');
 const dataOwnership = src.indexOf('chown -R "$APP_UID:$APP_GID" "$DATA_DIR"');
 const productionStart = src.indexOf('echo "==> starting production from $IOST_IMAGE..."');
+const argumentParsing = src.indexOf('while [ "$#" -gt 0 ]');
+const dockerRequirement = src.indexOf('command -v docker');
 
 ok('deployment is strict and serialized', /set -Eeuo pipefail/.test(src) && /flock\s+-n/.test(src));
 const dockerfile = readFileSync(join(ROOT, 'Dockerfile'), 'utf8');
@@ -32,9 +34,12 @@ ok('candidate becomes healthy before the production writer pauses',
 ok('legacy data ownership is migrated only after the old writer pauses',
   dataOwnership > oldPause && productionStart > dataOwnership);
 ok('preflight-only mode exits before production promotion',
-  /PREFLIGHT_ONLY/.test(src)
-  && src.indexOf('PREFLIGHT_ONLY') > candidateHealth
-  && src.indexOf('PREFLIGHT_ONLY') < oldPause);
+  /--preflight-only\) PREFLIGHT_ONLY=1/.test(src)
+  && src.indexOf('if [ "$PREFLIGHT_ONLY" = "1" ]') > candidateHealth
+  && src.indexOf('if [ "$PREFLIGHT_ONLY" = "1" ]') < oldPause);
+ok('command-line arguments are validated before deployment prerequisites or mutations',
+  argumentParsing >= 0 && dockerRequirement > argumentParsing
+  && /ERROR: unknown argument/.test(src));
 ok('network discovery targets production or Traefik, never an arbitrary container',
   /network_for_container/.test(src) && !/docker ps -q \| head -1/.test(src));
 ok('failed promotion invokes rollback of the exact paused process',

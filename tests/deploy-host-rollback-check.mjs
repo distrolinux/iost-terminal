@@ -66,7 +66,7 @@ case "$*" in
 esac
 `;
 
-function runScenario(promotionFails, preflightOnly = false) {
+function runScenario(promotionFails, preflightOnly = false, extraArgs = []) {
   const scratch = mkdtempSync(join(tmpdir(), 'iost-deploy-test-'));
   const app = join(scratch, 'app');
   const bin = join(scratch, 'bin');
@@ -77,9 +77,12 @@ function runScenario(promotionFails, preflightOnly = false) {
   writeFileSync(join(bin, 'docker'), FAKE_DOCKER);
   writeFileSync(join(bin, 'git'), FAKE_GIT);
   writeFileSync(join(bin, 'curl'), `#!/bin/bash\necho '{"ok":true,"revision":"${REVISION}"}'\n`);
-  for (const name of ['docker', 'git', 'curl']) chmodSync(join(bin, name), 0o755);
+  writeFileSync(join(bin, 'flock'), '#!/bin/bash\nexit 0\n');
+  writeFileSync(join(bin, 'stat'), '#!/bin/bash\necho 1000\n');
+  writeFileSync(join(bin, 'chown'), '#!/bin/bash\nexit 0\n');
+  for (const name of ['docker', 'git', 'curl', 'flock', 'stat', 'chown']) chmodSync(join(bin, name), 0o755);
 
-  const result = spawnSync('bash', [join(ROOT, 'deploy-host.sh')], {
+  const result = spawnSync('bash', [join(ROOT, 'deploy-host.sh'), ...extraArgs], {
     encoding: 'utf8',
     timeout: 10_000,
     env: {
@@ -114,12 +117,18 @@ ok('failed promotion restores and unpauses the predecessor',
   && Object.keys(failed.containers).every((name) => !name.includes('rollback')), failed.output);
 ok('failed promotion reports a healthy rollback', /rollback healthy/.test(failed.output), failed.output);
 
-const preflight = runScenario(false, true);
+const preflight = runScenario(false, false, ['--preflight-only']);
 ok('preflight-only exits successfully without touching production',
   preflight.status === 0
   && preflight.containers['iost-terminal'] === 'old-running'
   && Object.keys(preflight.containers).length === 1
   && /preflight only; production was not paused/.test(preflight.output), preflight.output);
+
+const unknownArgument = runScenario(false, false, ['--deploy-now']);
+ok('unknown arguments fail before Docker or production state is touched',
+  unknownArgument.status === 2
+  && unknownArgument.containers['iost-terminal'] === 'old-running'
+  && /unknown argument/.test(unknownArgument.output), unknownArgument.output);
 
 const passed = runScenario(false);
 const rollback = Object.entries(passed.containers).find(([name]) => name.includes('rollback'));
