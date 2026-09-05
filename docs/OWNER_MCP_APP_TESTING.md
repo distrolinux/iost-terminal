@@ -46,6 +46,11 @@ bid/ask execution side, server-fill notional, estimated cost, portfolio exposure
 correlated sleeve, drawdown, daily loss, stop risk, volatility regime, dynamic
 maximum order, portfolio capacity, limiting factor and machine-readable
 authorization checks. If it allows the request, call
+For a mission configured as `per-order` or when an `exceptions` rule fires,
+call `paper_approval_request` with the exact request and fingerprint, then wait
+for the signed-in owner to approve the closed mandate in Control Center. Pass
+the returned approved `approvalId` unchanged to `paper_trade_open`. Changed or
+expired evidence requires a new intent and approval. Otherwise call
 `paper_trade_open` with the same request, `intentId`, and returned
 `preflightFingerprint`, then close it with `paper_trade_close`. Confirm the result
 in the Paper account and revoke the agent key when finished.

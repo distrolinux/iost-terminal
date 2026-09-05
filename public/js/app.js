@@ -1181,6 +1181,7 @@ async function renderAgentControl() {
   const activePacts = pacts.filter((p) => p.status === 'active');
   const missionPairs = activePacts.map((pact) => ({ pact, wallet: paperWallets.find((wallet) => wallet.walletId === pact.agentWalletId) })).filter((pair) => pair.wallet);
   const missions = s.missions || [];
+  const approvalQueue = s.approvals?.queue || [];
   const runtime = s.runtime || { counts: { total: 0, ready: 0, degraded: 0, offline: 0, draining: 0 }, runtimes: [], policy: {} };
   const runtimeCounts = runtime.counts || {};
   const runtimeHealthy = !(runtimeCounts.degraded || runtimeCounts.offline) && (runtimeCounts.ready || !runtimeCounts.total);
@@ -1385,6 +1386,15 @@ async function renderAgentControl() {
     </section>`;
 
   el.insertAdjacentHTML('beforeend', `
+    <section class="card owner-approval-queue" aria-labelledby="ownerApprovalQueueTitle">
+      <div class="section-title" id="ownerApprovalQueueTitle">Owner Approval &amp; Exception Queue <span class="sub">exact paper mandate · short expiry · single use</span><span class="receipt-chain ${s.approvals?.chain?.ok ? 'is-valid' : 'is-invalid'}">${s.approvals?.chain?.ok ? 'chain verified' : 'verification required'}</span></div>
+      <p class="runtime-note">Agents may request approval, but only this owner-controlled screen can grant it. Approval is bound to the exact order, agent, execution intent and fresh preflight evidence. Any change or replay fails closed.</p>
+      ${approvalQueue.length ? `<div class="mission-list">${approvalQueue.map((approval) => `<article class="mission-card">
+        <header><div><strong>${esc(approval.order?.side || 'open')} ${esc(approval.order?.symbol || '')}</strong><span class="mono muted">${esc(approval.mandateDigest?.slice(0, 16) || '')}…</span></div><span class="chip warn">${esc(approval.status)}</span></header>
+        <dl><div><dt>Size</dt><dd>${Number(approval.order?.size || 0)}</dd></div><div><dt>Entry</dt><dd>${Number(approval.order?.entry || 0)}</dd></div><div><dt>Stop</dt><dd>${Number(approval.order?.stop || 0)}</dd></div><div><dt>Max slippage</dt><dd>${Number(approval.order?.maxSlippageBps || 0)} bps</dd></div><div><dt>Route</dt><dd>${esc(approval.evidence?.quoteSource || 'server-selected')}</dd></div><div><dt>Expires</dt><dd>${new Date(approval.expiresAt).toLocaleTimeString()}</dd></div></dl>
+        <div class="control-actions"><button class="btn sm green" data-approval-action="approve" data-approval-id="${esc(approval.approvalId)}" data-approval-digest="${esc(approval.mandateDigest)}">Approve exact paper order</button><button class="btn sm danger" data-approval-action="reject" data-approval-id="${esc(approval.approvalId)}" data-approval-digest="${esc(approval.mandateDigest)}">Reject</button></div>
+      </article>`).join('')}</div>` : '<div class="empty">No paper orders are waiting for owner approval.</div>'}
+    </section>
     <section class="card mission-control" aria-labelledby="missionControlTitle">
       <div class="section-title" id="missionControlTitle">Mission Control <span class="sub">supervised autonomy · paper-only execution envelopes</span></div>
       <ol class="mission-pipeline" aria-label="Mission decision pipeline">
@@ -1398,7 +1408,7 @@ async function renderAgentControl() {
         <label>Maximum realized loss (USD)<input id="missionMaxLoss" type="number" min="0.01" max="10000" step="0.01" value="5.00" required></label>
         <label>Maximum trades<input id="missionMaxTrades" type="number" min="1" max="100" step="1" value="3" required></label>
         <label>Expires in hours<input id="missionHours" type="number" min="1" max="168" step="1" value="24" required></label>
-        <label>Approval mode<select id="missionApproval"><option value="within-pact">Autonomous within Pact</option><option value="per-order" disabled>Every order · approval queue next</option><option value="exceptions" disabled>Only exceptions · policy queue next</option></select></label>
+        <label>Approval mode<select id="missionApproval"><option value="within-pact">Autonomous within Pact</option><option value="per-order">Every order · owner approval</option><option value="exceptions">Only policy exceptions</option></select></label>
         <label class="mission-wide">Objective<input id="missionObjective" maxlength="500" value="Find risk-adjusted paper entries and retain evidence for every decision." required></label>
         <label class="mission-wide">Strategy<input id="missionStrategy" maxlength="500" value="Score and risk-gated momentum with server-enforced limits." required></label>
         <div class="control-setup-actions mission-wide"><button class="btn sm green" type="submit">Create paused mission</button><span class="muted">Creating does not start it. Review the envelope, then start separately.</span></div>
@@ -1462,6 +1472,16 @@ async function renderAgentControl() {
       toast(action === 'acknowledge' ? 'Incident acknowledged' : '✓ Recovered incident resolved');
       renderAgentControl();
     } catch (e) { toast(`Incident action failed: ${esc(e.message)}`); }
+  }));
+  el.querySelectorAll('[data-approval-action]').forEach((button) => button.addEventListener('click', async () => {
+    const action = button.dataset.approvalAction;
+    const order = approvalQueue.find((item) => item.approvalId === button.dataset.approvalId)?.order || {};
+    if (!confirm(`${action === 'approve' ? 'Approve' : 'Reject'} this exact ${order.side || ''} ${order.symbol || ''} paper order? Approval cannot be reused and does not enable live trading.`)) return;
+    try {
+      await post(`/api/paper/approvals/${button.dataset.approvalId}/${action}`, { expectedDigest: button.dataset.approvalDigest });
+      toast(action === 'approve' ? '✓ Exact paper order approved' : 'Paper order rejected');
+      renderAgentControl();
+    } catch (e) { toast(`Approval decision failed: ${esc(e.message)}`); }
   }));
   $('#missionCreateForm', el)?.addEventListener('submit', async (event) => {
     event.preventDefault();

@@ -53,7 +53,7 @@ assert.equal(weakened.thresholds.maximumDrawdownPct, 20);
 
 const server = readFileSync(new URL('../server.js', import.meta.url), 'utf8');
 const protocol = readFileSync(new URL('../lib/mcp-protocol.js', import.meta.url), 'utf8');
-assert.match(server, /const DISCOVERY_VERSION = '1\.41\.0'/);
+assert.match(server, /const DISCOVERY_VERSION = '1\.42\.0'/);
 assert.match(server, /app\.get\('\/api\/strategy-governance', requireUser/);
 assert.match(server, /case 'strategy_promotion_scorecards'/);
 assert.match(protocol, /readTool\('strategy_promotion_scorecards'/);

@@ -238,6 +238,14 @@ Owner testing instructions: `/docs/OWNER_MCP_APP_TESTING.md`.
 - Effective capabilities are derived from the intersection of an owner-created credential, current key scopes, supervised runtime health, and an active wallet-bound Pact.
 - Agent names, prompts, model output, Agent Cards, and self-declared skills are descriptive only and never grant authority. Revocation fails closed immediately; delegation and agent substitution are never automatic.
 
+### Owner Approval & Exception Queue
+- `GET /api/paper/approvals` — signed-in owner’s private paper approval inbox and verified lifecycle chain
+- `paper_approval_request` — an agent requests a short-lived closed mandate after an allowed preflight; it cannot approve itself
+- `paper_approval_requests` — private read-only MCP queue status
+- `paper_trade_open` accepts the resulting `approvalId` when the mission policy requires it. The server revalidates the exact agent, intent, order and preflight fingerprint, consumes approval once, and still enforces every current paper execution gate.
+- Mission modes are `within-pact`, `per-order`, and `exceptions`. Exception triggers are deterministic: at least half the mission order cap, confidence below 70 or unavailable, a preflight warning, or a volatility regime outside calm/normal.
+- Owner decisions are available only through the non-agentic signed-in Control Center. Live, token, wallet-send and public-chain execution remain unavailable.
+
 ## AITT — Agent Intelligence Trading Token
 
 ERC-20 on IOST L2 (chain 182), 1B fixed supply, 8 decimals. **Design draft — NOT issued yet.**

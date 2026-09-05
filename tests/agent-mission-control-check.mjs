@@ -85,6 +85,22 @@ try {
   assert.equal(started.status, 'running');
   assert.equal(missions.missionEvidence(started).authority.canOpenPaperTrade, true);
 
+  const approvalMission = missions.createMission({
+    ownerId, walletId: wallet.walletId, pactId: pact.pactId, name: 'Owner approval mission',
+    symbols: ['IOST'], maxOrderMinor: 2_000, maxTrades: 1, maxLossMinor: 500,
+    approvalMode: 'per-order', expiresAt: Date.now() + 3_600_000,
+  });
+  missions.startMission(approvalMission.missionId, ownerId);
+  const approvalInput = { missionId: approvalMission.missionId, ownerId, walletId: wallet.walletId,
+    pactId: pact.pactId, symbol: 'IOST', notionalMinor: 500 };
+  assert.equal(missions.previewMissionTrade(approvalInput).ok, true, 'preflight must be possible before owner approval');
+  assert.equal(missions.previewMissionTrade(approvalInput).approvalRequired, true);
+  assert.equal(missions.checkMissionTrade(approvalInput).reason, 'mission-approval-required');
+  assert.equal(missions.checkMissionTrade({ ...approvalInput, approvalAuthorized: true }).ok, true);
+  assert.deepEqual(missions.missionApprovalRequirement(approvalMission.missionId, ownerId), {
+    required: true, mode: 'per-order', reasons: ['per-order-policy'],
+  });
+
   assert.equal(missions.checkMissionTrade({
     missionId: mission.missionId,
     ownerId,

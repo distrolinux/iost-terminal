@@ -74,7 +74,7 @@ const server = readFileSync(new URL('../server.js', import.meta.url), 'utf8');
 const app = readFileSync(new URL('../public/js/app.js', import.meta.url), 'utf8');
 assert.match(server, /case 'agent_capability_registry_status'/);
 assert.match(server, /app\.get\('\/api\/agent-capability-registry', requireUser/);
-assert.match(server, /const DISCOVERY_VERSION = '1\.41\.0'/);
+assert.match(server, /const DISCOVERY_VERSION = '1\.42\.0'/);
 assert.match(app, /Agent Capability &amp; Delegation Registry/);
 assert.match(app, /Effective authority is derived/);
 
