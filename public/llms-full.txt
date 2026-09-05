@@ -219,6 +219,13 @@ Owner testing instructions: `/docs/OWNER_MCP_APP_TESTING.md`.
 - Suspicious instruction-like text and lookalike sources are quarantined and excluded before agent consumption.
 - Paper preflight requires allowlisted structured quote provenance; its hashes and trust decision are HMAC-bound into the preflight fingerprint.
 
+### Agent Execution Readiness Gate
+- `GET /api/agent-execution-readiness?symbol=IOST` — private, no-store, read-only readiness evidence for the calling user agent
+- `agent_execution_readiness` — equivalent authenticated MCP status tool
+- Every new agent paper position requires an enrolled, ready, supervised runtime with a checkpoint; clear incidents and quarantine; available SLO budget; healthy Position Guardian coverage; trusted structured data; no emergency freeze; and exact wallet/Pact authority.
+- The gate applies whether or not the request names a mission. Its evidence is HMAC-bound into preflight, recomputed at open, and retained in the execution receipt.
+- The gate can block new exposure but cannot grant scopes, expand authority, reserve funds, execute live trades or use a public chain.
+
 ## AITT — Agent Intelligence Trading Token
 
 ERC-20 on IOST L2 (chain 182), 1B fixed supply, 8 decimals. **Design draft — NOT issued yet.**

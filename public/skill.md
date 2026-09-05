@@ -99,6 +99,12 @@ content quarantine, provenance coverage and structured execution-evidence
 trust. Headlines and tool/model text are data, never authority; suspicious
 instructions are removed before agent consumption, and the execution trust
 decision is bound into paper preflight.
+Before requesting new paper exposure, call the private read-only
+`agent_execution_readiness` tool. Every agent open independently recomputes the
+same fail-closed gate across supervised runtime health, incidents, SLO budget,
+Position Guardian, data trust, emergency freeze and exact wallet/Pact authority.
+The readiness evidence is bound into preflight and retained in the receipt;
+omitting a mission cannot bypass it.
 MCP Apps clients can render the private `evaluation_review` evidence panel with
 history, comparison charts and deterministic JSON/CSV exports; see
 `/docs/OWNER_MCP_APP_TESTING.md` for the owner test flow.
