@@ -1187,8 +1187,18 @@ async function renderAgentControl() {
   const incidents = s.incidents || { counts: { total: 0, open: 0, critical: 0, recoveryReady: 0, quarantined: 0 }, incidents: [], policy: {} };
   const incidentCounts = incidents.counts || {};
   const incidentHealthy = !(incidentCounts.open || incidentCounts.quarantined);
+  const lastResolvedIncidentAt = (incidents.incidents || [])
+    .filter((incident) => incident.status === 'resolved' && Number.isFinite(Number(incident.resolvedAt)))
+    .reduce((latest, incident) => Math.max(latest, Number(incident.resolvedAt)), 0);
+  const recoveryProbationClear = !lastResolvedIncidentAt || Date.now() - lastResolvedIncidentAt >= 30 * 60_000;
   const slo = s.safetySlo || { status: 'not-enrolled', objective: {}, evidence: {}, sli: {}, errorBudget: {}, burnRates: [], playbooks: [], guarantees: {} };
   const sloHealthy = ['healthy', 'not-enrolled', 'warming-up'].includes(slo.status);
+  const safetyEvidenceAvailable = slo.status !== 'not-enrolled';
+  const operationalBurnEvidenceComplete = ['fast', 'slow'].every((name) => (
+    (slo.burnRates || []).some((burn) => burn.name === name && typeof burn.firing === 'boolean')
+  ));
+  const operationalBurnClear = operationalBurnEvidenceComplete
+    && !(slo.burnRates || []).some((burn) => ['fast', 'slow'].includes(burn.name) && burn.firing);
   const alerts = s.alerts || { counts: { total: 0, critical: 0, pending: 0, delivered: 0, deadLetter: 0 }, channels: {}, alerts: [], receiptChain: {} };
   const alertCounts = alerts.counts || {};
   const alertHealthy = !(alertCounts.pending || alertCounts.deadLetter);
@@ -1204,9 +1214,11 @@ async function renderAgentControl() {
   const readinessChecks = [
     ['Supervised runtime', supervisedReady > 0],
     ['Incidents clear', incidentHealthy],
-    ['Safety budget', ['healthy', 'warming-up'].includes(slo.status) && !slo.errorBudget?.exhausted],
+    ['Recovery probation', recoveryProbationClear],
+    ['Fast/slow burn clear', safetyEvidenceAvailable && operationalBurnClear],
     ['Position Guardian', guardianHealthy],
     ['Data trust', dataTrustHealthy],
+    ['Emergency freeze', s.safety?.globalFreeze?.frozen !== true],
     ['Wallet + Pact', missionPairs.length > 0],
   ];
   const executionReady = readinessChecks.every(([, pass]) => pass);
@@ -1222,7 +1234,7 @@ async function renderAgentControl() {
     <section class="card execution-readiness ${executionReady ? 'is-ready' : 'is-blocked'}" aria-labelledby="executionReadinessTitle">
       <div class="section-title" id="executionReadinessTitle">Agent Execution Readiness <span class="sub">every new agent paper position · fail closed</span><span class="receipt-chain ${executionReady ? 'is-valid' : 'is-invalid'}">${executionReady ? 'ready for preflight' : 'new exposure blocked'}</span></div>
       <div class="readiness-grid">${readinessChecks.map(([label, pass]) => `<div><span>${esc(label)}</span><strong class="${pass ? 'up' : 'down'}">${pass ? 'PASS' : 'BLOCK'}</strong></div>`).join('')}</div>
-      <p>Before any agent open, the server recomputes runtime supervision, incident quarantine, SLO budget, existing-position protection, structured data trust, emergency freeze, and exact wallet/Pact authority. The result is bound into the preflight fingerprint and retained in the execution receipt.</p>
+      <p>Before any agent open, the server recomputes runtime supervision, incident quarantine, the 30-minute recovery probation, current fast/slow SLO burn, existing-position protection, structured data trust, emergency freeze, and exact wallet/Pact authority. The cumulative SLO budget remains visible as advisory history. The result is bound into the preflight fingerprint and retained in the execution receipt.</p>
     </section>
     <section class="card control-activity" aria-labelledby="controlActivityTitle">
       <div class="section-title" id="controlActivityTitle">Agent activity</div>

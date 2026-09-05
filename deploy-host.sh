@@ -5,6 +5,21 @@
 set -Eeuo pipefail
 umask 077
 
+usage() { echo "Usage: bash deploy-host.sh [--preflight-only]"; }
+PREFLIGHT_ONLY="${PREFLIGHT_ONLY:-0}"
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --preflight-only) PREFLIGHT_ONLY=1 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "ERROR: unknown argument: $1"; usage; exit 2 ;;
+  esac
+  shift
+done
+case "$PREFLIGHT_ONLY" in
+  0|1) ;;
+  *) echo "ERROR: PREFLIGHT_ONLY must be 0 or 1"; exit 2 ;;
+esac
+
 STACK="${STACK:-/docker/hermes-agent-ghfx}"
 APP="${APP:-$STACK/data/iost-terminal}"
 DATA_DIR="${DATA_DIR:-$APP/data}"
@@ -130,9 +145,13 @@ if command -v ss >/dev/null && ss -H -ltn 'sport = :8787' 2>/dev/null | grep -q 
   fi
 fi
 
-PRIOR_ROLLBACKS=()
-mapfile -t RELATED_CONTAINERS < <(docker_cmd ps --format '{{.Names}}' | awk -v prod="$PROD_CONTAINER" '$0 ~ ("^" prod) && $0 != prod')
+PRIOR_ROLLBACKS=('')
+RELATED_CONTAINERS=('')
+while IFS= read -r related; do
+  RELATED_CONTAINERS+=("$related")
+done < <(docker_cmd ps --format '{{.Names}}' | awk -v prod="$PROD_CONTAINER" '$0 ~ ("^" prod) && $0 != prod')
 for related in "${RELATED_CONTAINERS[@]}"; do
+  [ -n "$related" ] || continue
   if [[ "$related" == "${PROD_CONTAINER}-rollback-"* ]] && \
      [ "$(docker_cmd inspect -f '{{.State.Paused}}' "$related")" = "true" ]; then
     PRIOR_ROLLBACKS+=("$related")
@@ -192,7 +211,7 @@ wait_for_health "$CANDIDATE"
 echo "==> candidate healthy; production has not been touched"
 docker_cmd rm -f "$CANDIDATE" >/dev/null
 
-if [ "${PREFLIGHT_ONLY:-0}" = "1" ]; then
+if [ "$PREFLIGHT_ONLY" = "1" ]; then
   echo "DONE — preflight only; production was not paused, replaced, or modified."
   exit 0
 fi
@@ -201,6 +220,7 @@ fi
 # retired after the new candidate has proven healthy and while current
 # production is still serving traffic.
 for prior in "${PRIOR_ROLLBACKS[@]}"; do
+  [ -n "$prior" ] || continue
   echo "==> retiring superseded paused rollback: $prior"
   docker_cmd rm -f "$prior" >/dev/null
 done

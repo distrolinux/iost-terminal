@@ -72,6 +72,35 @@ const repeated = buildPaperTradePreflight({
 });
 assert.equal(repeated.preflightFingerprint, allowed.preflightFingerprint, 'same evidence must fingerprint identically');
 
+const executionReadiness = {
+  decision: 'allow', reasonCode: 'agent-execution-ready', checkedAt: now,
+  policy: { recoveryProbationMs: 30 * 60_000 },
+  evidence: { incidents: { lastResolvedAt: now - 31 * 60_000, recoveryAgeMs: 31 * 60_000, probationClear: true } },
+};
+const readinessBound = buildPaperTradePreflight({
+  order, ticker, cashUsd: 100, authorization, executionReadiness,
+  accountScope: 'private-account-id', supportedSymbols: ['IOST'], now,
+  bindingSecret: 'private-test-binding-secret',
+});
+const agedReadinessBound = buildPaperTradePreflight({
+  order, ticker, cashUsd: 100, authorization,
+  executionReadiness: { ...executionReadiness, checkedAt: now + 1_000, evidence: {
+    incidents: { ...executionReadiness.evidence.incidents, recoveryAgeMs: 31 * 60_000 + 1_000 },
+  } },
+  accountScope: 'private-account-id', supportedSymbols: ['IOST'], now,
+  bindingSecret: 'private-test-binding-secret',
+});
+assert.equal(agedReadinessBound.preflightFingerprint, readinessBound.preflightFingerprint,
+  'an advancing recovery timer must not invalidate unchanged readiness evidence');
+const changedReadiness = buildPaperTradePreflight({
+  order, ticker, cashUsd: 100, authorization,
+  executionReadiness: { ...executionReadiness, decision: 'deny', reasonCode: 'recovery-probation-clear' },
+  accountScope: 'private-account-id', supportedSymbols: ['IOST'], now,
+  bindingSecret: 'private-test-binding-secret',
+});
+assert.notEqual(changedReadiness.preflightFingerprint, readinessBound.preflightFingerprint,
+  'a changed readiness decision must invalidate the binding');
+
 const portfolioRisk = {
   decision: 'allow', reasonCode: 'portfolio-risk-passed',
   policy: { maxOrderPct: 10, normalMaxOrderPct: 7.5 },
@@ -252,7 +281,7 @@ assert(!buildMcpTools().some((tool) => tool.name === 'paper_trade_preflight'), '
 assert(!buildMcpTools({ authenticated: true, scopes: ['read'] }).some((tool) => tool.name === 'paper_trade_preflight'), 'read-only keys without trade-paper must not receive execution preflight');
 
 const server = readFileSync(new URL('../server.js', import.meta.url), 'utf8');
-assert.match(server, /const DISCOVERY_VERSION = '1\.38\.0'/);
+assert.match(server, /const DISCOVERY_VERSION = '1\.38\.1'/);
 assert.match(preflight.description, /execution-quality/i);
 assert.match(preflight.description, /venue failover/i);
 assert.match(server, /enforcePaperPreflightBinding/);

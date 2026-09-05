@@ -11,7 +11,10 @@ tool.
 - A durable checkpoint exists, quarantine is inactive, and new exposure is
   permitted by the runtime lease.
 - There are no open, critical or quarantined runtime incidents.
-- The safety SLO is `warming-up` or `healthy` and its error budget is available.
+- Safety SLO evidence exists and neither the fast nor slow operational burn-rate
+  alert is firing.
+- After an incident is owner-resolved, a deterministic 30-minute healthy
+  recovery probation has elapsed.
 - Existing positions have no degraded or unprotected Position Guardian state.
 - Structured market evidence passes the Agent Data Trust Firewall.
 - Emergency freeze is inactive.
@@ -21,6 +24,12 @@ tool.
 Any missing, malformed, unavailable or denied requirement blocks new exposure.
 Owner manual paper trading is explicitly outside this agent-runtime gate and
 continues through its existing session controls.
+
+The cumulative 30-day SLO error budget and ticket burn rate remain visible to
+the owner as historical/advisory evidence. They are never cleared or hidden,
+but they do not create a multi-day execution lock after an incident has been
+resolved, the recovery probation has elapsed, and present fast/slow burn alerts
+have cleared.
 
 ## Binding and replay safety
 

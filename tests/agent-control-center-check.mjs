@@ -31,7 +31,7 @@ assert.match(html, /data-view="control"/,
   'sidebar must expose the owner control center');
 assert.match(html, /id="view-control"/,
   'app must include the control-center view');
-assert.match(html, /\/js\/app\.js\?v=2\.40\.0/,
+assert.match(html, /\/js\/app\.js\?v=2\.40\.1/,
   'app asset cache key must be bumped');
 
 assert.match(app, /async function renderAgentControl\(\)/,
@@ -54,8 +54,10 @@ assert.match(app, /Agent Data Trust Firewall/,
   'control center must expose external-content and execution-evidence trust status');
 assert.match(app, /Agent Execution Readiness/,
   'control center must expose the new-exposure readiness gate');
-assert.match(app, /runtime supervision, incident quarantine, SLO budget/,
+assert.match(app, /runtime supervision, incident quarantine, the 30-minute recovery probation, current fast\/slow SLO burn/,
   'control center must explain the composed fail-closed evidence');
+assert.match(app, /cumulative SLO budget remains visible as advisory history/,
+  'control center must distinguish historical SLO evidence from present execution safety');
 assert.match(app, /content cannot authorize execution/,
   'control center must state that external content has no execution authority');
 

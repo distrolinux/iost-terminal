@@ -359,6 +359,9 @@ try {
   assert.equal(executionReadiness.body.result.structuredContent.reasonCode, 'agent-execution-ready');
   assert.equal(executionReadiness.body.result.structuredContent.evidence.runtime.supervised, true);
   assert.equal(executionReadiness.body.result.structuredContent.evidence.incidents.open, 0);
+  assert.equal(executionReadiness.body.result.structuredContent.policy.recoveryProbationMs, 30 * 60_000);
+  assert.equal(executionReadiness.body.result.structuredContent.policy.cumulativeErrorBudgetAdvisoryOnly, true);
+  assert.equal(executionReadiness.body.result.structuredContent.evidence.safetySlo.operationalBurnEvidenceComplete, true);
   assert.equal(executionReadiness.body.result.structuredContent.evidence.guardian.unprotected, 0);
   assert.equal(executionReadiness.body.result.structuredContent.evidence.dataTrust.decision, 'allow');
   assert.equal(executionReadiness.body.result.structuredContent.evidence.authorization.walletPactAuthorized, true);

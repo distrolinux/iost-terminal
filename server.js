@@ -809,7 +809,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.38.0';
+const DISCOVERY_VERSION = '1.38.1';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
