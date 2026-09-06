@@ -71,6 +71,10 @@ try {
   assert.equal(initial.response.status, 200);
   assert.equal(initial.json.mode, 'paper-only');
   assert.equal(initial.json.credit.lifetimeCapMinor, 10_000);
+  assert.equal(initial.json.wizard.status, 'action-required');
+  assert.equal(initial.json.wizard.nextAction.code, 'budget');
+  assert.equal(initial.json.wizard.execution.attempted, false);
+  assert.equal(initial.json.wizard.liveScopeUsed, false);
 
   // A pre-existing account wallet without a Pact must not hide the later
   // Launchpad wallet/Pact pair from agent authorization discovery.
@@ -89,6 +93,7 @@ try {
   assert.equal(setup.json.wallets.length, 1);
   assert.deepEqual(setup.json.wallets[0].capabilities, ['trade.paper']);
   assert.equal(setup.json.credit.lifetimeGrantedMinor, 10_000);
+  assert.equal(setup.json.wizard.nextAction.code, 'permission');
   const pactId = setup.json.setup.pactId;
 
   const repeated = await request('/api/agent-launchpad/setup', { method: 'POST', cookie: ownerCookie, body: setupBody });
@@ -133,6 +138,10 @@ try {
     'authorization must select the wallet that is actually bound to the active Pact');
   assert.equal(authorization.result.structuredContent.canOpenPaperTrade, true,
     'a valid Launchpad wallet/Pact pair must be reported ready even when an older wallet exists');
+  const afterAuthorization = await request('/api/agent-launchpad', { cookie: ownerCookie });
+  assert.equal(afterAuthorization.json.wizard.evidence.connected, true);
+  assert.equal(afterAuthorization.json.wizard.nextAction.code, 'runtime',
+    'the wizard must guide an authenticated client to supervised runtime setup next');
 
   const ownerTermination = await request(`/api/pacts/${pactId}/terminate`, { method: 'POST', cookie: ownerCookie, body: {} });
   assert.equal(ownerTermination.response.status, 200);

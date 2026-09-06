@@ -60,6 +60,7 @@ import * as iostAccounts from './lib/iost-accounts.js';
 import * as agentKeys from './lib/agent-keys.js';
 import * as agentSessions from './lib/agent-sessions.js';
 import { buildAgentReleaseTrust } from './lib/agent-release-trust.js';
+import { buildAgentReadinessWizard } from './lib/agent-readiness-wizard.js';
 import * as liveProposals from './lib/live-proposals.js';
 import * as management from './lib/management.js';
 import * as triggers from './lib/triggers.js';
@@ -826,7 +827,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.44.0';
+const DISCOVERY_VERSION = '1.45.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -2339,6 +2340,36 @@ function launchpadSnapshot(req) {
   const keys = agentKeys.listKeys(req.session.userId);
   const lifetimeGrantedMinor = Math.max(0, Math.trunc(Number(parent.paperOnboardingGrantedMinor) || 0));
   const remainingGrantMinor = Math.max(0, wallets.PAPER_ONBOARDING_CREDIT_CAP_MINOR - lifetimeGrantedMinor);
+  const walletEvidence = launchpadWallets.map((wallet) => ({
+    walletId: wallet.walletId,
+    name: wallet.name,
+    status: wallet.status,
+    balanceMinor: wallets.balanceOf(wallet.walletId),
+    limits: wallet.limits,
+    capabilities: wallet.capabilities,
+    approvalRequired: wallet.approvalRequired,
+    usage: limits.usageSnapshot(wallet.walletId),
+  }));
+  const pactEvidence = ownerPacts.filter((pact) => launchpadWallets.some((wallet) => wallet.walletId === pact.agentWalletId)).map((pact) => ({
+    pactId: pact.pactId,
+    agentWalletId: pact.agentWalletId,
+    intent: pact.intent,
+    status: pact.status,
+    expiresAt: pact.expiresAt,
+    completion: pact.completion,
+    spentMinor: pact.spentMinor,
+    policies: { approvalRequired: pact.policies?.approvalRequired ?? true, limits: pact.policies?.limits || null },
+  }));
+  const runtimeStatus = agentRuntime.ownerRuntimeStatus(req.session.userId);
+  const incidentStatus = agentIncidents.ownerIncidentStatus(req.session.userId);
+  const safetySlo = agentSafetySlo.buildAgentSafetySlo({ runtime: runtimeStatus, incidents: incidentStatus,
+    observationStartedAt: AGENT_SLO_OBSERVATION_STARTED_AT });
+  const sessionSecurity = agentSessions.agentSessionSecurityStatus({ userId: req.session.userId, isKeyActive: agentKeys.isActiveKey });
+  const releaseTrust = agentReleaseTrustStatus();
+  const wizard = buildAgentReadinessWizard({ wallets: walletEvidence, pacts: pactEvidence, keys,
+    runtime: runtimeStatus, missions: missions.listMissions(ownerId), incidents: incidentStatus, safetySlo,
+    guardian: management.positionGuardianStatus(ownerId), sessionSecurity, releaseTrust,
+    frozen: freeze.freezeState().frozen === true });
   return {
     ok: true,
     mode: 'paper-only',
@@ -2353,26 +2384,9 @@ function launchpadSnapshot(req) {
       withdrawable: false,
     },
     keys,
-    wallets: launchpadWallets.map((wallet) => ({
-      walletId: wallet.walletId,
-      name: wallet.name,
-      status: wallet.status,
-      balanceMinor: wallets.balanceOf(wallet.walletId),
-      limits: wallet.limits,
-      capabilities: wallet.capabilities,
-      approvalRequired: wallet.approvalRequired,
-      usage: limits.usageSnapshot(wallet.walletId),
-    })),
-    pacts: ownerPacts.filter((pact) => launchpadWallets.some((wallet) => wallet.walletId === pact.agentWalletId)).map((pact) => ({
-      pactId: pact.pactId,
-      agentWalletId: pact.agentWalletId,
-      intent: pact.intent,
-      status: pact.status,
-      expiresAt: pact.expiresAt,
-      completion: pact.completion,
-      spentMinor: pact.spentMinor,
-      policies: { approvalRequired: pact.policies?.approvalRequired ?? true, limits: pact.policies?.limits || null },
-    })),
+    wallets: walletEvidence,
+    pacts: pactEvidence,
+    wizard,
     status: {
       keyReady: keys.some((key) => !key.revokedAt && key.scopes.includes('trade-paper')),
       walletReady: launchpadWallets.some((wallet) => wallet.status === 'active' && wallet.capabilities.includes('trade.paper')),
