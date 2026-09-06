@@ -12,6 +12,15 @@ The Agent Readiness Wizard gives an owner one honest path from an empty account 
 6. **Bound mission** — a running mission is bound to the wallet, Pact, and runtime checkpoint.
 7. **Safety gate** — incidents, fast and slow SLO burns, Position Guardian, emergency freeze, and release trust are clear.
 
+Mission binding uses the mission's stored `walletId`, its exact active `pactId`,
+and the supervised runtime checkpoint's `missionId`. Mission creation also caps
+the requested expiry to the selected Pact deadline, avoiding a predictable
+owner-facing rejection when less than the requested number of hours remains.
+
+The cumulative 30-day error budget and ticket burn remain visible advisory
+history. Current fast and slow burn rates are the blocking SLO signals, matching
+the server execution-readiness policy; missing fast/slow evidence fails closed.
+
 The first incomplete stage supplies one deterministic next action. Later evidence remains visible so an owner can diagnose readiness without allowing a later stage to bypass an earlier one.
 
 ## Safety boundary
