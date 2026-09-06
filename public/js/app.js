@@ -1440,7 +1440,7 @@ async function renderAgentControl() {
         <label>Maximum order (USD)<input id="missionMaxOrder" type="number" min="0.01" max="10000" step="0.01" value="10.00" required></label>
         <label>Maximum realized loss (USD)<input id="missionMaxLoss" type="number" min="0.01" max="10000" step="0.01" value="5.00" required></label>
         <label>Maximum trades<input id="missionMaxTrades" type="number" min="1" max="100" step="1" value="3" required></label>
-        <label>Expires in hours<input id="missionHours" type="number" min="1" max="168" step="1" value="24" required></label>
+        <label>Expires in hours<input id="missionHours" type="number" min="1" max="168" step="1" value="24" required><small class="muted">Automatically capped to the selected Pact expiry.</small></label>
         <label>Approval mode<select id="missionApproval"><option value="within-pact">Autonomous within Pact</option><option value="per-order">Every order · owner approval</option><option value="exceptions">Only policy exceptions</option></select></label>
         <label class="mission-wide">Objective<input id="missionObjective" maxlength="500" value="Find risk-adjusted paper entries and retain evidence for every decision." required></label>
         <label class="mission-wide">Strategy<input id="missionStrategy" maxlength="500" value="Score and risk-gated momentum with server-enforced limits." required></label>
@@ -1525,12 +1525,16 @@ async function renderAgentControl() {
     const maxTrades = Math.round(Number($('#missionMaxTrades', el).value));
     const hours = Math.round(Number($('#missionHours', el).value));
     if (!walletId || !pactId || !symbols.length || !Number.isSafeInteger(maxOrderMinor) || maxOrderMinor <= 0 || !Number.isSafeInteger(maxLossMinor) || maxLossMinor <= 0 || !Number.isSafeInteger(maxTrades) || maxTrades <= 0 || !Number.isSafeInteger(hours) || hours < 1 || hours > 168) return toast('Enter a valid mission envelope.');
+    const selectedAuthority = missionPairs.find((pair) => pair.wallet.walletId === walletId && pair.pact.pactId === pactId);
+    const requestedExpiry = Date.now() + hours * 3600_000;
+    const pactExpiry = Number(selectedAuthority?.pact?.expiresAt || selectedAuthority?.pact?.completion?.deadlineTs || 0);
+    const expiresAt = pactExpiry > Date.now() ? Math.min(requestedExpiry, pactExpiry) : requestedExpiry;
     try {
       await post('/api/agent-missions', {
         walletId, pactId, symbols, maxOrderMinor, maxLossMinor, maxTrades,
         name: $('#missionName', el).value.trim(), objective: $('#missionObjective', el).value.trim(),
         strategy: $('#missionStrategy', el).value.trim(), approvalMode: $('#missionApproval', el).value,
-        expiresAt: Date.now() + hours * 3600_000,
+        expiresAt,
       });
       toast('✓ Mission created in paused mode', 'Review it below, then start it separately.');
       renderAgentControl();
