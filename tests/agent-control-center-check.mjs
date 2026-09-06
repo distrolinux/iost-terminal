@@ -31,7 +31,7 @@ assert.match(html, /data-view="control"/,
   'sidebar must expose the owner control center');
 assert.match(html, /id="view-control"/,
   'app must include the control-center view');
-assert.match(html, /\/js\/app\.js\?v=2\.44\.0/,
+assert.match(html, /\/js\/app\.js\?v=2\.46\.0/,
   'app asset cache key must be bumped');
 
 assert.match(app, /async function renderAgentControl\(\)/,
@@ -64,5 +64,9 @@ assert.match(app, /Agent Capability &amp; Delegation Registry/,
   'control center must expose effective agent capability evidence');
 assert.match(app, /Effective authority is derived[\s\S]{0,400}self-declared skills never grant permission/,
   'control center must distinguish descriptive claims from server authority');
+assert.match(app, /Agent Session Security/,
+  'control center must expose short-lived agent session posture');
+assert.match(app, /15-minute bearer session[\s\S]{0,400}never inherit live scope/,
+  'control center must explain the time, audience and scope boundaries');
 
 console.log('agent control center checks passed');

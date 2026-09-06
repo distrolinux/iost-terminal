@@ -58,6 +58,8 @@ import { buildPortfolioRiskDecision } from './lib/portfolio-risk-governor.js';
 import { buildVolatilitySentinel } from './lib/volatility-sentinel.js';
 import * as iostAccounts from './lib/iost-accounts.js';
 import * as agentKeys from './lib/agent-keys.js';
+import * as agentSessions from './lib/agent-sessions.js';
+import { buildAgentReleaseTrust } from './lib/agent-release-trust.js';
 import * as liveProposals from './lib/live-proposals.js';
 import * as management from './lib/management.js';
 import * as triggers from './lib/triggers.js';
@@ -158,6 +160,20 @@ try {
 
 const AGENT_SLO_OBSERVATION_STARTED_AT = agentSafetySlo.ensureSloObservationEpoch(DATA_DIR);
 
+function agentReleaseTrustStatus() {
+  return buildAgentReleaseTrust({
+    revision: process.env.APP_REVISION,
+    packageLock: readFileSync(join(ROOT, 'package-lock.json'), 'utf8'),
+    dockerfile: readFileSync(join(ROOT, 'Dockerfile'), 'utf8'),
+    workflow: readFileSync(join(ROOT, '.github/workflows/safety.yml'), 'utf8'),
+    deployScript: readFileSync(join(ROOT, 'deploy-host.sh'), 'utf8'),
+    expected: {
+      packageLockSha256: process.env.IOST_PACKAGE_LOCK_SHA256,
+      dockerfileSha256: process.env.IOST_DOCKERFILE_SHA256,
+    },
+  });
+}
+
 function agentSafetyEvidence(ownerId, keyId = null, now = Date.now()) {
   const runtime = keyId ? agentRuntime.agentRuntimeStatus(ownerId, keyId, now) : agentRuntime.ownerRuntimeStatus(ownerId, now);
   const incidents = keyId ? agentIncidents.agentIncidentStatus(ownerId, keyId, now) : agentIncidents.ownerIncidentStatus(ownerId, now);
@@ -243,10 +259,9 @@ app.use(session({
 // API keys (optional; agents SHOULD authenticate). Set AGENT_KEYS="k1,k2" — no default (fail closed).
 // Registered BEFORE all routes so every protected route can see a valid key.
 const AGENT_KEYS = new Set((process.env.AGENT_KEYS || '').split(',').map(s => s.trim()).filter(Boolean));
-// OAuth 2.0 bearer tokens (v1.17): opaque, resource-bound tokens minted at POST /oauth/token
-// via client_credentials (client_id = agent-key id, client_secret = full itk_ key).
-// In-memory, TTL 24h, revocable via /oauth/revoke — a restart clears them (documented).
-const oauthTokens = new Map(); // token -> { userId, keyId, scopes, resource, expiresAt }
+// OAuth bearer sessions are opaque, short-lived and resource-bound. Only token
+// digests are retained; the source key may downscope a session but never expand
+// it. Revoking the source key invalidates every derived session immediately.
 app.use((req, res, next) => {
   const key = req.get('x-api-key') || '';
   req.agentKey = key && AGENT_KEYS.has(key) ? key : null;
@@ -265,15 +280,12 @@ app.use((req, res, next) => {
     const authz = req.get('authorization') || '';
     if (/^Bearer\s+/i.test(authz)) {
       const bearerToken = authz.replace(/^Bearer\s+/i, '').trim();
-      const entry = oauthTokens.get(bearerToken);
       const expectedResource = req.path === '/mcp' ? `${SITE_URL}/mcp` : `${SITE_URL}/`;
-      const active = !!(entry && entry.expiresAt > Date.now() && agentKeys.isActiveKey(entry.keyId, entry.userId));
-      if (active && entry.resource === expectedResource) {
-        req.userAgent = { userId: entry.userId, keyId: entry.keyId, name: 'oauth', scopes: entry.scopes.slice() };
-      } else {
-        req.invalidBearer = true;
-        if (entry && !active) oauthTokens.delete(bearerToken);
-      }
+      const principal = agentSessions.resolveAgentSession(bearerToken, {
+        resource: expectedResource, isKeyActive: agentKeys.isActiveKey,
+      });
+      if (principal) req.userAgent = principal;
+      else req.invalidBearer = true;
     }
   }
   next();
@@ -814,7 +826,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.42.1';
+const DISCOVERY_VERSION = '1.44.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -903,6 +915,8 @@ const OPENAPI_PATHS = {
   '/api/agent-alerts': { get: { summary: 'Private read-only owner alert inbox, delivery, retry and receipt-chain status', tags: ['autonomy'] } },
   '/api/agent-data-trust': { get: { summary: 'Read-only external-content quarantine, provenance and execution-evidence trust status', tags: ['autonomy'] } },
   '/api/agent-execution-readiness': { get: { summary: 'Read-only fail-closed readiness for new agent paper exposure', tags: ['autonomy'] } },
+  '/api/agent-session-security': { get: { summary: 'Read-only short-lived agent session posture and resource-binding guarantees', tags: ['auth'] } },
+  '/api/agent-release-trust': { get: { summary: 'Read-only release provenance, SBOM and immutable-build verification', tags: ['security'] } },
 };
 app.get('/openapi.json', (req, res) => {
   res.set('Access-Control-Allow-Origin', '*');
@@ -980,11 +994,13 @@ app.get('/.well-known/oauth-protected-resource/mcp', (req, res) => {
 
 // ---- real OAuth 2.0 client_credentials grant (no fake metadata) ----
 // client_id = agent-key id (public), client_secret = the full itk_ secret.
-// Tokens are opaque, in-memory, 24h TTL; revoke directly via /oauth/revoke or
-// revoke the source agent key to invalidate every bearer derived from it.
+// Tokens are opaque, digest-only in memory and expire after 15 minutes. The
+// optional scope parameter can only narrow the source key's current scopes.
 const oauthLimiter = rateLimit({ windowMs: 60_000, limit: 20, standardHeaders: 'draft-7', legacyHeaders: false, message: { error: 'too many token requests — slow down' } });
 const oauthForm = express.urlencoded({ extended: false });
 app.post('/oauth/token', oauthLimiter, oauthForm, (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.set('Pragma', 'no-cache');
   const grant = String(req.body.grant_type || '');
   if (grant !== 'client_credentials') {
     return res.status(400).json({ error: 'unsupported_grant_type', error_description: 'only client_credentials is supported' });
@@ -1008,15 +1024,23 @@ app.post('/oauth/token', oauthLimiter, oauthForm, (req, res) => {
   if (![`${SITE_URL}/`, `${SITE_URL}/mcp`].includes(resource)) {
     return res.status(400).json({ error: 'invalid_target', error_description: 'resource must identify the IOST Terminal API or MCP endpoint' });
   }
-  const token = crypto.randomBytes(32).toString('base64url');
-  const expiresAt = Date.now() + 24 * 3600 * 1000;
-  oauthTokens.set(token, { ...principal, resource, expiresAt });
-  res.set('Cache-Control', 'no-store');
-  res.json({ access_token: token, token_type: 'Bearer', expires_in: 86400, scope: principal.scopes.join(' '), resource });
+  const requestedScopes = req.body.scope == null ? null : String(req.body.scope).split(/\s+/).filter(Boolean);
+  const selected = agentSessions.selectSessionScopes({ resource, sourceScopes: principal.scopes, requestedScopes });
+  if (!selected.ok) {
+    return res.status(400).json({ error: 'invalid_scope', error_description: 'scope must be a nonempty subset allowed by the source key and target resource' });
+  }
+  const issued = agentSessions.issueAgentSession({ principal, resource, scopes: selected.scopes });
+  res.json({
+    access_token: issued.token, token_type: 'Bearer',
+    expires_in: Math.floor(agentSessions.ACCESS_TOKEN_TTL_MS / 1000),
+    scope: selected.scopes.join(' '), resource,
+  });
 });
-app.post('/oauth/revoke', oauthForm, (req, res) => {
+app.post('/oauth/revoke', oauthLimiter, oauthForm, (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.set('Pragma', 'no-cache');
   const tok = String(req.body.token || '');
-  if (tok && oauthTokens.delete(tok)) res.json({ ok: true });
+  if (tok && agentSessions.revokeAgentSession(tok)) res.json({ ok: true });
   else res.status(200).json({ ok: false, error: 'token not found or already revoked' });
 });
 
@@ -1041,7 +1065,8 @@ Agents can read public market data with **no auth**, and act on an account with 
 ## OAuth 2.0 (client_credentials)
 Discovery: \`/.well-known/oauth-authorization-server\` (RFC 8414) · \`/.well-known/oauth-protected-resource\` (RFC 9728).
 - \`client_id\` = the key's id (shown in the app), \`client_secret\` = the full \`itk_…\` secret.
-- \`POST /oauth/token\` with \`grant_type=client_credentials\` (form body or HTTP Basic) → \`access_token\` (Bearer, 24h, opaque, in-memory). MCP clients include \`resource=${SITE_URL}/mcp\`; tokens are audience-bound and cannot be replayed across resources.
+- \`POST /oauth/token\` with \`grant_type=client_credentials\` (form body or HTTP Basic) → a 15-minute opaque bearer session. Only its SHA-256 digest is retained in memory. MCP clients include \`resource=${SITE_URL}/mcp\`; tokens are audience-bound and cannot be replayed across resources.
+- Optional \`scope=read trade-paper\` may narrow the source key. It can never add a scope, and MCP sessions always exclude \`trade-live\`.
 - Use \`Authorization: Bearer <token>\` — resolves to the same identity + scopes as the key.
 - Revoke: \`POST /oauth/revoke\` with \`{token}\`, or revoke the source agent key to invalidate every bearer derived from it immediately.
 
@@ -1240,6 +1265,12 @@ async function mcpToolCall(req, name, args) {
     };
     case 'health': return { ok: true, version: DISCOVERY_VERSION, ts: Date.now() };
     case 'agent_authorization_status': return mcpAuthorizationStatus(req);
+    case 'agent_session_security_status': {
+      const userId = req.userAgent?.userId || req.session?.userId;
+      if (!userId) throw Object.assign(new Error('user-bound agent session access required'), { protocolCode: -32602 });
+      return agentSessions.agentSessionSecurityStatus({ userId, keyId: req.userAgent?.keyId || null, isKeyActive: agentKeys.isActiveKey });
+    }
+    case 'agent_release_trust_status': return agentReleaseTrustStatus();
     case 'paper_account': return await markToMarket(accountFor(req).accountId);
     case 'paper_stats': return journalStats(accountFor(req).accountId);
     case 'paper_position_guardian': return management.positionGuardianStatus(accountFor(req).accountId);
@@ -3991,6 +4022,15 @@ const API_INDEX = {
     { path: '/api/agent-keys/:id', method: 'DELETE', purpose: 'revoke a key instantly' },
     { path: '/api/agent-keys/self', method: 'GET', purpose: 'agent-side introspection: keyId + name + scopes (send X-API-Key)' },
   ],
+  agentSessions: {
+    preferred: true,
+    tokenEndpoint: '/oauth/token',
+    lifetimeSeconds: 900,
+    scopeDownscoping: true,
+    resourceBound: true,
+    mcpLiveScopeExcluded: true,
+    statusEndpoint: '/api/agent-session-security',
+  },
   liveProposals: 'Option C — human-in-the-loop live trading: agents with trade-live scope REQUEST orders; NOTHING executes until the owner approves. Rails + venue re-validated at approval time.',
   liveProposalEndpoints: [
     { path: '/api/live/proposals', method: 'POST', body: '{symbol,side,size,entry?,reason?,confidence?}', purpose: 'agent requests a live trade (pending proposal created)' },
@@ -4378,6 +4418,19 @@ app.get('/api/agent-execution-readiness', requireUser, async (req, res) => {
   }));
 });
 
+app.get('/api/agent-session-security', requireUser, (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  const userId = req.userAgent?.userId || req.session?.userId;
+  if (!userId || (req.userAgent && !userAgentHas(req, 'read'))) return res.status(403).json({ error: 'user-bound read scope required' });
+  return res.json(agentSessions.agentSessionSecurityStatus({ userId, keyId: req.userAgent?.keyId || null, isKeyActive: agentKeys.isActiveKey }));
+});
+
+app.get('/api/agent-release-trust', requireUser, (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (req.userAgent && !userAgentHas(req, 'read')) return res.status(403).json({ error: 'read scope required' });
+  return res.json(agentReleaseTrustStatus());
+});
+
 for (const action of ['acknowledge', 'resolve']) {
   app.post(`/api/agent-incidents/:id/${action}`, requireUser, (req, res) => {
     res.set('Cache-Control', 'private, no-store');
@@ -4483,6 +4536,8 @@ app.get('/api/agent-control', requireUser, async (req, res) => {
   const reconciliation = executionReconciliationFor(`user:${req.session.userId}`);
   const orchestrator = portfolioOrchestratorFor(`user:${req.session.userId}`, `user:${req.session.userId}`);
   const capabilityRegistry = capabilityRegistryFor(req.session.userId);
+  const sessionSecurity = agentSessions.agentSessionSecurityStatus({ userId: req.session.userId, isKeyActive: agentKeys.isActiveKey });
+  const releaseTrust = agentReleaseTrustStatus();
   const lastAction = ap.actions[0] || null;
   res.json({
     ok: true,
@@ -4516,6 +4571,8 @@ app.get('/api/agent-control', requireUser, async (req, res) => {
     reconciliation,
     orchestrator,
     capabilityRegistry,
+    sessionSecurity,
+    releaseTrust,
     keys,
     keyStats: { active: keys.filter((k) => !k.revokedAt).length, revoked: keys.filter((k) => !!k.revokedAt).length },
     parentWallet,

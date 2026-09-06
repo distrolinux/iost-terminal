@@ -206,6 +206,7 @@ try {
   const ownerAlertTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_owner_alert_status');
   const dataTrustTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_data_trust_status');
   const executionReadinessTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_execution_readiness');
+  const sessionSecurityTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_session_security_status');
   assert.equal(runtimeStatusTool.annotations.readOnlyHint, true);
   assert.equal(runtimeStatusTool.annotations.destructiveHint, false);
   assert.equal(runtimeHeartbeatTool.annotations.readOnlyHint, false);
@@ -228,6 +229,9 @@ try {
   assert.equal(executionReadinessTool.annotations.readOnlyHint, true);
   assert.equal(executionReadinessTool.annotations.destructiveHint, false);
   assert.equal(executionReadinessTool.annotations.idempotentHint, true);
+  assert.equal(sessionSecurityTool.annotations.readOnlyHint, true);
+  assert.equal(sessionSecurityTool.annotations.destructiveHint, false);
+  assert.equal(sessionSecurityTool.annotations.idempotentHint, true);
   const promotionTool = privateTools.body.result.tools.find((tool) => tool.name === 'strategy_promotion_scorecards');
   assert.equal(promotionTool.annotations.readOnlyHint, true);
   assert.equal(promotionTool.annotations.destructiveHint, false);
@@ -246,8 +250,34 @@ try {
   const mcpToken = await tokenResponse.json();
   assert.equal(tokenResponse.status, 200);
   assert.equal(mcpToken.resource, `${BASE}/mcp`);
+  assert.equal(mcpToken.expires_in, 900);
+  assert.equal(mcpToken.scope, 'read trade-paper');
   const bearerTools = await mcp('tools/list', {}, { bearer: mcpToken.access_token });
   assert(bearerTools.body.result.tools.some((tool) => tool.name === 'paper_trade_open'));
+
+  const narrowTokenResponse = await fetch(`${BASE}/oauth/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'client_credentials', client_id: keyA.entry.id,
+      client_secret: keyA.key, resource: `${BASE}/mcp`, scope: 'read',
+    }),
+  });
+  const narrowToken = await narrowTokenResponse.json();
+  assert.equal(narrowTokenResponse.status, 200);
+  assert.equal(narrowToken.scope, 'read');
+  const narrowTools = await mcp('tools/list', {}, { bearer: narrowToken.access_token });
+  assert(!narrowTools.body.result.tools.some((tool) => tool.name === 'paper_trade_open'));
+
+  const invalidScopeResponse = await fetch(`${BASE}/oauth/token`, {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'client_credentials', client_id: keyA.entry.id,
+      client_secret: keyA.key, resource: `${BASE}/mcp`, scope: 'trade-live',
+    }),
+  });
+  assert.equal(invalidScopeResponse.status, 400);
+  assert.equal((await invalidScopeResponse.json()).error, 'invalid_scope');
 
   const rootTokenResponse = await fetch(`${BASE}/oauth/token`, {
     method: 'POST',
@@ -268,6 +298,24 @@ try {
   });
   assert.equal(authStatus.body.result.structuredContent.canOpenPaperTrade, true);
   assert.equal(authStatus.body.result.structuredContent.wallet.walletId, wallet.walletId);
+
+  const sessionSecurity = await mcp('tools/call', { name: 'agent_session_security_status', arguments: {} }, {
+    bearer: mcpToken.access_token, name: 'agent_session_security_status',
+  });
+  assert.equal(sessionSecurity.body.result.structuredContent.status, 'healthy');
+  assert.equal(sessionSecurity.body.result.structuredContent.policy.accessTokenTtlMs, 900000);
+  assert.equal(sessionSecurity.body.result.structuredContent.policy.resourceBound, true);
+  assert.equal(sessionSecurity.body.result.structuredContent.policy.plaintextTokensStored, false);
+  assert.equal(sessionSecurity.body.result.structuredContent.liveScopeUsed, false);
+
+  const revokeResponse = await fetch(`${BASE}/oauth/revoke`, {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ token: narrowToken.access_token }),
+  });
+  assert.equal(revokeResponse.status, 200);
+  assert.match(revokeResponse.headers.get('cache-control') || '', /no-store/);
+  const revokedTools = await mcp('tools/list', {}, { bearer: narrowToken.access_token });
+  assert.equal(revokedTools.status, 401);
 
   const guardianStatus = await mcp('tools/call', { name: 'paper_position_guardian', arguments: {} }, {
     key: keyA.key, name: 'paper_position_guardian',
