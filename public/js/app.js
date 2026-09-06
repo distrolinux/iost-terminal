@@ -1215,6 +1215,8 @@ async function renderAgentControl() {
   const orchestratorHealthy = orchestrator.decision === 'allow';
   const capabilityRegistry = s.capabilityRegistry || { status: 'unavailable', decision: 'deny', counts: {}, agents: [], policy: {} };
   const capabilityRegistryHealthy = capabilityRegistry.decision === 'allow';
+  const sessionSecurity = s.sessionSecurity || { status: 'unavailable', counts: {}, policy: {}, sessions: [] };
+  const releaseTrust = s.releaseTrust || { status: 'unavailable', checks: {}, pipeline: {}, sbom: {}, failedChecks: [] };
   const supervisedReady = (runtime.runtimes || []).filter((item) => item.ready
     && item.supervisor?.managed && item.supervisor?.healthy && item.checkpoint
     && item.quarantine?.active !== true && item.execution?.newMissionExposureAllowed).length;
@@ -1276,6 +1278,28 @@ async function renderAgentControl() {
       ${(capabilityRegistry.agents || []).length ? `<div class="runtime-list">${capabilityRegistry.agents.map((agent) => `<article><div><strong>${esc(agent.name || 'Agent')}</strong><span class="mono muted">${esc(agent.status)}</span></div><span class="chip ${agent.status === 'execution-ready' ? 'bull' : agent.status === 'revoked' ? 'bear' : 'neut'}">${esc(agent.status)}</span><dl><div><dt>Effective roles</dt><dd>${(agent.effectiveCapabilities || []).length}</dd></div><div><dt>Runtime</dt><dd>${agent.delegation?.runtimeReady ? 'verified' : 'not ready'}</dd></div><div><dt>Wallet + Pact</dt><dd>${agent.delegation?.walletPactAuthorityAvailable ? 'active' : 'not delegated'}</dd></div><div><dt>Self-claims</dt><dd>ignored</dd></div></dl></article>`).join('')}</div>` : '<div class="empty">No agent credentials are registered.</div>'}
       <div class="alert-channels"><span class="chip bull">Scope minimized</span><span class="chip bull">Authority recomputed</span><span class="chip neut">No self-promotion</span><span class="chip neut">No automatic delegation</span></div>
       <p>Effective authority is derived from the intersection of an owner-created credential, current key scopes, supervised runtime health, and an active wallet-bound Pact. Agent names, prompts, model output, and self-declared skills never grant permission.</p>
+    </section>
+    <section class="card execution-readiness ${sessionSecurity.status === 'healthy' ? 'is-ready' : 'is-blocked'}" aria-labelledby="agentSessionSecurityTitle">
+      <div class="section-title" id="agentSessionSecurityTitle">Agent Session Security <span class="sub">short-lived · resource-bound · scope-minimized</span><span class="receipt-chain ${sessionSecurity.status === 'healthy' ? 'is-valid' : 'is-invalid'}">${esc(sessionSecurity.status)}</span></div>
+      <div class="readiness-grid">
+        <div><span>Active sessions</span><strong>${sessionSecurity.counts?.active || 0}</strong></div>
+        <div><span>MCP bound</span><strong>${sessionSecurity.counts?.mcpBound || 0}</strong></div>
+        <div><span>Expired / revoked</span><strong>${(sessionSecurity.counts?.expired || 0) + (sessionSecurity.counts?.revoked || 0)}</strong></div>
+        <div><span>Maximum lifetime</span><strong>${Math.round((sessionSecurity.policy?.accessTokenTtlMs || 900000) / 60000)}m</strong></div>
+      </div>
+      <div class="alert-channels"><span class="chip bull">Audience validated</span><span class="chip bull">Scope downscoped</span><span class="chip bull">Digest-only storage</span><span class="chip neut">Key revocation fail-closed</span></div>
+      <p>OAuth-ready agents use the long-lived key at the token endpoint, then work through a 15-minute bearer session bound to one resource. Direct API-key authentication remains available for compatible clients; MCP sessions can never inherit live scope, and no token or digest is displayed here.</p>
+    </section>
+    <section class="card execution-readiness ${releaseTrust.status === 'verified' ? 'is-ready' : 'is-blocked'}" aria-labelledby="agentReleaseTrustTitle">
+      <div class="section-title" id="agentReleaseTrustTitle">Agent Release Trust <span class="sub">revision · dependencies · container · SBOM</span><span class="receipt-chain ${releaseTrust.status === 'verified' ? 'is-valid' : 'is-invalid'}">${esc(releaseTrust.status)}</span></div>
+      <div class="readiness-grid">
+        <div><span>Runtime provenance</span><strong class="${releaseTrust.checks?.runtimeProvenanceMatches ? 'up' : 'down'}">${releaseTrust.checks?.runtimeProvenanceMatches ? 'MATCH' : 'BLOCK'}</strong></div>
+        <div><span>Base image</span><strong class="${releaseTrust.checks?.baseImageDigestPinned ? 'up' : 'down'}">${releaseTrust.checks?.baseImageDigestPinned ? 'DIGEST PINNED' : 'UNPINNED'}</strong></div>
+        <div><span>Dependency integrity</span><strong class="${releaseTrust.checks?.dependencyIntegrityComplete ? 'up' : 'down'}">${Number(releaseTrust.sbom?.integrityCoveragePercent || 0).toFixed(0)}%</strong></div>
+        <div><span>SBOM evidence</span><strong class="${releaseTrust.sbom?.generatedAndRetainedInCi ? 'up' : 'down'}">${releaseTrust.sbom?.generatedAndRetainedInCi ? 'RETAINED' : 'MISSING'}</strong></div>
+      </div>
+      <div class="alert-channels"><span class="chip bull">Pinned CI actions</span><span class="chip bull">Least privilege</span><span class="chip bull">Clean-tree deploy</span><span class="chip bull">Automatic rollback</span></div>
+      <p>The running container must match the reviewed lockfile and Dockerfile fingerprints. CI produces a retained CycloneDX software bill of materials, external actions and the Node base are immutable, and incomplete release evidence fails closed without changing trading authority.</p>
     </section>
     <section class="card control-activity" aria-labelledby="controlActivityTitle">
       <div class="section-title" id="controlActivityTitle">Agent activity</div>

@@ -133,6 +133,8 @@ if ! git -C "$APP" diff --quiet || ! git -C "$APP" diff --cached --quiet || \
 fi
 REVISION="$(git -C "$APP" rev-parse --verify HEAD)"
 IOST_IMAGE="iost-terminal:${REVISION:0:12}"
+PACKAGE_LOCK_SHA256="$(sha256sum "$APP/package-lock.json" | awk '{print $1}')"
+DOCKERFILE_SHA256="$(sha256sum "$APP/Dockerfile" | awk '{print $1}')"
 
 if container_exists "$PROD_CONTAINER"; then OLD_PRESENT=1; fi
 
@@ -193,7 +195,13 @@ echo "==> building immutable image: $IOST_IMAGE"
 docker_cmd build --pull \
   --label "com.iost-terminal.revision=$REVISION" \
   --label "com.iost-terminal.built-at=$TIMESTAMP" \
+  --label "com.iost-terminal.package-lock-sha256=$PACKAGE_LOCK_SHA256" \
+  --label "com.iost-terminal.dockerfile-sha256=$DOCKERFILE_SHA256" \
   -t "$IOST_IMAGE" -f "$APP/Dockerfile" "$APP"
+
+[ "$(docker_cmd image inspect -f '{{index .Config.Labels "com.iost-terminal.revision"}}' "$IOST_IMAGE")" = "$REVISION" ] || { echo "ERROR: image revision provenance mismatch"; exit 1; }
+[ "$(docker_cmd image inspect -f '{{index .Config.Labels "com.iost-terminal.package-lock-sha256"}}' "$IOST_IMAGE")" = "$PACKAGE_LOCK_SHA256" ] || { echo "ERROR: image lockfile provenance mismatch"; exit 1; }
+[ "$(docker_cmd image inspect -f '{{index .Config.Labels "com.iost-terminal.dockerfile-sha256"}}' "$IOST_IMAGE")" = "$DOCKERFILE_SHA256" ] || { echo "ERROR: image Dockerfile provenance mismatch"; exit 1; }
 
 start_candidate() {
   echo "==> starting isolated candidate (scratch data, live credentials disabled)..."
@@ -201,6 +209,8 @@ start_candidate() {
     --network "$NET" --user "$APP_UID:$APP_GID" \
     "${ENV_ARGS[@]}" \
     -e APP_REVISION="$REVISION" \
+    -e IOST_PACKAGE_LOCK_SHA256="$PACKAGE_LOCK_SHA256" \
+    -e IOST_DOCKERFILE_SHA256="$DOCKERFILE_SHA256" \
     -e KRAKEN_API_KEY= -e KRAKEN_API_SECRET= -e IOST_PIN_KEY= \
     --tmpfs "/app/data:rw,noexec,nosuid,nodev,size=64m,mode=1770,uid=$APP_UID,gid=$APP_GID" \
     "$IOST_IMAGE" >/dev/null
@@ -245,6 +255,8 @@ docker_cmd run -d --name "$PROD_CONTAINER" --restart unless-stopped \
   --network "$NET" --user "$APP_UID:$APP_GID" \
   "${ENV_ARGS[@]}" \
   -e APP_REVISION="$REVISION" \
+  -e IOST_PACKAGE_LOCK_SHA256="$PACKAGE_LOCK_SHA256" \
+  -e IOST_DOCKERFILE_SHA256="$DOCKERFILE_SHA256" \
   -v "$DATA_DIR:/app/data" \
   --label com.iost-terminal.production=true \
   --label "com.iost-terminal.revision=$REVISION" \

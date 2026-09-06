@@ -26,7 +26,7 @@ const dockerfile = readFileSync(join(ROOT, 'Dockerfile'), 'utf8');
 ok('deployment builds an immutable image from a supported LTS runtime',
   /docker_cmd build --pull/.test(src)
   && /IOST_IMAGE/.test(src)
-  && /^FROM node:24-bookworm-slim$/m.test(dockerfile)
+  && /^FROM node:24-bookworm-slim@sha256:[a-f0-9]{64}$/m.test(dockerfile)
   && !/^FROM node:20/m.test(dockerfile));
 ok('candidate uses isolated scratch data', /start_candidate[\s\S]*--tmpfs ["']?\/app\/data:/.test(src));
 ok('candidate becomes healthy before the production writer pauses',

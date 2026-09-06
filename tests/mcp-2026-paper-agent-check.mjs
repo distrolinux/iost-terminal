@@ -172,7 +172,7 @@ ok('server integration retains wallet and Pact authorization for MCP paper opens
   assert.match(server, /settleAgentSpend\(gate/);
   assert.match(server, /MCP_MODERN_VERSION/);
   assert.match(server, /tasks\/get/);
-  assert.match(server, /entry\.resource === expectedResource/);
+  assert.match(server, /resolveAgentSession\(bearerToken[\s\S]{0,180}resource:\s*expectedResource/);
   assert.match(server, /pacts\.listPacts\(ident\.agentId\)/);
   assert.doesNotMatch(server, /pacts\.listPacts\(ident\.agentId, \{ includeAll: true \}\)/);
   assert.doesNotMatch(server.slice(server.indexOf("app.post('/mcp'"), server.indexOf('// ---- ARD manifest')), /executeLiveOrder|convertAitt|sendTransaction/);

@@ -35,6 +35,15 @@ case "$cmd" in
     ;;
   port) exit 1 ;;
   build) exit 0 ;;
+  image)
+    shift
+    args="$*"
+    if [[ "$args" == *com.iost-terminal.revision* ]]; then echo ${REVISION}
+    elif [[ "$args" == *com.iost-terminal.package-lock-sha256* ]]; then sha256sum "$APP/package-lock.json" | awk '{print $1}'
+    elif [[ "$args" == *com.iost-terminal.dockerfile-sha256* ]]; then sha256sum "$APP/Dockerfile" | awk '{print $1}'
+    else exit 1
+    fi
+    ;;
   run)
     name=""
     while [ "$#" -gt 0 ]; do
@@ -73,6 +82,7 @@ function runScenario(promotionFails, preflightOnly = false, extraArgs = []) {
   const state = join(scratch, 'state');
   mkdirSync(app); mkdirSync(bin); mkdirSync(state);
   writeFileSync(join(app, 'Dockerfile'), 'FROM scratch\n');
+  writeFileSync(join(app, 'package-lock.json'), '{"name":"fixture","lockfileVersion":3,"packages":{}}\n');
   writeFileSync(join(state, 'iost-terminal'), 'old-running\n');
   writeFileSync(join(bin, 'docker'), FAKE_DOCKER);
   writeFileSync(join(bin, 'git'), FAKE_GIT);

@@ -52,7 +52,11 @@ ok('same-origin mutation guard covers the full browser API surface',
   globalOriginGuard > 0 && firstAccountMutation > globalOriginGuard);
 
 ok('OAuth bearer authentication revalidates the source agent key',
-  /agentKeys\.isActiveKey\(entry\.keyId, entry\.userId\)/.test(src));
+  /resolveAgentSession\(bearerToken[\s\S]{0,180}isKeyActive:\s*agentKeys\.isActiveKey/.test(src));
+ok('OAuth bearer sessions are short-lived, resource-bound and scope-minimized',
+  /ACCESS_TOKEN_TTL_MS/.test(src)
+  && /selectSessionScopes/.test(src)
+  && /invalid_scope/.test(src));
 
 const agentSpendGate = route('function agentSpendGate(', '// queue flush:');
 ok('agent spend gate covers platform and per-user agent credentials',

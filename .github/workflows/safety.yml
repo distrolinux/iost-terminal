@@ -42,6 +42,17 @@ jobs:
         run: find scripts tests -type f -name '*.sh' -print0 | xargs -0 -r bash -n
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
+      - name: Generate CycloneDX production SBOM
+        run: npm sbom --sbom-format=cyclonedx --omit=dev > "${{ runner.temp }}/iost-terminal.cdx.json"
+      - name: Verify CycloneDX SBOM
+        run: node scripts/verify-sbom.mjs "${{ runner.temp }}/iost-terminal.cdx.json"
+      - name: Retain immutable SBOM evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: iost-terminal-sbom-${{ github.sha }}
+          path: ${{ runner.temp }}/iost-terminal.cdx.json
+          if-no-files-found: error
+          retention-days: 90
 
   contracts-local:
     name: Local-only contract suite
