@@ -1057,17 +1057,20 @@ async function renderAgentLaunchpad() {
   const activePact = pacts.find((pact) => pact.status === 'active');
   const liveKeys = (s.keys || []).filter((key) => !key.revokedAt);
   const paperKeys = liveKeys.filter((key) => key.scopes?.includes('trade-paper'));
-  const step = (ready, label, detail) => `<li class="${ready ? 'is-ready' : ''}"><span>${ready ? '✓' : '○'}</span><div><strong>${label}</strong><small>${detail}</small></div></li>`;
+  const wizard = s.wizard || { status: 'action-required', progress: { completed: 0, total: 7, percent: 0 }, steps: [], nextAction: { code: 'setup', label: 'Create a paper-only safety envelope', target: 'setup' } };
+  const step = (item) => `<li class="${item.pass ? 'is-ready' : item.code === wizard.nextAction?.code ? 'is-next' : ''}"${item.code === wizard.nextAction?.code ? ' aria-current="step"' : ''}><span>${item.pass ? '✓' : item.code === wizard.nextAction?.code ? '→' : '○'}</span><div><strong>${esc(item.label)}</strong><small>${esc(item.detail)}</small></div></li>`;
   const connectionTemplate = JSON.stringify({ url: s.mcpEndpoint, headers: { 'X-API-Key': '<PASTE_YOUR_ONE_TIME_KEY>' }, mode: 'paper-only' }, null, 2);
 
   el.innerHTML = `
-    <div class="section-title">Self-service Agent Launchpad <span class="sub">authorize → connect → observe · paper-only</span></div>
+    <div class="section-title">Self-service Agent Launchpad <span class="sub">authorize → connect → supervise → verify · paper-only</span></div>
     <div class="control-boundary" role="status">Execution boundary · <strong>PAPER ONLY</strong> · simulation credits have no cash or token value</div>
+    <section class="card launchpad-wizard ${wizard.status === 'ready-for-preflight' ? 'is-ready' : 'is-guiding'}" aria-labelledby="launchpadWizardTitle">
+      <div class="launchpad-wizard-head"><div><span class="eyebrow">Agent Readiness Wizard</span><h2 id="launchpadWizardTitle">${wizard.status === 'ready-for-preflight' ? 'Ready for a fresh preflight' : 'One safe action at a time'}</h2><p>${esc(wizard.nextAction?.label || 'Review current readiness evidence')}</p></div><div class="launchpad-progress" role="img" aria-label="${wizard.progress?.completed || 0} of ${wizard.progress?.total || 7} readiness stages complete"><strong>${wizard.progress?.percent || 0}%</strong><span>${wizard.progress?.completed || 0}/${wizard.progress?.total || 7} verified</span></div></div>
+      <div class="launchpad-progress-track" aria-hidden="true"><span style="width:${Math.max(0, Math.min(100, Number(wizard.progress?.percent || 0)))}%"></span></div>
+      <div class="launchpad-wizard-actions"><button class="btn sm green" id="launchpadNextAction" data-target="${esc(wizard.nextAction?.target || 'control')}">${wizard.status === 'ready-for-preflight' ? 'Review preflight readiness' : 'Continue safely'}</button><span>Advisory only · never approves or trades</span></div>
+    </section>
     <ol class="launchpad-steps" aria-label="Agent launch progress">
-      ${step(!!wallet, 'Budget', wallet ? `${money(wallet.balanceMinor)} bounded simulation balance` : 'Create a capped paper wallet')}
-      ${step(!!activePact, 'Permission', activePact ? 'Human-approved Pact is active' : proposedPact ? 'Review and approve the proposed Pact' : 'Create a time-limited Pact')}
-      ${step(!!paperKeys.length, 'Access', paperKeys.length ? `${paperKeys.length} scoped paper key${paperKeys.length === 1 ? '' : 's'}` : 'Create a revocable agent key')}
-      ${step(!!(wallet && activePact && paperKeys.length), 'Connect', 'Use the MCP endpoint in Hermes, Codex, or another compatible client')}
+      ${(wizard.steps || []).map(step).join('')}
     </ol>
 
     ${!wallet ? `<section class="card launchpad-card" aria-labelledby="launchpadSetupTitle">
@@ -1104,7 +1107,7 @@ async function renderAgentLaunchpad() {
       <p class="muted">Add this MCP endpoint to your agent client, then provide the one-time key through its secret manager—not a URL, screenshot, or shared prompt.</p>
       <div class="launchpad-endpoint"><code>${esc(s.mcpEndpoint)}</code><button class="btn sm ghost" id="launchpadCopyEndpoint" type="button">Copy MCP endpoint</button><button class="btn sm ghost" id="launchpadCopyTemplate" type="button">Copy connection template</button></div>
       <pre class="launchpad-template">${esc(connectionTemplate)}</pre>
-      <p class="launchpad-ready ${wallet && activePact && paperKeys.length ? 'is-ready' : ''}">${wallet && activePact && paperKeys.length ? 'Ready: connect the client and watch activity in Decision Trace.' : 'Complete Budget, Permission, and Access before the agent can open a paper position.'}</p>
+      <p class="launchpad-ready ${wallet && activePact && paperKeys.length ? 'is-ready' : ''}">${wallet && activePact && paperKeys.length ? 'Connection materials complete. Runtime, mission, and safety readiness remain independently verified above.' : 'Complete Budget, Permission, and Access before connecting an agent.'}</p>
     </section>`;
 
   $('#launchpadSetup', el)?.addEventListener('submit', async (event) => {
@@ -1156,6 +1159,12 @@ async function renderAgentLaunchpad() {
   }));
   $('#launchpadCopyEndpoint', el)?.addEventListener('click', () => navigator.clipboard?.writeText(s.mcpEndpoint).then(() => toast('✓ MCP endpoint copied')));
   $('#launchpadCopyTemplate', el)?.addEventListener('click', () => navigator.clipboard?.writeText(connectionTemplate).then(() => toast('✓ Connection template copied')));
+  $('#launchpadNextAction', el)?.addEventListener('click', (event) => {
+    const target = event.currentTarget.dataset.target;
+    const ids = { setup: 'launchpadSetupTitle', pact: 'launchpadPactTitle', key: 'launchpadKeyTitle', connect: 'launchpadConnectTitle' };
+    if (ids[target]) document.getElementById(ids[target])?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    else switchView(target === 'trace' ? 'trace' : 'control');
+  });
 }
 
 // ---------------- Owner Agent Control Center ----------------
