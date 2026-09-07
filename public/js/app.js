@@ -1226,6 +1226,7 @@ async function renderAgentControl() {
   const capabilityRegistryHealthy = capabilityRegistry.decision === 'allow';
   const sessionSecurity = s.sessionSecurity || { status: 'unavailable', counts: {}, policy: {}, sessions: [] };
   const releaseTrust = s.releaseTrust || { status: 'unavailable', checks: {}, pipeline: {}, sbom: {}, failedChecks: [] };
+  const missionRunner = s.missionRunner || { status: 'idle', decision: 'hold', reasonCode: 'no-running-mission', timeline: [], checks: [], runtime: {}, guarantees: {}, execution: {} };
   const supervisedReady = (runtime.runtimes || []).filter((item) => item.ready
     && item.supervisor?.managed && item.supervisor?.healthy && item.checkpoint
     && item.quarantine?.active !== true && item.execution?.newMissionExposureAllowed).length;
@@ -1254,6 +1255,18 @@ async function renderAgentControl() {
       <div class="section-title" id="executionReadinessTitle">Agent Execution Readiness <span class="sub">every new agent paper position · fail closed</span><span class="receipt-chain ${executionReady ? 'is-valid' : 'is-invalid'}">${executionReady ? 'ready for preflight' : 'new exposure blocked'}</span></div>
       <div class="readiness-grid">${readinessChecks.map(([label, pass]) => `<div><span>${esc(label)}</span><strong class="${pass ? 'up' : 'down'}">${pass ? 'PASS' : 'BLOCK'}</strong></div>`).join('')}</div>
       <p>Before any agent open, the server recomputes runtime supervision, incident quarantine, the 30-minute recovery probation, current fast/slow SLO burn, existing-position protection, structured data trust, emergency freeze, and exact wallet/Pact authority. The cumulative SLO budget remains visible as advisory history. The result is bound into the preflight fingerprint and retained in the execution receipt.</p>
+    </section>
+    <section class="card mission-runner ${missionRunner.status === 'blocked' ? 'is-blocked' : 'is-ready'}" aria-labelledby="missionRunnerTitle">
+      <div class="section-title" id="missionRunnerTitle">Supervised Paper Mission Runner <span class="sub">agent-portable · resumable · owner-visible</span><span class="receipt-chain ${missionRunner.status === 'blocked' ? 'is-invalid' : 'is-valid'}">${esc(missionRunner.status)}</span></div>
+      <div class="mission-runner-summary">
+        <div><span>Mission</span><strong>${esc(missionRunner.mission?.name || 'No running mission')}</strong><small>${esc((missionRunner.mission?.symbols || []).join(', ') || 'Create or start a mission')}</small></div>
+        <div><span>Current stage</span><strong>${esc(missionRunner.currentStage || 'idle')}</strong><small>${esc(missionRunner.reasonCode || 'not evaluated')}</small></div>
+        <div><span>Next actor</span><strong>${esc(missionRunner.nextAction?.actor || 'owner')}</strong><small>${esc(missionRunner.nextAction?.tool || 'owner control center')}</small></div>
+        <div><span>Execution</span><strong>${missionRunner.execution?.attempted ? 'attempted' : 'not attempted'}</strong><small>paper-only boundary</small></div>
+      </div>
+      <ol class="mission-runner-timeline" aria-label="Supervised mission workflow">${(missionRunner.timeline || []).map((step, index) => `<li class="is-${esc(step.status)}"><span class="mono">${String(index + 1).padStart(2, '0')}</span><strong>${esc(step.title)}</strong><small>${esc(step.tool)}</small></li>`).join('')}</ol>
+      <div class="mission-runner-next"><span class="chip ${missionRunner.status === 'blocked' ? 'bear' : missionRunner.status === 'awaiting-owner' ? 'warn' : 'bull'}">${esc(missionRunner.decision)}</span><p>${esc(missionRunner.nextAction?.description || 'Start a supervised paper mission to generate the next safe action.')}</p></div>
+      <p class="runtime-note">No action is executed by this panel. Every agent uses the same server-authored stages; preflight, short-lived owner approval, idempotent paper execution, receipt verification, and journaling remain separately enforced.</p>
     </section>
     <section class="card execution-readiness ${reconciliationHealthy ? 'is-ready' : 'is-blocked'}" aria-labelledby="executionReconciliationTitle">
       <div class="section-title" id="executionReconciliationTitle">Execution Reconciliation <span class="sub">intents · receipts · positions · journal · cash</span><span class="receipt-chain ${reconciliationHealthy ? 'is-valid' : 'is-invalid'}">${esc(reconciliation.status)}</span></div>
