@@ -184,6 +184,11 @@ try {
   assert.equal(reconciliationTool.annotations.readOnlyHint, true);
   assert.equal(reconciliationTool.annotations.destructiveHint, false);
   assert.equal(reconciliationTool.annotations.idempotentHint, true);
+  const missionRunnerTool = privateTools.body.result.tools.find((tool) => tool.name === 'paper_mission_runner_status');
+  assert(missionRunnerTool);
+  assert.equal(missionRunnerTool.annotations.readOnlyHint, true);
+  assert.equal(missionRunnerTool.annotations.destructiveHint, false);
+  assert.equal(missionRunnerTool.annotations.idempotentHint, true);
   const orchestratorTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_portfolio_orchestrator_status');
   assert(orchestratorTool);
   assert.equal(orchestratorTool.annotations.readOnlyHint, true);
@@ -773,6 +778,16 @@ try {
   assert.equal(orchestrator.body.result.structuredContent.execution.attempted, false);
   assert.equal(orchestrator.body.result.structuredContent.liveScopeUsed, false);
   assert.equal(orchestrator.body.result.structuredContent.publicChainUsed, false);
+
+  const missionRunner = await mcp('tools/call', {
+    name: 'paper_mission_runner_status', arguments: {},
+  }, { key: keyA.key, name: 'paper_mission_runner_status' });
+  assert.equal(missionRunner.body.result.structuredContent.ok, true);
+  assert.equal(missionRunner.body.result.structuredContent.mode, 'paper-only');
+  assert.equal(missionRunner.body.result.structuredContent.guarantees.automaticExecution, false);
+  assert.equal(missionRunner.body.result.structuredContent.execution.attempted, false);
+  assert.equal(missionRunner.body.result.structuredContent.liveScopeUsed, false);
+  assert.equal(missionRunner.body.result.structuredContent.publicChainUsed, false);
 
   const capabilityRegistry = await mcp('tools/call', {
     name: 'agent_capability_registry_status', arguments: {},

@@ -61,6 +61,7 @@ import * as agentKeys from './lib/agent-keys.js';
 import * as agentSessions from './lib/agent-sessions.js';
 import { buildAgentReleaseTrust } from './lib/agent-release-trust.js';
 import { buildAgentReadinessWizard } from './lib/agent-readiness-wizard.js';
+import { buildSupervisedMissionRunner } from './lib/supervised-mission-runner.js';
 import * as liveProposals from './lib/live-proposals.js';
 import * as management from './lib/management.js';
 import * as triggers from './lib/triggers.js';
@@ -827,7 +828,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.45.1';
+const DISCOVERY_VERSION = '1.46.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -901,6 +902,7 @@ const OPENAPI_PATHS = {
   '/api/signals': { post: { summary: 'Publish a signal as the authenticated principal; SHA-256 pinned on IOST mainnet', tags: ['agents'] } },
   '/api/agent-keys': { get: { summary: 'My AI-agent API keys (scopes, prefixes)', tags: ['auth'] }, post: { summary: 'Mint a scoped AI-agent API key', tags: ['auth'] } },
   '/api/agent-control': { get: { summary: 'Owner-only agent operations snapshot: activity, permissions, budgets and safety state', tags: ['autonomy'] } },
+  '/api/agent-mission-runner': { get: { summary: 'Read the deterministic supervised paper mission stage and next permitted action', tags: ['autonomy'] } },
   '/api/agent-control/emergency-stop': { post: { summary: 'Owner-only fail-safe: stop autopilot, suspend owned agent wallets and disable live execution', tags: ['autonomy'] } },
   '/api/agent-missions': { get: { summary: 'Owner-only supervised paper missions and trace evidence', tags: ['autonomy'] }, post: { summary: 'Create a paused paper mission bound to an exact active wallet and Pact', tags: ['autonomy'] } },
   '/api/agent-missions/{id}/start': { post: { summary: 'Start an owner paper mission after revalidating its wallet and Pact', tags: ['autonomy'] } },
@@ -1387,6 +1389,7 @@ async function mcpToolCall(req, name, args) {
       if (!ownerId) throw Object.assign(new Error('user-bound mission access required'), { status: 403 });
       return { ok: true, mode: 'paper-only', missions: missions.listMissionEvidence(ownerId) };
     }
+    case 'paper_mission_runner_status': return missionRunnerFor(req, args || {});
     case 'paper_mission_checkpoint': {
       const ownerId = missionOwnerId(req);
       if (!ownerId) throw Object.assign(new Error('user-bound mission access required'), { status: 403 });
@@ -1932,6 +1935,12 @@ app.get('/api/execution-reconciliation', requireUser, (req, res) => {
   if (req.userAgent && !userAgentHas(req, 'read')) return res.status(403).json({ error: 'read scope required' });
   const accountId = accountFor(req).accountId;
   res.json(executionReconciliationFor(accountId, getAccount(accountId)));
+});
+app.get('/api/agent-mission-runner', requireUser, (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (req.userAgent && !userAgentHas(req, 'read')) return res.status(403).json({ error: 'read scope required' });
+  try { res.json(missionRunnerFor(req, { missionId: req.query.missionId || null })); }
+  catch (error) { res.status(error.status || 400).json({ ok: false, error: error.message }); }
 });
 app.get('/api/agent-portfolio-orchestrator', requireUser, (req, res) => {
   res.set('Cache-Control', 'private, no-store');
@@ -2862,6 +2871,36 @@ function capabilityRegistryFor(userId, now = Date.now()) {
     pacts: pacts.listPacts(ownerId),
     missions: missions.listMissions(ownerId),
     runtimesByKey: Object.fromEntries(keys.map((key) => [key.id, agentRuntime.agentRuntimeStatus(userId, key.id, now)])),
+    now,
+  });
+}
+
+function missionRunnerFor(req, { missionId = null } = {}, now = Date.now()) {
+  const ownerId = missionOwnerId(req);
+  if (!ownerId) throw Object.assign(new Error('user-bound mission access required'), { status: 403 });
+  const accountId = accountFor(req).accountId;
+  const userId = String(ownerId).replace(/^user:/, '');
+  const ownerMissions = missions.listMissions(ownerId).map((mission) => ({
+    ...mission,
+    authority: missions.missionEvidence(mission)?.authority,
+  }));
+  const runtime = req.userAgent
+    ? agentRuntime.agentRuntimeStatus(req.userAgent.userId, req.userAgent.keyId, now)
+    : agentRuntime.ownerRuntimeStatus(userId, now);
+  const accountState = getAccount(accountId);
+  const selectedMission = missionId
+    ? ownerMissions.find((mission) => mission.missionId === missionId && mission.status === 'running')
+    : ownerMissions.find((mission) => mission.status === 'running');
+  const approvalMissionRef = ownerApprovals.ownerApprovalMissionRef(selectedMission?.missionId);
+  return buildSupervisedMissionRunner({
+    missions: ownerMissions,
+    missionId,
+    runtime,
+    approvals: ownerApprovals.listOwnerApprovals(accountId, { limit: 100, now })
+      .filter((approval) => approval.order?.missionRef === approvalMissionRef),
+    reconciliation: executionReconciliationFor(accountId, accountState, now),
+    guardian: guardianCoverage(accountState?.positions || []),
+    emergencyFreeze: freeze.freezeState(),
     now,
   });
 }
@@ -4537,6 +4576,7 @@ app.get('/api/agent-control', requireUser, async (req, res) => {
   }));
   const pendingLive = liveProposals.listProposals({ userId: req.session.userId, status: 'pending', limit: 100 });
   const pendingPaper = ownerApprovals.listOwnerApprovals(`user:${req.session.userId}`, { status: 'pending' });
+  const paperApprovalHistory = ownerApprovals.listOwnerApprovals(`user:${req.session.userId}`, { limit: 100 });
   const ownerMissions = missions.listMissions(`user:${req.session.userId}`);
   const incidentStatus = agentIncidents.ownerIncidentStatus(req.session.userId);
   const runtimeStatus = agentRuntime.ownerRuntimeStatus(req.session.userId);
@@ -4552,6 +4592,16 @@ app.get('/api/agent-control', requireUser, async (req, res) => {
   const capabilityRegistry = capabilityRegistryFor(req.session.userId);
   const sessionSecurity = agentSessions.agentSessionSecurityStatus({ userId: req.session.userId, isKeyActive: agentKeys.isActiveKey });
   const releaseTrust = agentReleaseTrustStatus();
+  const runnerMission = ownerMissions.find((mission) => mission.status === 'running');
+  const runnerApprovalRef = ownerApprovals.ownerApprovalMissionRef(runnerMission?.missionId);
+  const missionRunner = buildSupervisedMissionRunner({
+    missions: ownerMissions.map((mission) => ({ ...mission, authority: missions.missionEvidence(mission)?.authority })),
+    runtime: runtimeStatus,
+    approvals: paperApprovalHistory.filter((approval) => approval.order?.missionRef === runnerApprovalRef),
+    reconciliation,
+    guardian: guardianStatus,
+    emergencyFreeze: freeze.freezeState(),
+  });
   const lastAction = ap.actions[0] || null;
   res.json({
     ok: true,
@@ -4587,6 +4637,7 @@ app.get('/api/agent-control', requireUser, async (req, res) => {
     capabilityRegistry,
     sessionSecurity,
     releaseTrust,
+    missionRunner,
     keys,
     keyStats: { active: keys.filter((k) => !k.revokedAt).length, revoked: keys.filter((k) => !!k.revokedAt).length },
     parentWallet,
