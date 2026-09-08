@@ -982,10 +982,11 @@ function setupNavPalette() {
 setupNavPalette();
 
 // ARD: deterministic paths — every view has a stable deep link (/app#scanner, /app#risk, …)
-const VALID_VIEWS = ['scanner', 'scores', 'risk', 'portfolio', 'onchain', 'news', 'assistant', 'journal', 'performance', 'evaluation', 'whales', 'smartmoney', 'audit', 'launchpad', 'agents', 'control', 'trace', 'points', 'aitt', 'wallet'];
+const VALID_VIEWS = ['scanner', 'intelligence', 'scores', 'risk', 'portfolio', 'onchain', 'news', 'assistant', 'journal', 'performance', 'evaluation', 'whales', 'smartmoney', 'audit', 'launchpad', 'agents', 'control', 'trace', 'points', 'aitt', 'wallet'];
 function switchView(view) {
   if (!VALID_VIEWS.includes(view)) view = 'scanner';
   state.activeView = view;
+  document.body.classList.toggle('intel-mode', view === 'intelligence');
   if (view !== 'control' && agentEventSource) { agentEventSource.close(); agentEventSource = null; }
   $$('.nav-btn').forEach(b => b.classList.toggle('is-active', b.dataset.view === view));
   $$('.view').forEach(v => v.classList.add('hidden'));
@@ -1038,8 +1039,51 @@ function refreshView(view) {
     }
     return;
   }
-  ({ scanner: renderScanner, scores: renderScores, risk: renderRisk, portfolio: renderPortfolio,
+  ({ scanner: renderScanner, intelligence: renderAssetIntelligence, scores: renderScores, risk: renderRisk, portfolio: renderPortfolio,
     onchain: renderOnchain, news: renderNews, assistant: renderAssistant, journal: renderJournal, performance: renderPerformance, evaluation: renderEvaluationLab, whales: renderWhales, smartmoney: renderSmartMoney, audit: renderAudit, launchpad: renderAgentLaunchpad, agents: renderAgents, control: renderAgentControl, trace: renderDecisionTrace, points: renderPoints, aitt: renderAITT, wallet: renderWallet })[view]();
+}
+
+// ---------------- Asset Intelligence Workspace ----------------
+let intelligenceSymbol = 'IOST';
+async function renderAssetIntelligence() {
+  const el = $('#view-intelligence');
+  el.innerHTML = skeleton();
+  try {
+    const scan = state.scan.length ? state.scan : await api('/api/scanner').catch(() => []);
+    const symbols = scan.length ? scan.map((item) => item.symbol) : ['IOST', 'BTC', 'ETH', 'SOL', 'AAPL', 'NVDA'];
+    const [intel, portfolio] = await Promise.all([
+      api(`/api/asset-intelligence/${encodeURIComponent(intelligenceSymbol)}`),
+      api('/api/portfolio').catch(() => null),
+    ]);
+    const holding = (portfolio?.holdings || []).find((item) => item.symbol === intel.symbol);
+    const scores = Object.entries(intel.score.subscores || {});
+    const signals = intel.technicals.signals || [];
+    const scoreBars = scores.map(([name, value]) => `<div class="intel-score-row"><span>${esc(name)}</span><div><i style="width:${Math.max(0, Math.min(100, value))}%"></i></div><strong>${Math.round(value)}</strong></div>`).join('');
+    const headlines = (intel.sentiment.headlines || []).map((item) => `<li><a href="${esc(item.url || '#')}" ${item.url ? 'target="_blank" rel="noopener noreferrer"' : 'aria-disabled="true"'}>${esc(item.title)}</a><span>${esc(item.source)} · ${item.ts ? timeAgo(item.ts) : 'time unavailable'} · <b class="${item.sentiment === 'bullish' ? 'up' : item.sentiment === 'bearish' ? 'down' : ''}">${esc(item.sentiment)}</b></span></li>`).join('');
+    el.innerHTML = `
+      <div class="intel-head">
+        <div><span class="eyebrow">AITT Asset Intelligence</span><h1>${esc(intel.symbol)} Asset 360</h1><p>One evidence workspace for humans and agents. Intelligence only — never an order or recommendation.</p></div>
+        <label class="intel-selector">Asset<select id="intelSymbol">${symbols.map((symbol) => `<option value="${esc(symbol)}" ${symbol === intel.symbol ? 'selected' : ''}>${esc(symbol)}</option>`).join('')}</select></label>
+      </div>
+      <div class="intel-boundary" role="status"><strong>READ-ONLY</strong><span>No execution authority</span><span>Fresh preflight required</span><span>Human approval may be required</span></div>
+      <div class="intel-grid">
+        <section class="card intel-market">
+          <span class="eyebrow">Market evidence</span><div class="intel-price">${fmtPrice(intel.market.price, intel.type)}</div>
+          <div class="${intel.market.change24hPct >= 0 ? 'up' : 'down'}">${pct(intel.market.change24hPct)} · ${esc(intel.market.bias)}</div>
+          <dl><div><dt>Source</dt><dd>${esc(intel.market.source)}</dd></div><div><dt>Freshness</dt><dd class="${intel.market.fresh ? 'up' : 'warn'}">${intel.market.fresh ? 'Fresh' : 'Stale'} · ${intel.market.ageMs == null ? '—' : Math.round(intel.market.ageMs / 1000) + 's'}</dd></div><div><dt>24h range</dt><dd>${fmtPrice(intel.market.low24h, intel.type)} – ${fmtPrice(intel.market.high24h, intel.type)}</dd></div></dl>
+        </section>
+        <section class="card intel-composite"><span class="eyebrow">Composite evidence</span><div class="intel-score">${Math.round(intel.score.composite)}<small>/100</small></div><strong>${esc(intel.score.evidenceBand)}</strong><p>Descriptive evidence strength, not a buy/sell instruction.</p></section>
+        <section class="card intel-probability"><span class="eyebrow">Directional estimate</span><div class="intel-score">${intel.probability?.up == null ? '—' : Math.round(intel.probability.up * 100) + '%'}<small> up</small></div><p>${esc(intel.probability?.methodology || 'Evidence unavailable')}</p></section>
+        <section class="card intel-scores"><div class="section-title">Evidence dimensions</div>${scoreBars}</section>
+        <section class="card intel-signals"><div class="section-title">Signals & risk context</div><div class="intel-metrics"><span>RSI <b>${fmtNum(intel.technicals.rsi, 1)}</b></span><span>ATR <b>${fmtNum(intel.technicals.atrPct, 2)}%</b></span><span>Vol Z <b>${fmtNum(intel.technicals.volumeZScore, 2)}</b></span><span>Large trades <b>${intel.activity.largeTradeCount}</b></span></div><div class="intel-chips">${signals.map((signal) => `<span class="chip ${signal.direction === 'bullish' ? 'bull' : signal.direction === 'bearish' ? 'bear' : 'neut'}" title="${esc(signal.detail)}">${esc(signal.label)}</span>`).join('') || '<span class="muted">No current technical flags</span>'}</div></section>
+        <section class="card intel-trust"><div class="section-title">Evidence trust</div><dl><div><dt>Provenance coverage</dt><dd>${intel.evidence.provenanceCoveragePct}%</dd></div><div><dt>Relevant news</dt><dd>${intel.sentiment.coverage}</dd></div><div><dt>Quarantined</dt><dd>${intel.evidence.quarantinedCount}</dd></div><div><dt>External content authority</dt><dd>Data only</dd></div></dl><p class="muted">Suspicious content is quarantined and excluded. Missing evidence is never inferred.</p></section>
+        <section class="card intel-news"><div class="section-title">Asset news <span class="sub">${esc(intel.sentiment.label)} · ${intel.sentiment.score}/100</span></div><ul>${headlines || '<li class="muted">No asset-specific trusted headlines in the current feed.</li>'}</ul></section>
+        <section class="card intel-portfolio"><div class="section-title">Portfolio context</div>${holding ? `<p><strong>${esc(intel.symbol)}</strong> is currently held.</p><dl><div><dt>Portfolio weight</dt><dd>${fmtNum(holding.weightPct, 2)}%</dd></div><div><dt>Position notional</dt><dd>$${fmtNum(holding.notional, 2)}</dd></div></dl>` : '<p>This asset is not currently held in the visible paper portfolio.</p>'}<p class="muted">Portfolio context does not authorize execution.</p></section>
+        <section class="card intel-actions"><div class="section-title">Continue the workflow</div><p>Research can continue here. Any action must move through the platform’s separate permission, risk, approval and receipt controls.</p><div><button class="btn sm" data-intel-view="assistant">Ask Agent</button><button class="btn sm ghost" data-intel-view="risk">Risk calculator</button><button class="btn sm ghost" data-intel-view="audit">Token audit</button><button class="btn sm ghost" data-intel-view="trace">Decision trace</button></div></section>
+      </div>`;
+    $('#intelSymbol')?.addEventListener('change', (event) => { intelligenceSymbol = event.target.value; renderAssetIntelligence(); });
+    $$('[data-intel-view]', el).forEach((button) => button.addEventListener('click', () => switchView(button.dataset.intelView)));
+  } catch (error) { el.innerHTML = `<div class="card empty">Asset intelligence unavailable: ${esc(error.message)}</div>`; }
 }
 
 // ---------------- Self-service Agent Launchpad ----------------

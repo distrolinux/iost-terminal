@@ -212,6 +212,11 @@ MCP Apps clients can render the private `evaluation_review` panel with evaluatio
 history, two-run comparison charts and deterministic JSON/CSV evidence exports.
 Owner testing instructions: `/docs/OWNER_MCP_APP_TESTING.md`.
 
+### Asset Intelligence Workspace
+- `GET /api/asset-intelligence/:symbol` and public MCP tool `asset_intelligence` expose the same normalized Asset 360 evidence.
+- Evidence includes server market freshness, six score dimensions, bounded probability, technical and large-trade context, trusted news, sentiment and provenance coverage.
+- The workspace is intelligence-only: it cannot recommend, preflight, approve, reserve, trade, expand authority, use live scope or perform a public-chain action.
+
 ### Agent Data Trust Firewall
 - `GET /api/agent-data-trust?symbol=IOST` — private read-only quarantine, provenance and execution-evidence status
 - `agent_data_trust_status` — equivalent authenticated MCP status tool

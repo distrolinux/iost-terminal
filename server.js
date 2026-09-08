@@ -64,6 +64,7 @@ import { buildAgentReadinessWizard } from './lib/agent-readiness-wizard.js';
 import { buildSupervisedMissionRunner } from './lib/supervised-mission-runner.js';
 import * as agentEvents from './lib/agent-event-stream.js';
 import { buildAgentDecisionTrace } from './lib/agent-decision-trace.js';
+import { buildAssetIntelligence } from './lib/asset-intelligence.js';
 import * as liveProposals from './lib/live-proposals.js';
 import * as management from './lib/management.js';
 import * as triggers from './lib/triggers.js';
@@ -876,7 +877,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.48.0';
+const DISCOVERY_VERSION = '1.49.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -1306,6 +1307,13 @@ async function mcpToolCall(req, name, args) {
       const sym = String(args?.symbol || '').toUpperCase().trim();
       if (!sym) throw new Error('missing required argument: symbol');
       return await analyzeSymbol(sym);
+    }
+    case 'asset_intelligence': {
+      const sym = String(args?.symbol || '').toUpperCase().trim();
+      if (![...WATCHLIST.crypto, ...WATCHLIST.stocks].includes(sym)) throw new Error('unsupported symbol');
+      const [analysis, news] = await Promise.all([analyzeSymbol(sym), getNews()]);
+      const score = computeScores(analysis, getAssetSentiment(sym));
+      return buildAssetIntelligence({ symbol: sym, analysis, score, probability: probabilityOf(score, analysis), news });
     }
     case 'news_sentiment': return await getNews();
     case 'chain_status': return await getChainSnapshot();
@@ -1807,6 +1815,17 @@ app.get('/api/market/movers', publicLimiter, async (req, res) => {
 app.get('/api/analyze/:symbol', publicLimiter, async (req, res) => {
   try { res.json(await analyzeSymbol(req.params.symbol.toUpperCase(), { force: true })); }
   catch (e) { res.status(502).json({ error: e.message }); }
+});
+
+app.get('/api/asset-intelligence/:symbol', publicLimiter, async (req, res) => {
+  const symbol = String(req.params.symbol || '').toUpperCase().trim();
+  if (![...WATCHLIST.crypto, ...WATCHLIST.stocks].includes(symbol)) return res.status(404).json({ error: 'unsupported symbol' });
+  try {
+    const [analysis, news] = await Promise.all([analyzeSymbol(symbol, { force: true }), getNews()]);
+    const score = computeScores(analysis, getAssetSentiment(symbol));
+    res.setHeader('Cache-Control', 'public, max-age=10, stale-while-revalidate=20');
+    return res.json(buildAssetIntelligence({ symbol, analysis, score, probability: probabilityOf(score, analysis), news }));
+  } catch (error) { return res.status(502).json({ error: error.message }); }
 });
 
 async function allScores() {
