@@ -205,6 +205,7 @@ try {
   assert.equal(guardianTool.annotations.destructiveHint, false);
   assert.equal(guardianTool.annotations.idempotentHint, true);
   const runtimeStatusTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_runtime_status');
+  const agentEventTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_event_stream_status');
   const runtimeHeartbeatTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_runtime_heartbeat');
   const incidentStatusTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_incident_status');
   const safetySloTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_safety_slo_status');
@@ -214,6 +215,10 @@ try {
   const sessionSecurityTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_session_security_status');
   assert.equal(runtimeStatusTool.annotations.readOnlyHint, true);
   assert.equal(runtimeStatusTool.annotations.destructiveHint, false);
+  assert.equal(agentEventTool.annotations.readOnlyHint, true);
+  assert.equal(agentEventTool.annotations.destructiveHint, false);
+  assert.equal(agentEventTool.annotations.idempotentHint, true);
+  assert.equal(agentEventTool.inputSchema.properties.afterSequence.minimum, 0);
   assert.equal(runtimeHeartbeatTool.annotations.readOnlyHint, false);
   assert.equal(runtimeHeartbeatTool.annotations.destructiveHint, false);
   assert.equal(runtimeHeartbeatTool.annotations.idempotentHint, true);
@@ -473,6 +478,50 @@ try {
     key: keyB.key, name: 'agent_runtime_status',
   });
   assert.equal(otherRuntimeAfterSpoof.body.result.structuredContent.status, 'not-enrolled', 'REST payload must not override authenticated runtime identity');
+
+  const agentEventStatus = await mcp('tools/call', {
+    name: 'agent_event_stream_status', arguments: { afterSequence: 0, limit: 20 },
+  }, { key: keyA.key, name: 'agent_event_stream_status' });
+  assert.equal(agentEventStatus.status, 200);
+  assert.equal(agentEventStatus.body.result.structuredContent.mode, 'paper-only');
+  assert.equal(agentEventStatus.body.result.structuredContent.status, 'healthy');
+  assert.equal(agentEventStatus.body.result.structuredContent.chain.verified, true);
+  assert.equal(agentEventStatus.body.result.structuredContent.guarantees.ownerIsolated, true);
+  assert.equal(agentEventStatus.body.result.structuredContent.transport.lastEventIdSupported, true);
+  assert.equal(agentEventStatus.body.result.structuredContent.execution.tradeCreated, false);
+  assert.equal(agentEventStatus.body.result.structuredContent.liveScopeUsed, false);
+  assert.equal(agentEventStatus.body.result.structuredContent.publicChainUsed, false);
+  const otherAgentEvents = await mcp('tools/call', {
+    name: 'agent_event_stream_status', arguments: { afterSequence: 0, limit: 20 },
+  }, { key: keyB.key, name: 'agent_event_stream_status' });
+  assert(otherAgentEvents.body.result.structuredContent.cursor.latestSequence
+    < agentEventStatus.body.result.structuredContent.cursor.latestSequence, 'event history must remain independently sequenced per owner');
+  const agentEventRest = await fetch(`${BASE}/api/agent-events?afterSequence=0&limit=5`, {
+    headers: { 'X-API-Key': keyA.key },
+  });
+  assert.equal(agentEventRest.status, 200);
+  assert.match(agentEventRest.headers.get('cache-control') || '', /private/);
+  assert.match(agentEventRest.headers.get('cache-control') || '', /no-store/);
+  assert.equal((await agentEventRest.json()).chain.verified, true);
+  const unauthenticatedAgentStream = await fetch(`${BASE}/api/agent-events/stream`);
+  assert.equal(unauthenticatedAgentStream.status, 401);
+  const streamAbort = new AbortController();
+  const agentEventStream = await fetch(`${BASE}/api/agent-events/stream?afterSequence=0`, {
+    headers: { 'X-API-Key': keyA.key }, signal: streamAbort.signal,
+  });
+  assert.equal(agentEventStream.status, 200);
+  assert.match(agentEventStream.headers.get('content-type') || '', /text\/event-stream/);
+  assert.match(agentEventStream.headers.get('cache-control') || '', /private, no-store/);
+  assert.equal(agentEventStream.headers.get('x-accel-buffering'), 'no');
+  const streamReader = agentEventStream.body.getReader();
+  let streamChunk = '';
+  for (let i = 0; i < 8 && !/(?:event: agent-event|event: ready)/.test(streamChunk); i += 1) {
+    const chunk = await streamReader.read();
+    if (chunk.done) break;
+    streamChunk += new TextDecoder().decode(chunk.value);
+  }
+  assert.match(streamChunk, /(?:event: agent-event|event: ready)/);
+  streamAbort.abort();
 
   const scorecards = await mcp('tools/call', { name: 'strategy_promotion_scorecards', arguments: { limit: 5 } }, {
     key: keyReadOnly.key, name: 'strategy_promotion_scorecards',

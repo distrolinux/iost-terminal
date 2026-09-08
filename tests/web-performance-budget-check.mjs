@@ -46,7 +46,7 @@ within('Hub initial compressed transfer', hubInitialTransfer, budgets.hub.initia
 
 assert.match(readFileSync(new URL('public/index.html', root), 'utf8'), /<img[^>]+ai-operator\.webp[^>]+loading="lazy"/);
 assert.match(server, /import compression from 'compression'/);
-assert.match(server, /req\.path !== '\/api\/events' && compression\.filter/);
+assert.match(server, /'\/api\/events', '\/api\/agent-events\/stream'/);
 assert.match(server, /express\.static\(join\(ROOT, 'public'\), \{ maxAge: '1h' \}\)/);
 assert.ok(pkg.dependencies?.compression, 'compression must remain a production dependency');
 console.log('PASS  compression, SSE bypass, static caching, and lazy-image contracts');

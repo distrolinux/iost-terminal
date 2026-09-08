@@ -82,6 +82,11 @@ Supervisor companion at a 20-second cadence. It persists an exact write-ahead
 retry, recovers only from an offline or draining checkpoint, and records
 draining on shutdown; it never makes a trading decision or gains a scope.
 Position Guardian continues protecting existing positions.
+Use the private read-only `agent_event_stream_status` tool or the resumable
+`/api/agent-events/stream` SSE endpoint to follow sanitized operational outcomes.
+Per-owner sequence numbers, `Last-Event-ID` replay, explicit retention-gap
+notices, 15-second transport heartbeats and an anchored SHA-256 chain make
+reconnects observable without granting approval or execution authority.
 Poll the private read-only `agent_incident_status` tool for deduplicated runtime
 warnings, offline quarantines, recovery readiness and owner-review state. An
 agent cannot acknowledge, resolve or release its own quarantine; the runtime
