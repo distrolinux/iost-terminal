@@ -20,6 +20,7 @@ assert.equal(result.ok, true);
 assert.equal(result.mode, 'intelligence-only');
 assert.equal(result.score.evidenceBand, 'Strong');
 assert.equal(result.score.recommendation, false);
+assert.equal(result.probability.down, .36, 'derive the complementary downside probability when the model only emits probUp');
 assert.equal(result.sentiment.headlines.length, 1);
 assert.equal(result.evidence.externalContentAuthority, 'data-only');
 assert.deepEqual(result.boundaries, {
