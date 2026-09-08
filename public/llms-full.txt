@@ -219,6 +219,13 @@ Owner testing instructions: `/docs/OWNER_MCP_APP_TESTING.md`.
 - Suspicious instruction-like text and lookalike sources are quarantined and excluded before agent consumption.
 - Paper preflight requires allowlisted structured quote provenance; its hashes and trust decision are HMAC-bound into the preflight fingerprint.
 
+### Real-time Agent Event Stream
+- `GET /api/agent-events?afterSequence=&limit=` — private bounded replay snapshot
+- `GET /api/agent-events/stream` — private Server-Sent Events stream; resume with `Last-Event-ID` or `afterSequence`
+- `agent_event_stream_status` — equivalent read-only MCP replay and integrity status
+- Events use per-owner monotonic sequences, explicit cursor-gap notices, 15-second transport heartbeats, bounded retention and an anchored SHA-256 chain.
+- Only sanitized outcomes are retained. The stream cannot approve, reserve, trade, expand authority, use live scope or perform a public-chain action.
+
 ### Agent Execution Readiness Gate
 - `GET /api/agent-execution-readiness?symbol=IOST` — private, no-store, read-only readiness evidence for the calling user agent
 - `agent_execution_readiness` — equivalent authenticated MCP status tool

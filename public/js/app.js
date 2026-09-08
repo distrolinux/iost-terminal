@@ -21,6 +21,7 @@ const gradeClass = (g) => g.toLowerCase().replace(/\s+/g, '-');
 const state = { scan: [], scores: [], news: null, onchain: null, paper: null, portfolio: null, activeView: 'scanner' };
 let sseOk = false;
 let detailLastFocus = null;
+let agentEventSource = null;
 
 function detailFocusable() {
   return $$('#detailBody a[href], #detailBody button:not([disabled]), #detailBody input:not([disabled]), #detailBody select:not([disabled]), #detailBody textarea:not([disabled]), #detailBody [tabindex]:not([tabindex="-1"])')
@@ -985,6 +986,7 @@ const VALID_VIEWS = ['scanner', 'scores', 'risk', 'portfolio', 'onchain', 'news'
 function switchView(view) {
   if (!VALID_VIEWS.includes(view)) view = 'scanner';
   state.activeView = view;
+  if (view !== 'control' && agentEventSource) { agentEventSource.close(); agentEventSource = null; }
   $$('.nav-btn').forEach(b => b.classList.toggle('is-active', b.dataset.view === view));
   $$('.view').forEach(v => v.classList.add('hidden'));
   $(`#view-${view}`).classList.remove('hidden');
@@ -1170,6 +1172,43 @@ async function renderAgentLaunchpad() {
 // ---------------- Owner Agent Control Center ----------------
 // One operational view over the server's existing policy and revocation rails.
 // It is intentionally paper-first and never receives API-key or venue secrets.
+function agentEventHtml(event) {
+  const tone = event.severity === 'critical' ? 'bear' : event.severity === 'warning' ? 'warn' : 'bull';
+  return `<li data-agent-event-sequence="${Number(event.sequence || 0)}"><span class="event-sequence mono">#${Number(event.sequence || 0)}</span><span class="event-node ${tone}" aria-hidden="true"></span><div><strong>${esc(event.summary || event.type || 'Agent event')}</strong><span>${esc(event.category || 'operations')} · ${esc(event.actor || 'system')} · ${event.occurredAt ? timeAgo(event.occurredAt) : 'now'}</span></div><span class="chip ${tone}">${esc(event.outcome || 'observed')}</span></li>`;
+}
+function connectAgentEventStream(afterSequence = 0) {
+  if (agentEventSource) agentEventSource.close();
+  const status = $('#agentEventConnection');
+  agentEventSource = new EventSource(`/api/agent-events/stream?afterSequence=${Number(afterSequence || 0)}`);
+  agentEventSource.addEventListener('ready', (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      if (status) { status.textContent = data.chainVerified ? 'live · verified' : 'verification blocked'; status.className = `receipt-chain ${data.chainVerified ? 'is-valid' : 'is-invalid'}`; }
+    } catch { /* ignore malformed readiness */ }
+  });
+  agentEventSource.addEventListener('agent-event', (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      const list = $('#agentEventTimeline');
+      if (!list || list.querySelector(`[data-agent-event-sequence="${Number(data.sequence)}"]`)) return;
+      list.insertAdjacentHTML('afterbegin', agentEventHtml(data));
+      while (list.children.length > 12) list.lastElementChild.remove();
+      $('#agentEventEmpty')?.remove();
+      const cursor = $('#agentEventCursor');
+      if (cursor) cursor.textContent = `sequence ${Number(data.sequence)}`;
+    } catch { /* ignore malformed event */ }
+  });
+  agentEventSource.addEventListener('gap', (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      const gap = $('#agentEventGap');
+      if (gap) { gap.hidden = false; gap.textContent = `Replay gap detected. Timeline resumed at retained sequence ${Number(data.earliestAvailable)}.`; }
+    } catch { /* ignore malformed gap */ }
+  });
+  agentEventSource.addEventListener('heartbeat', () => { if (status) status.textContent = 'live · verified'; });
+  agentEventSource.addEventListener('error', () => { if (status) { status.textContent = 'reconnecting'; status.className = 'receipt-chain is-invalid'; } });
+}
+
 async function renderAgentControl() {
   const el = $('#view-control');
   el.innerHTML = skeleton();
@@ -1227,6 +1266,7 @@ async function renderAgentControl() {
   const sessionSecurity = s.sessionSecurity || { status: 'unavailable', counts: {}, policy: {}, sessions: [] };
   const releaseTrust = s.releaseTrust || { status: 'unavailable', checks: {}, pipeline: {}, sbom: {}, failedChecks: [] };
   const missionRunner = s.missionRunner || { status: 'idle', decision: 'hold', reasonCode: 'no-running-mission', timeline: [], checks: [], runtime: {}, guarantees: {}, execution: {} };
+  const eventStream = s.eventStream || { status: 'unavailable', events: [], cursor: {}, replay: {}, chain: {}, transport: {} };
   const supervisedReady = (runtime.runtimes || []).filter((item) => item.ready
     && item.supervisor?.managed && item.supervisor?.healthy && item.checkpoint
     && item.quarantine?.active !== true && item.execution?.newMissionExposureAllowed).length;
@@ -1267,6 +1307,18 @@ async function renderAgentControl() {
       <ol class="mission-runner-timeline" aria-label="Supervised mission workflow">${(missionRunner.timeline || []).map((step, index) => `<li class="is-${esc(step.status)}"><span class="mono">${String(index + 1).padStart(2, '0')}</span><strong>${esc(step.title)}</strong><small>${esc(step.tool)}</small></li>`).join('')}</ol>
       <div class="mission-runner-next"><span class="chip ${missionRunner.status === 'blocked' ? 'bear' : missionRunner.status === 'awaiting-owner' ? 'warn' : 'bull'}">${esc(missionRunner.decision)}</span><p>${esc(missionRunner.nextAction?.description || 'Start a supervised paper mission to generate the next safe action.')}</p></div>
       <p class="runtime-note">No action is executed by this panel. Every agent uses the same server-authored stages; preflight, short-lived owner approval, idempotent paper execution, receipt verification, and journaling remain separately enforced.</p>
+    </section>
+    <section class="card agent-event-stream" aria-labelledby="agentEventStreamTitle">
+      <div class="section-title" id="agentEventStreamTitle">Real-time Agent Event Stream <span class="sub">resumable · owner-private · tamper-evident</span><span class="receipt-chain ${eventStream.chain?.verified ? 'is-valid' : 'is-invalid'}" id="agentEventConnection">${eventStream.chain?.verified ? 'connecting · verified' : 'verification blocked'}</span></div>
+      <div class="agent-event-summary">
+        <div><span>Cursor</span><strong id="agentEventCursor">sequence ${Number(eventStream.cursor?.latestSequence || 0)}</strong></div>
+        <div><span>Retention</span><strong>${Number(eventStream.retention?.retainedCount || 0)} events</strong></div>
+        <div><span>Heartbeat</span><strong>${Math.round(Number(eventStream.transport?.heartbeatIntervalMs || 15000) / 1000)} seconds</strong></div>
+        <div><span>Replay</span><strong>${eventStream.replay?.gapDetected ? 'gap detected' : 'cursor safe'}</strong></div>
+      </div>
+      <p class="agent-event-gap" id="agentEventGap" ${eventStream.replay?.gapDetected ? '' : 'hidden'}>${eventStream.replay?.gapDetected ? `Replay gap detected. Timeline resumed at retained sequence ${Number(eventStream.cursor?.earliestSequence || 0)}.` : ''}</p>
+      ${(eventStream.events || []).length ? `<ol class="agent-event-timeline" id="agentEventTimeline" aria-live="polite">${[...(eventStream.events || [])].reverse().map(agentEventHtml).join('')}</ol>` : '<ol class="agent-event-timeline" id="agentEventTimeline" aria-live="polite"></ol><p class="muted" id="agentEventEmpty">No agent events have been recorded yet. The stream is connected and ready.</p>'}
+      <p class="runtime-note">Reconnects resume from the last sequence. A retention gap is explicit rather than silently skipped, and only sanitized operational outcomes enter this private stream. It cannot approve, reserve, trade, expand authority, or access a public chain.</p>
     </section>
     <section class="card execution-readiness ${reconciliationHealthy ? 'is-ready' : 'is-blocked'}" aria-labelledby="executionReconciliationTitle">
       <div class="section-title" id="executionReconciliationTitle">Execution Reconciliation <span class="sub">intents · receipts · positions · journal · cash</span><span class="receipt-chain ${reconciliationHealthy ? 'is-valid' : 'is-invalid'}">${esc(reconciliation.status)}</span></div>
@@ -1504,6 +1556,8 @@ async function renderAgentControl() {
         return `<article class="control-pact"><div><strong>${esc(p.intent)}</strong><span class="mono muted">${esc(p.pactId)}</span></div><span class="chip ${p.status === 'active' ? 'bull' : p.status === 'proposed' ? 'warn' : 'neut'}">${esc(p.status)}</span><dl><div><dt>Wallet</dt><dd>${esc(p.agentWalletId || 'none')}</dd></div><div><dt>Budget</dt><dd>${p.completion?.type === 'budget' ? money(p.completion.budgetMinor) : '—'}</dd></div><div><dt>Per order</dt><dd>${cap ? money(cap) : 'Unlimited'}</dd></div><div><dt>Expires</dt><dd>${esc(expiry)}</dd></div></dl><div class="control-pact-actions">${p.status === 'proposed' ? `<button class="btn sm green" data-pact-approve="${esc(p.pactId)}">Approve paper Pact</button>` : ''}${p.status === 'active' ? `<button class="btn sm ghost" data-pact-terminate="${esc(p.pactId)}">End Pact</button>` : ''}</div></article>`;
       }).join('')}</div>` : '<div class="empty">No paper Pacts proposed.</div>'}
     </section>`);
+
+  connectAgentEventStream(eventStream.cursor?.latestSequence || 0);
 
   $('#controlAutopilot')?.addEventListener('click', async () => {
     await post(ap.enabled ? '/api/autopilot/stop' : '/api/autopilot/start', {});

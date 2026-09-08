@@ -62,6 +62,7 @@ import * as agentSessions from './lib/agent-sessions.js';
 import { buildAgentReleaseTrust } from './lib/agent-release-trust.js';
 import { buildAgentReadinessWizard } from './lib/agent-readiness-wizard.js';
 import { buildSupervisedMissionRunner } from './lib/supervised-mission-runner.js';
+import * as agentEvents from './lib/agent-event-stream.js';
 import * as liveProposals from './lib/live-proposals.js';
 import * as management from './lib/management.js';
 import * as triggers from './lib/triggers.js';
@@ -137,7 +138,7 @@ try {
     'stakes.json', 'slashes.json', 'points.json', 'wallets.json', 'limits.json', 'freeze.json',
     'pacts.json', 'evm-wallets.json', 'aitt-claims-v2.json', 'aitt-points-snapshot.json',
     'iost_accounts.json', 'pending_pins.json', 'signals.json', 'follows.json', 'triggers.json',
-    'payments.json', 'fee-config.json', 'live-proposals.json', 'agent-audit.jsonl',
+    'payments.json', 'fee-config.json', 'live-proposals.json', 'agent-audit.jsonl', 'agent-event-stream.json',
     'live-audit.jsonl', 'arena-audit.jsonl', 'mcp-tasks.json', 'missions.json', 'execution-receipts.jsonl',
     'execution-intents.json', 'owner-approvals.json', 'agent-runtimes.json', 'agent-incidents.json', 'agent-slo-observation.json', 'owner-alert-router.json',
   ]) {
@@ -155,6 +156,7 @@ try {
   agentRuntime.secureAgentRuntimePermissions();
   agentIncidents.secureAgentIncidentPermissions();
   ownerAlerts.secureOwnerAlertPermissions();
+  agentEvents.secureAgentEventPermissions();
 } catch (e) {
   console.error(`[security] refusing boot: sensitive store permissions could not be secured (${e.message})`);
   throw e;
@@ -200,7 +202,7 @@ app.use(compression({
   threshold: 1024,
   // Streaming events must flush immediately rather than wait for a compression
   // buffer. Everything else uses the package's content-type safety filter.
-  filter: (req, res) => req.path !== '/api/events' && compression.filter(req, res),
+  filter: (req, res) => !['/api/events', '/api/agent-events/stream'].includes(req.path) && compression.filter(req, res),
 }));
 app.use(express.json({ limit: '200kb' }));
 
@@ -232,6 +234,48 @@ const SECURITY_HEADERS = {
 };
 app.use((req, res, next) => {
   res.set(SECURITY_HEADERS);
+  next();
+});
+
+// Feed authenticated operational outcomes into the private Agent Event Stream.
+// The listener is attached before route authentication and resolves identity
+// only after the response, so both browser-owner and user-agent paths are
+// covered without logging request bodies or private identifiers.
+app.use((req, res, next) => {
+  const isMcpCall = req.method === 'POST' && req.path === '/mcp' && req.body?.method === 'tools/call';
+  const isOperationalMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)
+    && /^\/api\/(?:agent-|paper|pacts|wallets|evaluation-lab)/.test(req.path);
+  if (!isMcpCall && !isOperationalMutation) return next();
+  res.on('finish', () => {
+    // Durable event persistence must never delay the response path. In
+    // particular, clients need a fair opportunity to cancel newly queued MCP
+    // tasks before their worker begins.
+    setImmediate(() => {
+      const ownerId = req.userAgent?.userId || req.session?.userId;
+      if (!ownerId) return;
+      const tool = isMcpCall ? String(req.body?.params?.name || 'unknown') : null;
+      // Accepted 20-second supervisor renewals would crowd out meaningful
+      // history. Transport heartbeats cover liveness; failures remain events.
+      if (tool === 'agent_runtime_heartbeat' && res.statusCode < 400) return;
+      const label = cleanEventLabel(tool || req.path.split('/').filter(Boolean).slice(-2).join(' '));
+      const category = /trade|execution|paper\/open|paper\/close/.test(tool || req.path) ? 'execution'
+        : /mission/.test(tool || req.path) ? 'mission'
+          : /approval/.test(tool || req.path) ? 'approval'
+            : /runtime|incident|slo/.test(tool || req.path) ? 'runtime' : 'governance';
+      try {
+        agentEvents.recordAgentEvent(ownerId, {
+          type: isMcpCall ? 'mcp.tool.completed' : 'api.operation.completed',
+          category,
+          severity: res.statusCode >= 500 ? 'critical' : res.statusCode >= 400 ? 'warning' : 'info',
+          actor: req.userAgent ? 'agent' : 'owner',
+          outcome: res.statusCode < 400 ? 'accepted' : 'rejected',
+          summary: `${label || 'Operation'} ${res.statusCode < 400 ? 'completed' : 'was rejected'}.`,
+          sourceRef: req.userAgent?.keyId || req.session?.userId,
+          metadata: { tool: tool || undefined, method: req.method, statusCode: res.statusCode },
+        });
+      } catch (error) { console.warn(`[agent-events] append failed: ${error.message}`); }
+    });
+  });
   next();
 });
 
@@ -371,6 +415,9 @@ function canonicalHash(obj) {
     return o;
   };
   return crypto.createHash('sha256').update(JSON.stringify(sort(obj ?? {}))).digest('hex');
+}
+function cleanEventLabel(value) {
+  return String(value || '').replace(/[_./:-]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 100);
 }
 app.use((req, res, next) => {
   if (!(req.agentKey || req.userAgent)) return next();
@@ -828,7 +875,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.46.0';
+const DISCOVERY_VERSION = '1.47.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -902,6 +949,8 @@ const OPENAPI_PATHS = {
   '/api/signals': { post: { summary: 'Publish a signal as the authenticated principal; SHA-256 pinned on IOST mainnet', tags: ['agents'] } },
   '/api/agent-keys': { get: { summary: 'My AI-agent API keys (scopes, prefixes)', tags: ['auth'] }, post: { summary: 'Mint a scoped AI-agent API key', tags: ['auth'] } },
   '/api/agent-control': { get: { summary: 'Owner-only agent operations snapshot: activity, permissions, budgets and safety state', tags: ['autonomy'] } },
+  '/api/agent-events': { get: { summary: 'Private owner-scoped agent event replay with monotonic sequence and gap detection', tags: ['autonomy'] } },
+  '/api/agent-events/stream': { get: { summary: 'Private resumable Server-Sent Events stream for agent operations', tags: ['autonomy'] } },
   '/api/agent-mission-runner': { get: { summary: 'Read the deterministic supervised paper mission stage and next permitted action', tags: ['autonomy'] } },
   '/api/agent-control/emergency-stop': { post: { summary: 'Owner-only fail-safe: stop autopilot, suspend owned agent wallets and disable live execution', tags: ['autonomy'] } },
   '/api/agent-missions': { get: { summary: 'Owner-only supervised paper missions and trace evidence', tags: ['autonomy'] }, post: { summary: 'Create a paused paper mission bound to an exact active wallet and Pact', tags: ['autonomy'] } },
@@ -1283,6 +1332,16 @@ async function mcpToolCall(req, name, args) {
       if (req.session?.userId) return agentRuntime.ownerRuntimeStatus(req.session.userId);
       throw Object.assign(new Error('user-bound runtime access required'), { protocolCode: -32602 });
     }
+    case 'agent_event_stream_status': {
+      const ownerId = req.userAgent?.userId || req.session?.userId;
+      if (!ownerId || (req.userAgent && !userAgentHas(req, 'read'))) {
+        throw Object.assign(new Error('user-bound event stream read scope required'), { protocolCode: -32602 });
+      }
+      return agentEvents.agentEventStreamStatus(ownerId, {
+        afterSequence: args?.afterSequence || 0,
+        limit: args?.limit || 50,
+      });
+    }
     case 'agent_incident_status': {
       if (req.userAgent) return agentIncidents.agentIncidentStatus(req.userAgent.userId, req.userAgent.keyId);
       if (req.session?.userId) return agentIncidents.ownerIncidentStatus(req.session.userId);
@@ -1536,7 +1595,9 @@ app.post('/mcp', publicLimiter, async (req, res) => {
         } catch (error) {
           mcpTaskStore.fail(taskOwner, task.taskId, { code: error.protocolCode || -32603, message: error.message });
         }
-      }, 25);
+      // Leave a bounded cancellation window after returning the task handle.
+      // This is still well below the advertised one-second polling cadence.
+      }, 250);
       return success({ resultType: 'task', ...task });
     }
     try {
@@ -4242,6 +4303,8 @@ const API_INDEX = {
     { path: '/api/autopilot/proposals/:id/approve', method: 'POST', purpose: 'human override — execute a pending proposal now' },
     { path: '/api/autopilot/proposals/:id/reject', method: 'POST', purpose: 'human override — block a pending proposal' },
     { path: '/api/agent-control', method: 'GET', purpose: 'OWNER ONLY: aggregate agent activity, permissions, budgets and safety state' },
+    { path: '/api/agent-events', method: 'GET', query: 'afterSequence=&limit=', purpose: 'private owner-scoped agent event replay with monotonic cursor, gap detection and tamper-evident history' },
+    { path: '/api/agent-events/stream', method: 'GET', headers: 'Last-Event-ID (optional)', purpose: 'private resumable SSE agent operations stream with 15-second heartbeats' },
     { path: '/api/agent-control/emergency-stop', method: 'POST', purpose: 'OWNER ONLY: stop autopilot, suspend owned agent wallets and disable live execution' },
   ],
   meta: [
@@ -4602,6 +4665,10 @@ app.get('/api/agent-control', requireUser, async (req, res) => {
     guardian: guardianStatus,
     emergencyFreeze: freeze.freezeState(),
   });
+  const eventCursor = agentEvents.agentEventStreamStatus(req.session.userId, { limit: 1 }).cursor.latestSequence;
+  const eventStream = agentEvents.agentEventStreamStatus(req.session.userId, {
+    afterSequence: Math.max(0, eventCursor - 12), limit: 12,
+  });
   const lastAction = ap.actions[0] || null;
   res.json({
     ok: true,
@@ -4638,6 +4705,7 @@ app.get('/api/agent-control', requireUser, async (req, res) => {
     sessionSecurity,
     releaseTrust,
     missionRunner,
+    eventStream,
     keys,
     keyStats: { active: keys.filter((k) => !k.revokedAt).length, revoked: keys.filter((k) => !!k.revokedAt).length },
     parentWallet,
@@ -4973,7 +5041,98 @@ app.post('/api/paper/:id/management', requireUser, (req, res) => {
   res.json({ ok: true, position: r.position });
 });
 
-// ---------- SSE real-time push ----------
+// ---------- Private Agent Event Stream ----------
+// Browser owners authenticate with their session cookie. Machine clients use
+// the same scoped X-API-Key or OAuth bearer accepted by requireUser.
+const agentEventClientCounts = new Map();
+function agentEventOwner(req) {
+  if (req.userAgent && userAgentHas(req, 'read')) return req.userAgent.userId;
+  if (req.session?.userId && auth.findById(req.session.userId)) return req.session.userId;
+  return null;
+}
+function writeAgentSse(res, event, data, id = null) {
+  if (id != null) res.write(`id: ${id}\n`);
+  res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+}
+
+app.get('/api/agent-events', requireUser, (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  const ownerId = agentEventOwner(req);
+  if (!ownerId) return res.status(403).json({ error: 'owner or user agent read scope required' });
+  try {
+    return res.json(agentEvents.agentEventStreamStatus(ownerId, {
+      afterSequence: req.query.afterSequence || 0,
+      limit: req.query.limit || 50,
+    }));
+  } catch (error) { return res.status(400).json({ error: error.message }); }
+});
+
+app.get('/api/agent-events/stream', requireUser, (req, res) => {
+  const ownerId = agentEventOwner(req);
+  if (!ownerId) return res.status(403).json({ error: 'owner or user agent read scope required' });
+  const headerCursor = req.get('Last-Event-ID');
+  const requestedCursor = headerCursor == null || headerCursor === '' ? (req.query.afterSequence || 0) : headerCursor;
+  if (!/^\d+$/.test(String(requestedCursor))) return res.status(400).json({ error: 'event cursor must be a non-negative integer' });
+  const active = agentEventClientCounts.get(ownerId) || 0;
+  if (active >= 5) return res.status(429).json({ error: 'agent event stream connection limit reached' });
+  agentEventClientCounts.set(ownerId, active + 1);
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'private, no-store, max-age=0',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+    ...SECURITY_HEADERS,
+  });
+  res.write('retry: 3000\n\n');
+
+  let replaying = true;
+  let lastSent = Number(requestedCursor);
+  const pending = [];
+  const sendEvent = (event) => {
+    if (event.sequence <= lastSent) return;
+    writeAgentSse(res, 'agent-event', event, event.sequence);
+    lastSent = event.sequence;
+  };
+  const unsubscribe = agentEvents.subscribeAgentEvents(ownerId, (event) => {
+    if (replaying) pending.push(event); else sendEvent(event);
+  });
+  try {
+    let snapshot = agentEvents.agentEventStreamStatus(ownerId, { afterSequence: lastSent, limit: 200 });
+    if (snapshot.replay.gapDetected) writeAgentSse(res, 'gap', {
+      reasonCode: snapshot.replay.reasonCode,
+      requested: snapshot.cursor.requested,
+      earliestAvailable: snapshot.cursor.earliestSequence,
+    });
+    if (snapshot.replay.gapDetected) lastSent = snapshot.cursor.resumedFrom;
+    for (const event of snapshot.events) sendEvent(event);
+    while (snapshot.replay.hasMore) {
+      snapshot = agentEvents.agentEventStreamStatus(ownerId, { afterSequence: lastSent, limit: 200 });
+      for (const event of snapshot.events) sendEvent(event);
+    }
+    replaying = false;
+    for (const event of pending) sendEvent(event);
+    writeAgentSse(res, 'ready', {
+      version: snapshot.version, status: snapshot.status, sequence: lastSent,
+      chainVerified: snapshot.chain.verified, heartbeatIntervalMs: snapshot.transport.heartbeatIntervalMs,
+      liveScopeUsed: false, publicChainUsed: false,
+    });
+  } catch (error) {
+    replaying = false;
+    writeAgentSse(res, 'blocked', { reasonCode: 'event-history-unavailable' });
+  }
+  const heartbeat = setInterval(() => writeAgentSse(res, 'heartbeat', {
+    ts: Date.now(), sequence: lastSent, liveScopeUsed: false, publicChainUsed: false,
+  }), 15_000);
+  const close = () => {
+    clearInterval(heartbeat);
+    unsubscribe();
+    const remaining = Math.max(0, (agentEventClientCounts.get(ownerId) || 1) - 1);
+    if (remaining) agentEventClientCounts.set(ownerId, remaining); else agentEventClientCounts.delete(ownerId);
+  };
+  req.once('close', close);
+});
+
+// ---------- Public market SSE real-time push ----------
 const clients = new Set();
 app.get('/api/events', (req, res) => {
   res.writeHead(200, {
