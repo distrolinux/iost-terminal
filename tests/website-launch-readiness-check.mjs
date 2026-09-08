@@ -138,8 +138,8 @@ check('Terminal exposes a read-only agent decision trace',
   /data-view="trace" aria-label="View agent decision trace"/.test(app)
   && /id="view-trace" aria-label="Agent decision trace view"/.test(app)
   && /async function renderDecisionTrace\(\)/.test(appJs)
-  && /PAPER-FIRST · READ-ONLY TRACE/.test(appJs)
-  && /Simulation broker only in this trace/.test(appJs));
+  && /AUTHORITATIVE EVIDENCE ONLY/.test(appJs)
+  && /missing evidence is never inferred/i.test(appJs));
 
 for (const [name, html] of [['landing WebGL', home], ['3D Hub', hub]]) {
   check(`${name} animation pauses while the page is hidden`,

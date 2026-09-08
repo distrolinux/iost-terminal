@@ -65,7 +65,7 @@ try {
   assert.match(app, /Real-time Agent Event Stream/);
   assert.match(app, /new EventSource\(`\/api\/agent-events\/stream\?afterSequence=/);
   assert.match(css, /\.agent-event-timeline/);
-  assert.match(server, /const DISCOVERY_VERSION = '1\.47\.0'/);
+  assert.match(server, /const DISCOVERY_VERSION = '1\.48\.0'/);
   console.log('agent event stream checks passed');
 } finally {
   rmSync(scratch, { recursive: true, force: true });

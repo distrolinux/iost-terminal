@@ -63,6 +63,7 @@ import { buildAgentReleaseTrust } from './lib/agent-release-trust.js';
 import { buildAgentReadinessWizard } from './lib/agent-readiness-wizard.js';
 import { buildSupervisedMissionRunner } from './lib/supervised-mission-runner.js';
 import * as agentEvents from './lib/agent-event-stream.js';
+import { buildAgentDecisionTrace } from './lib/agent-decision-trace.js';
 import * as liveProposals from './lib/live-proposals.js';
 import * as management from './lib/management.js';
 import * as triggers from './lib/triggers.js';
@@ -875,7 +876,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.47.0';
+const DISCOVERY_VERSION = '1.48.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -951,6 +952,7 @@ const OPENAPI_PATHS = {
   '/api/agent-control': { get: { summary: 'Owner-only agent operations snapshot: activity, permissions, budgets and safety state', tags: ['autonomy'] } },
   '/api/agent-events': { get: { summary: 'Private owner-scoped agent event replay with monotonic sequence and gap detection', tags: ['autonomy'] } },
   '/api/agent-events/stream': { get: { summary: 'Private resumable Server-Sent Events stream for agent operations', tags: ['autonomy'] } },
+  '/api/agent-decision-trace': { get: { summary: 'Private read-only receipt-bound explanation across the complete agent decision lifecycle', tags: ['autonomy'] } },
   '/api/agent-mission-runner': { get: { summary: 'Read the deterministic supervised paper mission stage and next permitted action', tags: ['autonomy'] } },
   '/api/agent-control/emergency-stop': { post: { summary: 'Owner-only fail-safe: stop autopilot, suspend owned agent wallets and disable live execution', tags: ['autonomy'] } },
   '/api/agent-missions': { get: { summary: 'Owner-only supervised paper missions and trace evidence', tags: ['autonomy'] }, post: { summary: 'Create a paused paper mission bound to an exact active wallet and Pact', tags: ['autonomy'] } },
@@ -1341,6 +1343,12 @@ async function mcpToolCall(req, name, args) {
         afterSequence: args?.afterSequence || 0,
         limit: args?.limit || 50,
       });
+    }
+    case 'agent_decision_trace': {
+      if (req.userAgent && !userAgentHas(req, 'read')) {
+        throw Object.assign(new Error('user-bound decision trace read scope required'), { protocolCode: -32602 });
+      }
+      return agentDecisionTraceFor(req, { limit: args?.limit || 25 });
     }
     case 'agent_incident_status': {
       if (req.userAgent) return agentIncidents.agentIncidentStatus(req.userAgent.userId, req.userAgent.keyId);
@@ -1996,6 +2004,11 @@ app.get('/api/execution-reconciliation', requireUser, (req, res) => {
   if (req.userAgent && !userAgentHas(req, 'read')) return res.status(403).json({ error: 'read scope required' });
   const accountId = accountFor(req).accountId;
   res.json(executionReconciliationFor(accountId, getAccount(accountId)));
+});
+app.get('/api/agent-decision-trace', requireUser, (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (req.userAgent && !userAgentHas(req, 'read')) return res.status(403).json({ error: 'read scope required' });
+  res.json(agentDecisionTraceFor(req, { limit: req.query.limit || 25 }));
 });
 app.get('/api/agent-mission-runner', requireUser, (req, res) => {
   res.set('Cache-Control', 'private, no-store');
@@ -2905,6 +2918,26 @@ function executionReconciliationFor(accountId, accountState = null, now = Date.n
     receiptState: executionReceipts.reconciliationExecutionReceipts(resolvedId),
     account: state,
     now,
+  });
+}
+
+function agentDecisionTraceFor(req, { limit = 25 } = {}) {
+  const accountId = accountFor(req).accountId;
+  const ownerId = req.userAgent?.userId || req.session?.userId;
+  if (!ownerId) throw Object.assign(new Error('user-bound decision trace access required'), { status: 403, protocolCode: -32602 });
+  const account = getAccount(accountId) || { accountId, positions: [], journal: [] };
+  const receiptState = executionReceipts.listExecutionReceipts(accountId, 200);
+  const reconciliation = executionReconciliationFor(accountId, account);
+  return buildAgentDecisionTrace({
+    receipts: receiptState.receipts,
+    receiptVerification: receiptState.verification,
+    intents: executionIntents.listExecutionIntents(accountId, 200),
+    approvals: ownerApprovals.listOwnerApprovals(accountId, { limit: 200 }),
+    approvalVerification: ownerApprovals.verifyOwnerApprovalChain(accountId),
+    journal: account.journal || [],
+    reconciliation,
+    eventStream: agentEvents.agentEventStreamStatus(ownerId, { limit: 1 }),
+    limit,
   });
 }
 
