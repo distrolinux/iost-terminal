@@ -135,6 +135,12 @@ not replace any current execution gate.
 MCP Apps clients can render the private `evaluation_review` evidence panel with
 history, comparison charts and deterministic JSON/CSV exports; see
 `/docs/OWNER_MCP_APP_TESTING.md` for the owner test flow.
+Use `agent_security_sentinel_status` to inspect privacy-preserving aggregate
+website-security evidence and `public_execution_launch_readiness` to inspect every gate for
+a future non-custodial public live canary. These tools are read-only and cannot
+enable live mode, authorize an order, move funds, trade or expand authority.
+Treat any failed gate as authoritative: public real-money execution remains
+locked, even when paper execution is otherwise ready.
 
 ## Rules
 
