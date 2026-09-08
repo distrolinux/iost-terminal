@@ -226,6 +226,12 @@ Owner testing instructions: `/docs/OWNER_MCP_APP_TESTING.md`.
 - Events use per-owner monotonic sequences, explicit cursor-gap notices, 15-second transport heartbeats, bounded retention and an anchored SHA-256 chain.
 - Only sanitized outcomes are retained. The stream cannot approve, reserve, trade, expand authority, use live scope or perform a public-chain action.
 
+### Agent Decision Trace
+- `GET /api/agent-decision-trace?limit=25` — private read-only lifecycle explanations built from approvals, intents, receipts, reconciliation and journal evidence
+- `agent_decision_trace` — equivalent authenticated MCP tool
+- Every decision shows observe, analyze, risk-check, approval, execute, verify and journal stages as pass, block, pending, not-required or unavailable.
+- Evidence gaps are never filled with model inference. The trace cannot approve, reserve, execute, retry, expand authority, use live scope or perform a public-chain action.
+
 ### Agent Execution Readiness Gate
 - `GET /api/agent-execution-readiness?symbol=IOST` — private, no-store, read-only readiness evidence for the calling user agent
 - `agent_execution_readiness` — equivalent authenticated MCP status tool

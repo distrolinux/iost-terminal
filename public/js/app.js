@@ -1697,55 +1697,47 @@ async function renderAgentControl() {
 }
 
 // ---------------- Agent Decision Trace (read-only) ----------------
-// Explains what the autonomous loop observed, which policy gate applied, and
-// whether the result stayed paper-only or is waiting for explicit approval.
+// Receipt-bound explainability across the complete agent decision lifecycle.
+// Missing evidence is displayed as unavailable and is never reconstructed in
+// the browser.
 async function renderDecisionTrace() {
   const el = $('#view-trace');
   el.innerHTML = skeleton();
   let s;
-  try { s = await api('/api/autopilot'); }
+  try { s = await api('/api/agent-decision-trace?limit=25'); }
   catch (e) { el.innerHTML = `<div class="card empty">Decision trace unavailable: ${esc(e.message)}</div>`; return; }
-  const cfg = s.config || {};
-  const actions = (s.actions || []).slice(0, 25);
-  const proposals = s.proposals || [];
-  const typeClass = (type) => type === 'entry' ? 'bull' : ['halt', 'error', 'halt-close'].includes(type) ? 'bear' : ['proposal', 'skip', 'exit', 'reject'].includes(type) ? 'warn' : 'neut';
-  const stage = (type) => ({ start: 'Operator', stop: 'Operator', config: 'Policy', proposal: 'Approval', entry: 'Paper execution', exit: 'Paper execution', skip: 'Risk gate', halt: 'Risk gate', 'halt-close': 'Risk gate', reject: 'Approval', error: 'Fail closed' }[type] || 'Agent loop');
+  const traces = s.traces || [];
+  const counts = s.counts || {};
+  const evidence = s.evidence || {};
+  const stageClass = (status) => status === 'pass' ? 'is-pass' : status === 'block' ? 'is-block'
+    : status === 'pending' ? 'is-pending' : 'is-neutral';
+  const traceClass = (trace) => trace.outcome === 'accepted' ? 'bull'
+    : ['rejected', 'reversed', 'expired'].includes(trace.outcome) ? 'bear' : 'warn';
+  const displayTime = (value) => value ? new Date(value).toLocaleString() : 'Time unavailable';
   el.innerHTML = `
-    <div class="section-title">Agent Decision Trace <span class="sub">evidence → policy → approval → paper execution</span></div>
-    <div class="trace-safety" role="status">PAPER-FIRST · READ-ONLY TRACE · LIVE AND ON-CHAIN ACTIONS REMAIN SEPARATELY DISABLED</div>
-    <ol class="trace-pipeline" aria-label="Autonomous decision pipeline">
-      ${[
-        ['1', 'Observe', 'Market, news and on-chain inputs'],
-        ['2', 'Score', `Composite ≥ ${cfg.openMinScore ?? '—'} · risk ≥ ${cfg.openMaxRisk ?? '—'}`],
-        ['3', 'Risk gate', `R:R ≥ ${cfg.minRr ?? '—'} · ${cfg.accountRiskPct ?? '—'}% risk · halt ${cfg.dailyLossHaltPct ?? '—'}%`],
-        ['4', 'Approval', cfg.requireApproval ? 'Human approval required before execution' : 'Paper mode may execute inside policy'],
-        ['5', 'Paper execute', 'Simulation broker only in this trace'],
-        ['6', 'Journal', 'Outcome and reasoning retained for review'],
-      ].map(([n, title, detail]) => `<li><span class="trace-num mono">${n}</span><strong>${title}</strong><span>${detail}</span></li>`).join('')}
+    <div class="section-title">Agent Decision Trace <span class="sub">observe → analyze → risk → approve → execute → verify → journal</span><span class="receipt-chain ${s.ok ? 'is-valid' : 'is-invalid'}">${esc(s.status)}</span></div>
+    <div class="trace-safety" role="status">AUTHORITATIVE EVIDENCE ONLY · PAPER-FIRST · READ-ONLY · MISSING EVIDENCE IS NEVER INFERRED</div>
+    <ol class="trace-pipeline" aria-label="Authoritative agent decision pipeline">
+      ${(s.stages || []).map((name, index) => `<li><span class="trace-num mono">${index + 1}</span><strong>${esc(name.replace('-', ' '))}</strong><span>${['Fresh server evidence', 'Structured thesis', 'Risk and readiness gates', 'Exact owner mandate', 'Simulated paper broker', 'Receipt and reconciliation', 'Paper outcome retained'][index] || 'Verified evidence'}</span></li>`).join('')}
     </ol>
-    <div class="grid g-3 trace-stats">
-      <div class="card kpi"><span class="k-label">Agent state</span><span class="k-value">${s.enabled ? 'RUNNING' : 'IDLE'}</span><span class="k-sub">${s.ticks || 0} completed ticks</span></div>
-      <div class="card kpi"><span class="k-label">Approval queue</span><span class="k-value">${proposals.length}</span><span class="k-sub">pending · nothing here approves an action</span></div>
-      <div class="card kpi"><span class="k-label">Execution boundary</span><span class="k-value">PAPER</span><span class="k-sub">read-only evidence view</span></div>
+    <div class="grid g-4 trace-stats">
+      <div class="card kpi"><span class="k-label">Decision traces</span><span class="k-value">${counts.total || 0}</span><span class="k-sub">owner-private retained evidence</span></div>
+      <div class="card kpi"><span class="k-label">Fully verified</span><span class="k-value">${counts.verified || 0}</span><span class="k-sub">receipt + intent + reconciliation</span></div>
+      <div class="card kpi"><span class="k-label">Needs attention</span><span class="k-value">${(counts.blocked || 0) + (counts.pending || 0)}</span><span class="k-sub">${counts.blocked || 0} blocked · ${counts.pending || 0} pending</span></div>
+      <div class="card kpi"><span class="k-label">Evidence integrity</span><span class="k-value">${evidence.receiptChainVerified && evidence.approvalChainVerified && evidence.eventChainVerified ? 'VERIFIED' : 'REVIEW'}</span><span class="k-sub">receipt · approval · event chains</span></div>
     </div>
-    ${proposals.length ? `<section class="card trace-proposals" aria-labelledby="traceProposalTitle">
-      <div class="section-title" id="traceProposalTitle">Awaiting human approval <span class="sub">inspect only — approve/reject controls remain in the owner workflow</span></div>
-      <div class="trace-proposal-grid">${proposals.map(p => `<article>
-        <div><strong>${esc(p.symbol)}</strong> <span class="chip warn">${esc(p.side)}</span> <span class="chip neut">confidence ${p.confidence ?? '—'}</span></div>
-        <p>${esc(p.reason || 'No reasoning supplied')}</p>
-        <dl><div><dt>Entry</dt><dd>${p.entry ?? '—'}</dd></div><div><dt>Stop</dt><dd>${p.stop ?? '—'}</dd></div><div><dt>Target</dt><dd>${p.target ?? '—'}</dd></div><div><dt>R:R</dt><dd>${p.rr != null ? Number(p.rr).toFixed(2) : '—'}</dd></div></dl>
-      </article>`).join('')}</div>
-    </section>` : ''}
-    <section class="card" aria-labelledby="traceLogTitle">
-      <div class="section-title" id="traceLogTitle">Recent reasoning <span class="sub">newest first · server-owned audit trail</span></div>
-      ${actions.length ? `<ol class="trace-log">${actions.map(a => `<li>
-        <time class="mono" datetime="${new Date(a.ts).toISOString()}">${new Date(a.ts).toLocaleString()}</time>
-        <span class="chip ${typeClass(a.type)}">${esc(a.type)}</span>
-        <strong>${esc(stage(a.type))}</strong>
-        <span class="trace-symbol mono">${esc(a.symbol || 'SYSTEM')}</span>
-        <p>${esc(a.detail || 'No detail')}</p>
-        <span class="mono trace-score">${a.score == null ? '—' : `score ${a.score}`}</span>
-      </li>`).join('')}</ol>` : '<div class="empty">No decisions yet. The trace will populate after the paper agent runs.</div>'}
+    <section class="card trace-evidence-summary" aria-labelledby="traceEvidenceTitle">
+      <div class="section-title" id="traceEvidenceTitle">Verification boundary <span class="sub">current authoritative stores</span></div>
+      <div class="runtime-grid"><div><span>Execution receipts</span><strong>${evidence.receiptChainVerified ? 'verified' : 'blocked'}</strong></div><div><span>Owner approvals</span><strong>${evidence.approvalChainVerified ? 'verified' : 'blocked'}</strong></div><div><span>Account reconciliation</span><strong>${esc(evidence.reconciliationDecision || 'unavailable')}</strong></div><div><span>Agent events</span><strong>${evidence.eventChainVerified ? `verified · seq ${evidence.eventLatestSequence || 0}` : 'blocked'}</strong></div></div>
+    </section>
+    <section class="trace-decisions" aria-labelledby="traceLogTitle">
+      <div class="section-title" id="traceLogTitle">Recent decisions <span class="sub">newest first · reason and evidence at every stage</span></div>
+      ${traces.length ? traces.map(trace => `<article class="card trace-decision">
+        <header><div><span class="chip ${traceClass(trace)}">${esc(trace.outcome)}</span><strong>${esc(trace.action)} ${esc(trace.symbol || 'paper decision')}</strong><span class="chip neut">${esc(trace.side || trace.source)}</span></div><time class="mono">${esc(displayTime(trace.occurredAt))}</time></header>
+        <p>${esc(trace.summary || 'No decision summary retained.')}</p>
+        <div class="trace-decision-meta"><span class="mono">${esc(trace.traceRef)}</span><span>${trace.evidenceCoveragePct || 0}% evidence coverage</span>${trace.reasonCode ? `<span>reason · ${esc(trace.reasonCode)}</span>` : ''}</div>
+        <ol class="trace-stage-list">${(trace.stages || []).map(item => `<li class="${stageClass(item.status)}"><div><strong>${esc(item.name.replace('-', ' '))}</strong><span>${esc(item.status)}</span></div><p>${esc(item.summary)}</p></li>`).join('')}</ol>
+      </article>`).join('') : '<div class="card empty">No authoritative paper decisions yet. This view will populate from approval mandates and execution receipts.</div>'}
     </section>`;
 }
 

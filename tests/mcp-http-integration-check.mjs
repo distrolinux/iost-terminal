@@ -206,6 +206,7 @@ try {
   assert.equal(guardianTool.annotations.idempotentHint, true);
   const runtimeStatusTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_runtime_status');
   const agentEventTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_event_stream_status');
+  const decisionTraceTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_decision_trace');
   const runtimeHeartbeatTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_runtime_heartbeat');
   const incidentStatusTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_incident_status');
   const safetySloTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_safety_slo_status');
@@ -219,6 +220,10 @@ try {
   assert.equal(agentEventTool.annotations.destructiveHint, false);
   assert.equal(agentEventTool.annotations.idempotentHint, true);
   assert.equal(agentEventTool.inputSchema.properties.afterSequence.minimum, 0);
+  assert.equal(decisionTraceTool.annotations.readOnlyHint, true);
+  assert.equal(decisionTraceTool.annotations.destructiveHint, false);
+  assert.equal(decisionTraceTool.annotations.idempotentHint, true);
+  assert.equal(decisionTraceTool.inputSchema.properties.limit.maximum, 100);
   assert.equal(runtimeHeartbeatTool.annotations.readOnlyHint, false);
   assert.equal(runtimeHeartbeatTool.annotations.destructiveHint, false);
   assert.equal(runtimeHeartbeatTool.annotations.idempotentHint, true);
@@ -522,6 +527,26 @@ try {
   }
   assert.match(streamChunk, /(?:event: agent-event|event: ready)/);
   streamAbort.abort();
+
+  const decisionTrace = await mcp('tools/call', {
+    name: 'agent_decision_trace', arguments: { limit: 20 },
+  }, { key: keyA.key, name: 'agent_decision_trace' });
+  assert.equal(decisionTrace.status, 200);
+  assert.equal(decisionTrace.body.result.structuredContent.mode, 'paper-only');
+  assert.deepEqual(decisionTrace.body.result.structuredContent.stages,
+    ['observe', 'analyze', 'risk-check', 'approval', 'execute', 'verify', 'journal']);
+  assert.equal(decisionTrace.body.result.structuredContent.evidence.receiptChainVerified, true);
+  assert.equal(decisionTrace.body.result.structuredContent.evidence.approvalChainVerified, true);
+  assert.equal(decisionTrace.body.result.structuredContent.guarantees.missingEvidenceNeverInferred, true);
+  assert.equal(decisionTrace.body.result.structuredContent.execution.tradeCreated, false);
+  assert.equal(decisionTrace.body.result.structuredContent.liveScopeUsed, false);
+  assert.equal(decisionTrace.body.result.structuredContent.publicChainUsed, false);
+  const decisionTraceRest = await fetch(`${BASE}/api/agent-decision-trace?limit=20`, {
+    headers: { 'X-API-Key': keyA.key },
+  });
+  assert.equal(decisionTraceRest.status, 200);
+  assert.match(decisionTraceRest.headers.get('cache-control') || '', /private, no-store/);
+  assert.equal((await decisionTraceRest.json()).mode, 'paper-only');
 
   const scorecards = await mcp('tools/call', { name: 'strategy_promotion_scorecards', arguments: { limit: 5 } }, {
     key: keyReadOnly.key, name: 'strategy_promotion_scorecards',

@@ -539,10 +539,32 @@ body.cmd .ticker-wrap { background: rgba(6, 10, 17, .9); border-color: rgba(0, 2
 .trace-log strong { font-size: 11px; }
 .trace-log p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
 .trace-symbol { color: var(--cyan); font-size: 10px; }
+.trace-evidence-summary { margin-bottom: 14px; }
+.trace-decisions { display: grid; gap: 12px; }
+.trace-decision { padding: 16px; }
+.trace-decision > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.trace-decision > header > div { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.trace-decision > header time { color: var(--dim); font-size: 10px; }
+.trace-decision > p { margin: 10px 0; color: var(--muted); font-size: 12px; }
+.trace-decision-meta { display: flex; flex-wrap: wrap; gap: 8px 16px; color: var(--dim); font-size: 10px; }
+.trace-stage-list { display: grid; grid-template-columns: repeat(7, minmax(130px, 1fr)); gap: 7px; margin: 14px 0 0; padding: 0; overflow-x: auto; list-style: none; }
+.trace-stage-list li { min-width: 130px; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: rgba(8, 13, 22, .48); }
+.trace-stage-list li > div { display: flex; justify-content: space-between; gap: 6px; }
+.trace-stage-list strong { color: var(--text); font-size: 10px; text-transform: capitalize; }
+.trace-stage-list li > div span { font: 9px var(--mono); text-transform: uppercase; }
+.trace-stage-list p { margin: 7px 0 0; color: var(--muted); font-size: 9px; line-height: 1.45; }
+.trace-stage-list .is-pass { border-color: rgba(34, 211, 170, .35); }
+.trace-stage-list .is-pass > div span { color: var(--mint); }
+.trace-stage-list .is-block { border-color: rgba(255, 92, 122, .4); }
+.trace-stage-list .is-block > div span { color: var(--down); }
+.trace-stage-list .is-pending { border-color: rgba(255, 200, 87, .35); }
+.trace-stage-list .is-pending > div span { color: var(--warn); }
+.trace-stage-list .is-neutral > div span { color: var(--dim); }
 @media (max-width: 760px) {
   .trace-log li { grid-template-columns: auto auto 1fr; align-items: start; }
   .trace-log p { grid-column: 1 / -1; }
   .trace-score { text-align: right; }
+  .trace-decision > header { align-items: flex-start; flex-direction: column; }
 }
 
 /* ---------- Agent Evaluation Lab ---------- */
