@@ -65,6 +65,8 @@ import { buildSupervisedMissionRunner } from './lib/supervised-mission-runner.js
 import * as agentEvents from './lib/agent-event-stream.js';
 import { buildAgentDecisionTrace } from './lib/agent-decision-trace.js';
 import { buildAssetIntelligence } from './lib/asset-intelligence.js';
+import { observeSecurityResponse, securitySentinelStatus } from './lib/security-sentinel.js';
+import { buildPublicLiveReadiness } from './lib/public-live-readiness.js';
 import * as liveProposals from './lib/live-proposals.js';
 import * as management from './lib/management.js';
 import * as triggers from './lib/triggers.js';
@@ -180,6 +182,23 @@ function agentReleaseTrustStatus() {
   });
 }
 
+function publicLiveReadinessFor(req) {
+  const userId = req.userAgent?.userId || req.session?.userId;
+  const venue = userKrakenStatus(userId ? auth.findById(userId) : null);
+  return buildPublicLiveReadiness({
+    security: securitySentinelStatus(),
+    releaseTrust: agentReleaseTrustStatus(),
+    venueConnected: venue.configured === true,
+    venuePermissionVerified: venue.permissionsVerified === true,
+    secretVaultReady: process.env.LIVE_SECRET_VAULT_READY === '1',
+    transactionAuthorizationReady: process.env.LIVE_TRANSACTION_AUTH_READY === '1',
+    independentAuditVerified: process.env.LIVE_INDEPENDENT_AUDIT_VERIFIED === '1',
+    jurisdictionControlsReady: process.env.PUBLIC_LIVE_JURISDICTION_CONTROLS === '1',
+    complianceApproved: process.env.PUBLIC_LIVE_COMPLIANCE_APPROVED === '1',
+    liveFeatureAvailable: liveTradingAvailable(),
+  });
+}
+
 function agentSafetyEvidence(ownerId, keyId = null, now = Date.now()) {
   const runtime = keyId ? agentRuntime.agentRuntimeStatus(ownerId, keyId, now) : agentRuntime.ownerRuntimeStatus(ownerId, now);
   const incidents = keyId ? agentIncidents.agentIncidentStatus(ownerId, keyId, now) : agentIncidents.ownerIncidentStatus(ownerId, now);
@@ -236,6 +255,19 @@ const SECURITY_HEADERS = {
 };
 app.use((req, res, next) => {
   res.set(SECURITY_HEADERS);
+  next();
+});
+
+// Aggregate, privacy-preserving security telemetry for the public launch
+// gate. No IP address, credential, request body or route parameter is stored.
+app.use((req, res, next) => {
+  res.on('finish', () => observeSecurityResponse({
+    path: req.path,
+    statusCode: res.statusCode,
+    invalidBearer: req.invalidBearer === true,
+    credentialPresented: Boolean(req.get('x-api-key') || req.get('authorization')),
+    authFlow: req.path.startsWith('/api/auth/') || req.path.startsWith('/oauth/'),
+  }));
   next();
 });
 
@@ -877,7 +909,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.49.0';
+const DISCOVERY_VERSION = '1.50.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -972,6 +1004,8 @@ const OPENAPI_PATHS = {
   '/api/agent-execution-readiness': { get: { summary: 'Read-only fail-closed readiness for new agent paper exposure', tags: ['autonomy'] } },
   '/api/agent-session-security': { get: { summary: 'Read-only short-lived agent session posture and resource-binding guarantees', tags: ['auth'] } },
   '/api/agent-release-trust': { get: { summary: 'Read-only release provenance, SBOM and immutable-build verification', tags: ['security'] } },
+  '/api/security-sentinel': { get: { summary: 'Private monitor-only aggregate website security posture', tags: ['security'] } },
+  '/api/public-live-readiness': { get: { summary: 'Private fail-closed public live-trading launch readiness; never enables execution', tags: ['security'] } },
 };
 app.get('/openapi.json', (req, res) => {
   res.set('Access-Control-Allow-Origin', '*');
@@ -1333,6 +1367,8 @@ async function mcpToolCall(req, name, args) {
       return agentSessions.agentSessionSecurityStatus({ userId, keyId: req.userAgent?.keyId || null, isKeyActive: agentKeys.isActiveKey });
     }
     case 'agent_release_trust_status': return agentReleaseTrustStatus();
+    case 'agent_security_sentinel_status': return securitySentinelStatus();
+    case 'public_execution_launch_readiness': return publicLiveReadinessFor(req);
     case 'paper_account': return await markToMarket(accountFor(req).accountId);
     case 'paper_stats': return journalStats(accountFor(req).accountId);
     case 'paper_position_guardian': return management.positionGuardianStatus(accountFor(req).accountId);
@@ -2468,6 +2504,8 @@ function launchpadSnapshot(req) {
     observationStartedAt: AGENT_SLO_OBSERVATION_STARTED_AT });
   const sessionSecurity = agentSessions.agentSessionSecurityStatus({ userId: req.session.userId, isKeyActive: agentKeys.isActiveKey });
   const releaseTrust = agentReleaseTrustStatus();
+  const security = securitySentinelStatus();
+  const liveReadiness = publicLiveReadinessFor(req);
   const wizard = buildAgentReadinessWizard({ wallets: walletEvidence, pacts: pactEvidence, keys,
     runtime: runtimeStatus, missions: missions.listMissions(ownerId), incidents: incidentStatus, safetySlo,
     guardian: management.positionGuardianStatus(ownerId), sessionSecurity, releaseTrust,
@@ -2489,6 +2527,8 @@ function launchpadSnapshot(req) {
     wallets: walletEvidence,
     pacts: pactEvidence,
     wizard,
+    security,
+    liveReadiness,
     status: {
       keyReady: keys.some((key) => !key.revokedAt && key.scopes.includes('trade-paper')),
       walletReady: launchpadWallets.some((wallet) => wallet.status === 'active' && wallet.capabilities.includes('trade.paper')),
@@ -4597,6 +4637,18 @@ app.get('/api/agent-release-trust', requireUser, (req, res) => {
   res.set('Cache-Control', 'private, no-store');
   if (req.userAgent && !userAgentHas(req, 'read')) return res.status(403).json({ error: 'read scope required' });
   return res.json(agentReleaseTrustStatus());
+});
+
+app.get('/api/security-sentinel', requireUser, (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (req.userAgent && !userAgentHas(req, 'read')) return res.status(403).json({ error: 'read scope required' });
+  return res.json(securitySentinelStatus());
+});
+
+app.get('/api/public-live-readiness', requireUser, (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (req.userAgent && !userAgentHas(req, 'read')) return res.status(403).json({ error: 'read scope required' });
+  return res.json(publicLiveReadinessFor(req));
 });
 
 for (const action of ['acknowledge', 'resolve']) {

@@ -1104,7 +1104,10 @@ async function renderAgentLaunchpad() {
   const liveKeys = (s.keys || []).filter((key) => !key.revokedAt);
   const paperKeys = liveKeys.filter((key) => key.scopes?.includes('trade-paper'));
   const wizard = s.wizard || { status: 'action-required', progress: { completed: 0, total: 7, percent: 0 }, steps: [], nextAction: { code: 'setup', label: 'Create a paper-only safety envelope', target: 'setup' } };
+  const security = s.security || { status: 'warming-up', counts: {}, findings: [], observedDurationMs: 0 };
+  const liveReadiness = s.liveReadiness || { status: 'locked', progress: { passed: 0, total: 10, percent: 0 }, gates: [], blockers: [] };
   const step = (item) => `<li class="${item.pass ? 'is-ready' : item.code === wizard.nextAction?.code ? 'is-next' : ''}"${item.code === wizard.nextAction?.code ? ' aria-current="step"' : ''}><span>${item.pass ? '✓' : item.code === wizard.nextAction?.code ? '→' : '○'}</span><div><strong>${esc(item.label)}</strong><small>${esc(item.detail)}</small></div></li>`;
+  const liveGate = (gate) => `<li class="${gate.pass ? 'is-ready' : 'is-locked'}"><span>${gate.pass ? '✓' : '×'}</span><strong>${esc(gate.label)}</strong></li>`;
   const connectionTemplate = JSON.stringify({ url: s.mcpEndpoint, headers: { 'X-API-Key': '<PASTE_YOUR_ONE_TIME_KEY>' }, mode: 'paper-only' }, null, 2);
 
   el.innerHTML = `
@@ -1118,6 +1121,29 @@ async function renderAgentLaunchpad() {
     <ol class="launchpad-steps" aria-label="Agent launch progress">
       ${(wizard.steps || []).map(step).join('')}
     </ol>
+
+    <div class="public-live-grid">
+      <section class="card public-live-card" aria-labelledby="publicLiveTitle">
+        <div class="public-live-head"><div><span class="eyebrow">Future public execution</span><h2 id="publicLiveTitle">Public live readiness</h2></div><span class="chip ${liveReadiness.status === 'ready-for-controlled-canary' ? 'bull' : 'warn'}">${liveReadiness.status === 'ready-for-controlled-canary' ? 'controlled canary ready' : 'live locked'}</span></div>
+        <p>Non-custodial target: each person controls their venue account. Agents may propose narrowly bounded orders, but never authorize themselves, withdraw, transfer, or bypass the owner.</p>
+        <div class="public-live-meter"><span><strong>${Number(liveReadiness.progress?.percent || 0)}%</strong> verified</span><span>${Number(liveReadiness.progress?.passed || 0)} / ${Number(liveReadiness.progress?.total || 10)} launch gates</span></div>
+        <div class="launchpad-progress-track" aria-hidden="true"><span style="width:${Math.max(0, Math.min(100, Number(liveReadiness.progress?.percent || 0)))}%"></span></div>
+        <ul class="public-live-gates">${(liveReadiness.gates || []).map(liveGate).join('')}</ul>
+        <p class="public-live-boundary"><strong>Current boundary:</strong> paper trading remains available; public real-money orders stay off until every gate passes and the owner deliberately starts a controlled canary.</p>
+      </section>
+      <section class="card security-sentinel-card" aria-labelledby="securitySentinelTitle">
+        <div class="public-live-head"><div><span class="eyebrow">Monitor-only defense</span><h2 id="securitySentinelTitle">Security Sentinel</h2></div><span class="chip ${security.status === 'healthy' ? 'bull' : security.status === 'attention' ? 'bear' : 'warn'}">${esc(security.status)}</span></div>
+        <p>Aggregated website safety evidence helps gate a future live launch without collecting visitor IP addresses, credentials, or request bodies.</p>
+        <dl class="security-sentinel-counts">
+          <div><dt>Auth rejects</dt><dd>${Number(security.counts?.authRejected || 0)}</dd></div>
+          <div><dt>Path probes</dt><dd>${Number(security.counts?.probes || 0)}</dd></div>
+          <div><dt>Rate limits</dt><dd>${Number(security.counts?.rateLimited || 0)}</dd></div>
+          <div><dt>Server errors</dt><dd>${Number(security.counts?.serverErrors || 0)}</dd></div>
+        </dl>
+        <p class="security-evidence">15-minute evidence window · ${security.evidenceSufficient ? 'coverage complete' : 'warming up'} · ${(Number(security.observedDurationMs || 0) / 60_000).toFixed(1)} minutes observed</p>
+        <ul class="security-guarantees"><li>Monitor-only: it cannot trade or expand authority.</li><li>Infrastructure and owner controls retain enforcement authority.</li><li>Observations are bounded and expire automatically.</li></ul>
+      </section>
+    </div>
 
     ${!wallet ? `<section class="card launchpad-card" aria-labelledby="launchpadSetupTitle">
       <div class="section-title" id="launchpadSetupTitle">1. Create the safety envelope</div>

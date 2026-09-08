@@ -264,6 +264,13 @@ Owner testing instructions: `/docs/OWNER_MCP_APP_TESTING.md`.
 - Mission modes are `within-pact`, `per-order`, and `exceptions`. Exception triggers are deterministic: at least half the mission order cap, confidence below 70 or unavailable, a preflight warning, or a volatility regime outside calm/normal.
 - Owner decisions are available only through the non-agentic signed-in Control Center. Live, token, wallet-send and public-chain execution remain unavailable.
 
+### Public Live Readiness and Security Sentinel
+- `GET /api/security-sentinel` and authenticated MCP tool `agent_security_sentinel_status` expose bounded, aggregate website-security evidence.
+- `GET /api/public-live-readiness` and authenticated MCP tool `public_execution_launch_readiness` expose ten fail-closed launch gates for a future non-custodial public live canary.
+- The Security Sentinel is monitor-only and retains no IP addresses, credentials, request bodies or route parameters. Infrastructure and owner controls retain enforcement authority.
+- Real-money public execution remains locked. Readiness tools cannot enable live mode, authorize an order, reserve funds, withdraw, transfer, trade or expand authority.
+- The target model keeps assets at each eligible user's venue and requires unique owner authorization bound to significant live-order data. Availability remains jurisdiction- and venue-dependent.
+
 ## AITT — Agent Intelligence Trading Token
 
 ERC-20 on IOST L2 (chain 182), 1B fixed supply, 8 decimals. **Design draft — NOT issued yet.**
