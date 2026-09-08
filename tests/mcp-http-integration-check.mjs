@@ -169,6 +169,19 @@ try {
   const publicTools = await mcp('tools/list');
   assert.equal(publicTools.body.result.cacheScope, 'public');
   assert(!publicTools.body.result.tools.some((tool) => tool.name === 'paper_trade_open'));
+  const assetIntelligenceTool = publicTools.body.result.tools.find((tool) => tool.name === 'asset_intelligence');
+  assert(assetIntelligenceTool);
+  assert.equal(assetIntelligenceTool.annotations.readOnlyHint, true);
+  assert.equal(assetIntelligenceTool.annotations.destructiveHint, false);
+  assert.equal(assetIntelligenceTool.annotations.idempotentHint, true);
+  const assetIntelligence = await mcp('tools/call', { name: 'asset_intelligence', arguments: { symbol: 'IOST' } }, { name: 'asset_intelligence' });
+  assert.equal(assetIntelligence.status, 200);
+  assert.equal(assetIntelligence.body.result.structuredContent.mode, 'intelligence-only');
+  assert.equal(assetIntelligence.body.result.structuredContent.boundaries.executionAuthority, 'none');
+  assert.equal(assetIntelligence.body.result.structuredContent.boundaries.tradeCreated, false);
+  const assetIntelligenceRest = await fetch(`${BASE}/api/asset-intelligence/IOST`);
+  assert.equal(assetIntelligenceRest.status, 200);
+  assert.equal((await assetIntelligenceRest.json()).score.recommendation, false);
 
   const privateTools = await mcp('tools/list', {}, { key: keyA.key });
   assert.equal(privateTools.body.result.cacheScope, 'private');

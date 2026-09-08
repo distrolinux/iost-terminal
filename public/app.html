@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Sora:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/css/style.css?v=2.29">
+<link rel="stylesheet" href="/css/style.css?v=2.31">
 </head>
 <body class="cmd">
 <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -42,6 +42,7 @@
       <div class="nav-group" data-nav-group="Observe">
         <span class="nav-group-label">Observe</span>
         <button class="nav-btn is-active" data-view="scanner" aria-label="View AI market scanner"><span class="ic">▤</span><span class="lbl">Markets</span></button>
+        <button class="nav-btn" data-view="intelligence" aria-label="View Asset Intelligence Workspace"><span class="ic">◎</span><span class="lbl">Intel</span></button>
         <button class="nav-btn" data-view="scores" aria-label="View AI trade scores"><span class="ic">◈</span><span class="lbl">Scores</span></button>
         <button class="nav-btn" data-view="news" aria-label="View market news and sentiment"><span class="ic">✉</span><span class="lbl">News</span></button>
         <button class="nav-btn" data-view="whales" aria-label="View large trades log"><span class="ic">🐋</span><span class="lbl">Whales</span></button>
@@ -82,6 +83,7 @@
 
   <main class="cmd-main" id="main-content" tabindex="-1">
     <div class="view" id="view-scanner" aria-label="AI market scanner view"></div>
+    <div class="view hidden" id="view-intelligence" aria-label="Asset Intelligence Workspace view"></div>
     <div class="view hidden" id="view-scores" aria-label="AI trade scores view"></div>
     <div class="view hidden" id="view-risk" aria-label="Risk calculator view"></div>
     <div class="view hidden" id="view-portfolio" aria-label="Portfolio AI view"></div>
@@ -208,7 +210,7 @@
 
 <script defer src="/js/vendor/lightweight-charts.js"></script>
 <script defer src="/js/vendor/tweetnacl.min.js"></script>
-<script type="module" src="/js/app.js?v=2.51.0"></script>
+<script type="module" src="/js/app.js?v=2.53.0"></script>
 <script type="module" src="/js/auth.js?v=2.10.0"></script>
 <script type="module" src="/js/onboarding.js?v=1.2.0"></script>
 <script type="application/json" id="agent-state">null</script>

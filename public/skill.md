@@ -17,6 +17,7 @@ real money without explicit owner approval.**
 1. **Read state first** — no auth needed:
    - `GET /api/ui-state` — one-call dashboard snapshot (scanner, scores, account, autopilot, market, on-chain)
    - `GET /api/scores` — 0–100 AI trade scores for all assets
+   - `GET /api/asset-intelligence/:symbol` — unified read-only Asset 360 evidence, provenance, sentiment and execution boundaries
    - `GET /api/scanner` — real-time analysis with signals and indicators
    - `GET /api/news` · `GET /api/onchain` · `GET /api/probability`
    - `GET /api/signals/feed` — public signal feed with on-chain pin status
@@ -53,6 +54,7 @@ layer. Full spec + Coinbase CDP research folded in: repo `docs/PHASE2_WALLET.md`
 
 ## Public analysis tools
 
+- `GET /api/asset-intelligence/:symbol` — Asset 360 market, score, technical, sentiment, large-trade and provenance evidence; no execution authority
 - `POST /api/risk` — position sizing, $ risk, R:R, potential P/L
 - `POST /api/backtest` — rule-based backtest vs historical bars (expectancy, profit factor, max DD, Sharpe)
 - `POST /api/token-audit` — Binance Web3 token safety scan (honeypot/rug-pull/tax)
