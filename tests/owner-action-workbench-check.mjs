@@ -40,6 +40,17 @@ assert.equal(noAuthority.nextAction.target.view, 'launchpad');
 assert.equal(noAuthority.liveScopeUsed, false);
 assert.equal(noAuthority.publicChainUsed, false);
 
+const unrelatedWallet = { walletId: 'wal_unrelated', status: 'active', capabilities: ['trade.paper'] };
+const multipleWallets = buildOwnerActionWorkbench({ ...safe, wallets: [unrelatedWallet, wallet] });
+assert.equal(multipleWallets.status, 'ready');
+assert.equal(multipleWallets.nextAction.code, 'ready');
+assert.equal(multipleWallets.evidence.walletPactAuthorized, true);
+assert.equal(multipleWallets.actions.some((action) => action.code === 'paper-pact'), false);
+
+const ownerTrustStatus = buildOwnerActionWorkbench({ ...safe, dataTrust: { status: 'healthy' } });
+assert.equal(ownerTrustStatus.status, 'ready');
+assert.equal(ownerTrustStatus.actions.some((action) => action.code === 'data-trust'), false);
+
 const app = readFileSync(new URL('../public/js/app.js', import.meta.url), 'utf8');
 const css = readFileSync(new URL('../public/css/style.css', import.meta.url), 'utf8');
 const server = readFileSync(new URL('../server.js', import.meta.url), 'utf8');
