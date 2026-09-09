@@ -75,6 +75,9 @@ recommendations without changing agent or execution authority.
 The private read-only `agent_benchmark_scorecards` tool returns AITT verified paper
 benchmarks with locked manifest checksums, baseline comparisons, causal trace coverage
 and evidence hashes. It cannot publish evidence, promote an agent, trade or change authority.
+The private read-only `agent_challenge_scorecards` tool returns five locked paper stress
+scenarios covering fees, thin books, delayed fills and combined stress. Results are advisory;
+they cannot grant authority, promote an agent or trade.
 The private read-only `paper_position_guardian` tool reports server-enforced
 paper bracket/OCO coverage, fresh-quote watchdog health and automatic-exit
 receipt evidence. Protection continues when the initiating agent disconnects.

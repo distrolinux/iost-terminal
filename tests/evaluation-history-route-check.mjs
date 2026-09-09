@@ -11,7 +11,8 @@ assert.match(routes, /app\.get\('\/api\/evaluation-lab\/history\/:id\/export', r
 assert.match(routes, /app\.get\('\/api\/evaluation-lab\/history\/:id', requireUser/);
 assert.match(routes, /app\.get\('\/api\/strategy-governance', requireUser/);
 assert.match(routes, /app\.get\('\/api\/agent-benchmarks', requireUser/);
-assert.equal((routes.match(/evaluationOwner\(req\)/g) || []).length, 7, 'every evaluation, benchmark and strategy-governance route must resolve a private owner');
+assert.match(routes, /app\.get\('\/api\/agent-challenges', requireUser/);
+assert.equal((routes.match(/evaluationOwner\(req\)/g) || []).length, 8, 'every evaluation, benchmark, challenge and strategy-governance route must resolve a private owner');
 assert.match(server, /function evaluationOwner\(req\)[\s\S]{0,420}req\.userAgent\?\.userId[\s\S]{0,180}return null/);
 assert.match(routes, /Cache-Control', 'private, no-store'/);
 assert.match(routes, /format must be json or csv/);

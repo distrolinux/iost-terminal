@@ -24,7 +24,7 @@ const config = { trainBars: 80, testBars: 40, stepBars: 40, minimumTrades: 1,
 const base = evaluateAgentStrategy({ symbol: 'IOST', timeframe: '1d', strategy, candles: candles(), config });
 assert.equal(base.ok, true);
 assert.equal(base.mode, 'paper-only');
-assert.equal(base.methodology.execution, 'next-bar-open');
+assert.equal(base.methodology.execution, '1-bar-delayed open');
 assert.ok(base.folds.length >= 4);
 assert.ok(base.folds.every((f) => f.train.toIndex < f.test.fromIndex));
 assert.ok(base.trades.every((t) => t.signalIndex < t.entryIndex));
@@ -41,6 +41,8 @@ assert.equal(base.promotion.scope, 'paper-strategy-candidate');
 assert.equal(base.promotion.allowed, base.promotion.failures.length === 0);
 assert.match(base.evidence.resultHash, /^[a-f0-9]{64}$/);
 assert.equal(verifyEvaluationEvidence(base), true);
+assert.equal(base.challenge.scenarios.length, 5);
+assert.equal(base.challenge.guarantees.executionAuthority, 'none');
 assert.ok(base.series.equity.length > 2);
 assert.equal(base.series.equity.length, base.series.drawdown.length);
 assert.deepEqual(Object.keys(base.series.baselines).sort(), ['buyAndHold', 'cash', 'smaCross'].sort());
@@ -50,6 +52,8 @@ const changed = evaluateAgentStrategy({ symbol: 'IOST', timeframe: '1d', strateg
 assert.deepEqual(changed.folds[0], base.folds[0]);
 assert.deepEqual(changed.trades.filter((t) => t.fold === 1), base.trades.filter((t) => t.fold === 1));
 assert.equal(verifyEvaluationEvidence({ ...base, metrics: { ...base.metrics, trades: base.metrics.trades + 1 } }), false);
+const invalidDelay = evaluateAgentStrategy({ symbol: 'IOST', timeframe: '1d', strategy, candles: candles(), config: { ...config, executionDelayBars: 0 } });
+assert.equal(invalidDelay.ok, false);
 
 const tooSmall = evaluateAgentStrategy({ symbol: 'IOST', timeframe: '1d', strategy, candles: candles(100), config });
 assert.equal(tooSmall.ok, false);
