@@ -64,6 +64,7 @@ import { buildAgentReadinessWizard } from './lib/agent-readiness-wizard.js';
 import { buildSupervisedMissionRunner } from './lib/supervised-mission-runner.js';
 import * as agentEvents from './lib/agent-event-stream.js';
 import { buildAgentDecisionTrace } from './lib/agent-decision-trace.js';
+import { buildAgentEvidencePassport } from './lib/agent-evidence-passport.js';
 import { buildAssetIntelligence } from './lib/asset-intelligence.js';
 import { observeSecurityResponse, securitySentinelStatus } from './lib/security-sentinel.js';
 import { buildPublicLiveReadiness } from './lib/public-live-readiness.js';
@@ -911,7 +912,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.52.0';
+const DISCOVERY_VERSION = '1.53.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -982,6 +983,7 @@ const OPENAPI_PATHS = {
   '/api/execution-intents': { get: { summary: 'Private paper execution idempotency and replay status', tags: ['execution'] } },
   '/api/execution-intents/{intentId}': { get: { summary: 'Private status for one paper execution intent', tags: ['execution'] } },
   '/api/execution-reconciliation': { get: { summary: 'Private read-only reconciliation of paper intents, receipts, positions, journal and cash', tags: ['execution'] } },
+  '/api/agent-evidence-passport': { get: { summary: 'Private portable AITT proof bundle across agent authority, runtime, release, security, execution and evaluation evidence', tags: ['autonomy'] } },
   '/api/agent-portfolio-orchestrator': { get: { summary: 'Private read-only multi-agent portfolio coordination, conflict and execution-lane status', tags: ['autonomy'] } },
   '/api/agent-capability-registry': { get: { summary: 'Private read-only effective agent capabilities and owner delegation evidence', tags: ['autonomy'] } },
   '/api/signals': { post: { summary: 'Publish a signal as the authenticated principal; SHA-256 pinned on IOST mainnet', tags: ['agents'] } },
@@ -1397,6 +1399,12 @@ async function mcpToolCall(req, name, args) {
         throw Object.assign(new Error('user-bound decision trace read scope required'), { protocolCode: -32602 });
       }
       return agentDecisionTraceFor(req, { limit: args?.limit || 25 });
+    }
+    case 'agent_evidence_passport': {
+      if (req.userAgent && !userAgentHas(req, 'read')) {
+        throw Object.assign(new Error('user-bound evidence passport read scope required'), { protocolCode: -32602 });
+      }
+      return agentEvidencePassportFor(req);
     }
     case 'agent_incident_status': {
       if (req.userAgent) return agentIncidents.agentIncidentStatus(req.userAgent.userId, req.userAgent.keyId);
@@ -2070,6 +2078,11 @@ app.get('/api/agent-decision-trace', requireUser, (req, res) => {
   res.set('Cache-Control', 'private, no-store');
   if (req.userAgent && !userAgentHas(req, 'read')) return res.status(403).json({ error: 'read scope required' });
   res.json(agentDecisionTraceFor(req, { limit: req.query.limit || 25 }));
+});
+app.get('/api/agent-evidence-passport', requireUser, (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (req.userAgent && !userAgentHas(req, 'read')) return res.status(403).json({ error: 'read scope required' });
+  res.json(agentEvidencePassportFor(req));
 });
 app.get('/api/agent-mission-runner', requireUser, (req, res) => {
   res.set('Cache-Control', 'private, no-store');
@@ -3031,6 +3044,30 @@ function capabilityRegistryFor(userId, now = Date.now()) {
     missions: missions.listMissions(ownerId),
     runtimesByKey: Object.fromEntries(keys.map((key) => [key.id, agentRuntime.agentRuntimeStatus(userId, key.id, now)])),
     now,
+  });
+}
+
+function agentEvidencePassportFor(req, now = Date.now()) {
+  const userId = req.userAgent?.userId || req.session?.userId;
+  if (!userId) throw Object.assign(new Error('user-bound evidence passport access required'), { status: 403, protocolCode: -32602 });
+  const accountId = accountFor(req).accountId;
+  const account = getAccount(accountId) || { accountId, positions: [], journal: [] };
+  const registry = capabilityRegistryFor(userId, now);
+  const scopedRegistry = req.userAgent ? registryEvidenceForPrincipal(registry, req.userAgent.keyId) : registry;
+  const evaluations = listEvaluations(userId, 1, now).runs || [];
+  return buildAgentEvidencePassport({
+    subjectSeed: req.userAgent?.keyId ? `agent:${userId}:${req.userAgent.keyId}` : `owner:${userId}`,
+    authorization: mcpAuthorizationStatus(req),
+    runtime: req.userAgent
+      ? agentRuntime.agentRuntimeStatus(userId, req.userAgent.keyId, now)
+      : agentRuntime.ownerRuntimeStatus(userId, now),
+    capabilityRegistry: scopedRegistry,
+    releaseTrust: agentReleaseTrustStatus(),
+    securitySentinel: securitySentinelStatus(now),
+    reconciliation: executionReconciliationFor(accountId, account, now),
+    decisionTrace: agentDecisionTraceFor(req, { limit: 25 }),
+    evaluation: evaluations[0] || null,
+    generatedAt: now,
   });
 }
 
@@ -4395,6 +4432,7 @@ const API_INDEX = {
     { path: '/api/agent-data-trust', method: 'GET', purpose: 'read-only external-content quarantine, provenance hashes and execution-evidence trust status' },
     { path: '/api/agent-execution-readiness', method: 'GET', purpose: 'read-only fail-closed readiness for new agent paper exposure across runtime, incident, SLO, guardian, data-trust and authority evidence' },
     { path: '/api/agent-capability-registry', method: 'GET', purpose: 'private read-only effective agent capability and owner-delegation evidence' },
+    { path: '/api/agent-evidence-passport', method: 'GET', purpose: 'private portable AITT integrity bundle across agent authority, runtime, release, security, reconciliation, decisions and evaluation evidence' },
     { path: '/api/autopilot', method: 'GET', purpose: 'autopilot status + config + action audit trail + pending proposals' },
     { path: '/api/autopilot/start', method: 'POST', body: '{config?}', purpose: 'enable autonomous trading loop' },
     { path: '/api/autopilot/stop', method: 'POST', purpose: 'disable autonomous loop' },
@@ -4767,6 +4805,7 @@ app.get('/api/agent-control', requireUser, async (req, res) => {
   const capabilityRegistry = capabilityRegistryFor(req.session.userId);
   const sessionSecurity = agentSessions.agentSessionSecurityStatus({ userId: req.session.userId, isKeyActive: agentKeys.isActiveKey });
   const releaseTrust = agentReleaseTrustStatus();
+  const evidencePassport = agentEvidencePassportFor(req);
   const runnerMission = ownerMissions.find((mission) => mission.status === 'running');
   const runnerApprovalRef = ownerApprovals.ownerApprovalMissionRef(runnerMission?.missionId);
   const missionRunner = buildSupervisedMissionRunner({
@@ -4816,6 +4855,7 @@ app.get('/api/agent-control', requireUser, async (req, res) => {
     capabilityRegistry,
     sessionSecurity,
     releaseTrust,
+    evidencePassport,
     missionRunner,
     eventStream,
     keys,
