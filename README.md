@@ -141,7 +141,9 @@ and the autopilot executes trades with zero human intervention.
 
 - `POST /api/autopilot/start` (+ optional `{config}`), `POST /api/autopilot/stop`,
   `POST /api/autopilot/config`, `GET /api/autopilot` (status + action audit trail)
-- Owner Agent Control Center (`/app#control`) combines current/last activity,
+- Owner Agent Control Center (`/app#control`) begins with an accessible Owner
+  Action Workbench that turns authoritative readiness blockers into ordered,
+  plain-language owner, operator or automatic-monitoring steps, then combines current/last activity,
   scoped-key revocation, wallet budgets and pause/reactivate controls. Its
   confirmed emergency stop pauses autopilot, suspends owned agent wallets and
   invokes the existing live kill switch; the launch boundary remains paper-first.

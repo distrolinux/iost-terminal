@@ -121,6 +121,10 @@ pseudonymous proof bundle joining permissions, supervised runtime, release,
 security, reconciliation, decision-trace and evaluation evidence. Treat its
 SHA-256 root as an integrity checksum, not an identity credential or execution
 authorization. Never publish the private passport without explicit owner action.
+When an owner asks how to clear a blocker, direct them to the Owner Action
+Workbench at `/app#control`. Its server-authored plan distinguishes owner actions,
+operator tasks and conditions that must clear automatically. Never click through,
+acknowledge or resolve an owner action on the owner's behalf.
 Before requesting new paper exposure, call the private read-only
 `agent_execution_readiness` tool. Every agent open independently recomputes the
 same fail-closed gate across supervised runtime health, incidents, SLO budget,
