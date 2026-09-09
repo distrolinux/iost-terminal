@@ -31,7 +31,7 @@ assert.match(html, /data-view="control"/,
   'sidebar must expose the owner control center');
 assert.match(html, /id="view-control"/,
   'app must include the control-center view');
-assert.match(html, /\/js\/app\.js\?v=2\.56\.0/,
+assert.match(html, /\/js\/app\.js\?v=2\.57\.0/,
   'app asset cache key must be bumped');
 
 assert.match(app, /async function renderAgentControl\(\)/,
@@ -54,6 +54,14 @@ assert.match(app, /Agent Data Trust Firewall/,
   'control center must expose external-content and execution-evidence trust status');
 assert.match(app, /Agent Execution Readiness/,
   'control center must expose the new-exposure readiness gate');
+assert.match(app, /Owner Action Workbench/,
+  'control center must turn readiness evidence into plain-language owner guidance');
+assert.match(app, /data-workbench-action/,
+  'workbench items must navigate to their exact owner or system evidence');
+assert.match(app, /data-incident-toggle[\s\S]{0,200}aria-expanded/,
+  'incident cards must expose a keyboard-accessible disclosure control');
+assert.match(app, /After an owner incident action, the complete read-only safety plan is fetched again/,
+  'workbench must explain post-action verification');
 assert.match(app, /Supervised Paper Mission Runner/,
   'control center must expose the agent-portable mission workflow');
 assert.match(app, /No action is executed by this panel/,

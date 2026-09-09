@@ -55,7 +55,7 @@ const server = readFileSync(new URL('../server.js', import.meta.url), 'utf8');
 const app = readFileSync(new URL('../public/js/app.js', import.meta.url), 'utf8');
 assert.match(server, /case 'paper_mission_runner_status'/);
 assert.match(server, /missionRunner,/);
-assert.match(server, /const DISCOVERY_VERSION = '1\.53\.0'/);
+assert.match(server, /const DISCOVERY_VERSION = '1.54.0'/);
 assert.match(app, /Supervised Paper Mission Runner/);
 assert.match(app, /No action is executed by this panel/);
 

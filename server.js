@@ -65,6 +65,7 @@ import { buildSupervisedMissionRunner } from './lib/supervised-mission-runner.js
 import * as agentEvents from './lib/agent-event-stream.js';
 import { buildAgentDecisionTrace } from './lib/agent-decision-trace.js';
 import { buildAgentEvidencePassport } from './lib/agent-evidence-passport.js';
+import { buildOwnerActionWorkbench } from './lib/owner-action-workbench.js';
 import { buildAssetIntelligence } from './lib/asset-intelligence.js';
 import { observeSecurityResponse, securitySentinelStatus } from './lib/security-sentinel.js';
 import { buildPublicLiveReadiness } from './lib/public-live-readiness.js';
@@ -912,7 +913,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.53.0';
+const DISCOVERY_VERSION = '1.54.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -4820,6 +4821,15 @@ app.get('/api/agent-control', requireUser, async (req, res) => {
   const eventStream = agentEvents.agentEventStreamStatus(req.session.userId, {
     afterSequence: Math.max(0, eventCursor - 12), limit: 12,
   });
+  const workbench = buildOwnerActionWorkbench({
+    incidents: incidentStatus, runtime: runtimeStatus, safetySlo, guardian: guardianStatus,
+    dataTrust, reconciliation, authorization: agentWallets.some((wallet) => (
+      wallet.status === 'active' && wallet.capabilities?.includes('trade.paper')
+      && ownerPacts.some((pact) => pact.status === 'active' && pact.agentWalletId === wallet.walletId)
+    )),
+    wallets: agentWallets, pacts: ownerPacts, missions: ownerMissions,
+    frozen: freeze.freezeState().frozen === true,
+  });
   const lastAction = ap.actions[0] || null;
   res.json({
     ok: true,
@@ -4856,6 +4866,7 @@ app.get('/api/agent-control', requireUser, async (req, res) => {
     sessionSecurity,
     releaseTrust,
     evidencePassport,
+    workbench,
     missionRunner,
     eventStream,
     keys,

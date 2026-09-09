@@ -1336,6 +1336,7 @@ async function renderAgentControl() {
   const sessionSecurity = s.sessionSecurity || { status: 'unavailable', counts: {}, policy: {}, sessions: [] };
   const releaseTrust = s.releaseTrust || { status: 'unavailable', checks: {}, pipeline: {}, sbom: {}, failedChecks: [] };
   const evidencePassport = s.evidencePassport || { status: 'unavailable', coverage: {}, claims: [], guarantees: {} };
+  const workbench = s.workbench || { status: 'unavailable', nextAction: {}, actions: [], counts: {}, guarantees: {} };
   const missionRunner = s.missionRunner || { status: 'idle', decision: 'hold', reasonCode: 'no-running-mission', timeline: [], checks: [], runtime: {}, guarantees: {}, execution: {} };
   const eventStream = s.eventStream || { status: 'unavailable', events: [], cursor: {}, replay: {}, chain: {}, transport: {} };
   const supervisedReady = (runtime.runtimes || []).filter((item) => item.ready
@@ -1357,6 +1358,18 @@ async function renderAgentControl() {
   el.innerHTML = `
     <div class="section-title">Agent Control Center <span class="sub">owner-only operations · server-enforced limits</span></div>
     <div class="control-boundary" role="status">Execution boundary · <strong>PAPER</strong> · live and on-chain execution remain separately gated</div>
+    <section class="card owner-action-workbench ${workbench.status === 'ready' ? 'is-ready' : 'is-attention'}" aria-labelledby="ownerActionWorkbenchTitle" aria-live="polite">
+      <div class="workbench-head">
+        <div><span class="eyebrow">Owner Action Workbench</span><h2 id="ownerActionWorkbenchTitle">${workbench.status === 'ready' ? 'Agent workflow is ready' : 'What is blocking my agent?'}</h2><p>${esc(workbench.nextAction?.detail || 'Review current owner and system readiness evidence.')}</p></div>
+        <div class="workbench-status"><span class="chip ${workbench.status === 'ready' ? 'bull' : 'warn'}">${esc(workbench.status || 'unavailable')}</span><strong>${Number(workbench.counts?.ownerAction || 0)}</strong><small>owner action${Number(workbench.counts?.ownerAction || 0) === 1 ? '' : 's'}</small></div>
+      </div>
+      <ol class="workbench-list">${(workbench.actions || []).map((task, index) => {
+        const operation = task.action?.kind === 'incident' ? task.action.operation : '';
+        const label = task.state === 'complete' ? 'Review readiness' : operation === 'acknowledge' ? 'Review & acknowledge' : operation === 'resolve' ? 'Resolve & release' : task.state === 'waiting' ? 'View live evidence' : task.state === 'system-action' ? 'View system status' : 'Continue safely';
+        return `<li class="is-${esc(task.state)} ${index === 0 ? 'is-next' : ''}"><span class="workbench-step mono">${String(index + 1).padStart(2, '0')}</span><div><strong>${esc(task.title)}</strong><p>${esc(task.detail)}</p><small>${task.state === 'owner-action' ? 'Requires you' : task.state === 'waiting' ? 'Monitoring automatically' : task.state === 'system-action' ? 'System or operator task' : 'Verified'}</small></div><button class="btn sm ${task.state === 'owner-action' ? 'green' : 'ghost'}" type="button" data-workbench-action data-target-view="${esc(task.target?.view || 'control')}" data-target-anchor="${esc(task.target?.anchor || 'executionReadinessTitle')}" data-incident-operation="${esc(operation)}" data-incident-ref="${esc(task.action?.incidentRef || '')}">${esc(label)}</button></li>`;
+      }).join('')}</ol>
+      <p class="workbench-boundary">The workbench explains and navigates. It never approves itself, changes permissions, creates a reservation, or trades. After an owner incident action, the complete read-only safety plan is fetched again.</p>
+    </section>
     <div class="grid g-3 control-kpis">
       <div class="card kpi"><span class="k-label">Autonomous agent</span><span class="k-value ${ap.enabled ? 'up' : ''}">${ap.running ? 'WORKING' : ap.enabled ? 'READY' : 'PAUSED'}</span><span class="k-sub">${ap.ticks || 0} ticks · ${ap.dayTrades || 0} paper trades today</span></div>
       <div class="card kpi"><span class="k-label">Active access</span><span class="k-value">${s.keyStats?.active || 0}</span><span class="k-sub">agent keys · ${s.keyStats?.revoked || 0} revoked</span></div>
@@ -1488,15 +1501,16 @@ async function renderAgentControl() {
         <div><span>Recovery ready</span><strong>${incidentCounts.recoveryReady || 0}</strong><small>awaiting owner review</small></div>
         <div><span>Failure threshold</span><strong>${incidentCounts.open ? (incidents.policy?.recoveryFailureQuarantineThreshold || 3) : 'armed'}</strong><small>${Math.round((incidents.policy?.recoveryFailureWindowMs || 600000) / 60000)} minute window</small></div>
       </div>
-      ${incidents.incidents?.length ? `<div class="incident-list">${incidents.incidents.map((incident) => {
+      ${incidents.incidents?.length ? `<div class="incident-list">${incidents.incidents.map((incident, index) => {
         const active = incident.status !== 'resolved';
         const acknowledged = Boolean(incident.acknowledgedAt);
         const severityClass = incident.severity === 'critical' ? 'bear' : incident.status === 'resolved' ? 'bull' : 'warn';
+        const detailId = `incident-detail-${index}`;
         return `<article class="incident-item ${active ? 'is-open' : 'is-resolved'}">
-          <div class="incident-head"><div><strong>${esc(incident.agentName || 'Agent')}</strong><span class="mono muted">${esc(incident.category || 'runtime-incident')} · ${esc(incident.incidentRef || '')}</span></div><div><span class="chip ${severityClass}">${esc(incident.severity)}</span><span class="chip ${incident.status === 'resolved' ? 'bull' : 'neut'}">${esc(incident.status)}</span></div></div>
-          <p>${esc(incident.summary || incident.reasonCode || 'Runtime safety incident')}</p>
+          <div class="incident-head"><div><strong>${esc(incident.agentName || 'Agent')}</strong><span class="mono muted">${esc(incident.category || 'runtime-incident')} · ${esc(incident.incidentRef || '')}</span></div><div><span class="chip ${severityClass}">${esc(incident.severity)}</span><span class="chip ${incident.status === 'resolved' ? 'bull' : 'neut'}">${esc(incident.status)}</span><button class="btn sm ghost incident-disclosure" type="button" data-incident-toggle aria-controls="${detailId}" aria-expanded="${active ? 'true' : 'false'}">${active ? 'Hide details' : 'Review details'}</button></div></div>
+          <div id="${detailId}" class="incident-details" ${active ? '' : 'hidden'}><p>${esc(incident.summary || incident.reasonCode || 'Runtime safety incident')}</p>
           <dl><div><dt>First seen</dt><dd>${incident.openedAt ? timeAgo(incident.openedAt) : 'unknown'}</dd></div><div><dt>Occurrences</dt><dd>${incident.occurrenceCount || 1}</dd></div><div><dt>Quarantine</dt><dd>${incident.quarantineApplied ? 'applied' : 'not required'}</dd></div><div><dt>Review</dt><dd>${acknowledged ? 'acknowledged' : active ? 'required' : 'complete'}</dd></div></dl>
-          ${active ? `<div class="incident-actions">${acknowledged ? '' : `<button class="btn sm ghost" data-incident-action="acknowledge" data-incident-ref="${esc(incident.incidentRef)}">Acknowledge</button>`}<button class="btn sm green" data-incident-action="resolve" data-incident-ref="${esc(incident.incidentRef)}" ${!incident.recoveryReady || !acknowledged ? 'disabled' : ''}>Resolve &amp; release</button><span>${incident.recoveryReady ? acknowledged ? 'Runtime recovered; owner release is available.' : 'Runtime recovered; acknowledge before release.' : 'Release stays locked until runtime health is ready.'}</span></div>` : ''}
+          ${active ? `<div class="incident-actions">${acknowledged ? '' : `<button class="btn sm ghost" data-incident-action="acknowledge" data-incident-ref="${esc(incident.incidentRef)}">Acknowledge</button>`}<button class="btn sm green" data-incident-action="resolve" data-incident-ref="${esc(incident.incidentRef)}" ${!incident.recoveryReady || !acknowledged ? 'disabled' : ''}>Resolve &amp; release</button><span>${incident.recoveryReady ? acknowledged ? 'Runtime recovered; owner release is available.' : 'Runtime recovered; acknowledge before release.' : 'Release stays locked until runtime health is ready.'}</span></div>` : ''}</div>
         </article>`;
       }).join('')}</div>` : '<div class="empty incident-empty">No runtime incidents. Monitoring remains active in the server even when this page is closed.</div>'}
       <p class="runtime-note">Incident controls can only reduce or restore previously granted paper authority. They cannot enable live trading, move funds, or bypass wallet, Pact, mission, preflight, risk, and Position Guardian controls.</p>
@@ -1646,14 +1660,34 @@ async function renderAgentControl() {
     toast(ap.enabled ? '⏸ Paper agent paused' : '▶ Paper agent started');
     renderAgentControl();
   });
-  el.querySelectorAll('[data-incident-action]').forEach((button) => button.addEventListener('click', async () => {
-    const action = button.dataset.incidentAction;
-    if (action === 'resolve' && !confirm('Resolve this recovered incident and release only its runtime quarantine? Existing paper authority and all other safety gates remain unchanged.')) return;
+  const performIncidentAction = async (action, incidentRef) => {
+    const prompt = action === 'resolve'
+      ? 'Resolve this recovered incident and release only its runtime quarantine? Existing paper authority and all other safety gates remain unchanged.'
+      : 'Acknowledge that you reviewed this incident? This does not release quarantine, grant authority, or execute a trade.';
+    if (!confirm(prompt)) return;
     try {
-      await post(`/api/agent-incidents/${button.dataset.incidentRef}/${action}`, {});
+      await post(`/api/agent-incidents/${incidentRef}/${action}`, {});
       toast(action === 'acknowledge' ? 'Incident acknowledged' : '✓ Recovered incident resolved');
       renderAgentControl();
     } catch (e) { toast(`Incident action failed: ${esc(e.message)}`); }
+  };
+  el.querySelectorAll('[data-incident-action]').forEach((button) => button.addEventListener('click', () => (
+    performIncidentAction(button.dataset.incidentAction, button.dataset.incidentRef)
+  )));
+  el.querySelectorAll('[data-incident-toggle]').forEach((button) => button.addEventListener('click', () => {
+    const details = document.getElementById(button.getAttribute('aria-controls'));
+    if (!details) return;
+    const expanded = button.getAttribute('aria-expanded') === 'true';
+    button.setAttribute('aria-expanded', String(!expanded));
+    button.textContent = expanded ? 'Review details' : 'Hide details';
+    details.hidden = expanded;
+  }));
+  el.querySelectorAll('[data-workbench-action]').forEach((button) => button.addEventListener('click', async () => {
+    if (button.dataset.incidentOperation) return performIncidentAction(button.dataset.incidentOperation, button.dataset.incidentRef);
+    const view = button.dataset.targetView || 'control';
+    const anchor = button.dataset.targetAnchor;
+    if (view !== state.activeView) switchView(view);
+    setTimeout(() => document.getElementById(anchor)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), view === state.activeView ? 0 : 250);
   }));
   el.querySelectorAll('[data-approval-action]').forEach((button) => button.addEventListener('click', async () => {
     const action = button.dataset.approvalAction;
