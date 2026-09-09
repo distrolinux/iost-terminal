@@ -1335,6 +1335,7 @@ async function renderAgentControl() {
   const capabilityRegistryHealthy = capabilityRegistry.decision === 'allow';
   const sessionSecurity = s.sessionSecurity || { status: 'unavailable', counts: {}, policy: {}, sessions: [] };
   const releaseTrust = s.releaseTrust || { status: 'unavailable', checks: {}, pipeline: {}, sbom: {}, failedChecks: [] };
+  const evidencePassport = s.evidencePassport || { status: 'unavailable', coverage: {}, claims: [], guarantees: {} };
   const missionRunner = s.missionRunner || { status: 'idle', decision: 'hold', reasonCode: 'no-running-mission', timeline: [], checks: [], runtime: {}, guarantees: {}, execution: {} };
   const eventStream = s.eventStream || { status: 'unavailable', events: [], cursor: {}, replay: {}, chain: {}, transport: {} };
   const supervisedReady = (runtime.runtimes || []).filter((item) => item.ready
@@ -1361,6 +1362,17 @@ async function renderAgentControl() {
       <div class="card kpi"><span class="k-label">Active access</span><span class="k-value">${s.keyStats?.active || 0}</span><span class="k-sub">agent keys · ${s.keyStats?.revoked || 0} revoked</span></div>
       <div class="card kpi"><span class="k-label">Pending approvals</span><span class="k-value">${(s.approvals?.paper || 0) + (s.approvals?.live || 0)}</span><span class="k-sub">${s.approvals?.paper || 0} paper · ${s.approvals?.live || 0} live (cannot auto-execute)</span></div>
     </div>
+    <section class="card evidence-passport ${evidencePassport.status === 'verified' ? 'is-verified' : 'is-partial'}" aria-labelledby="evidencePassportTitle">
+      <div class="section-title" id="evidencePassportTitle">AITT Agent Evidence Passport <span class="sub">private proof · portable JSON · no execution authority</span><span class="receipt-chain ${evidencePassport.integrity?.verified ? 'is-valid' : 'is-invalid'}">${evidencePassport.integrity?.verified ? 'integrity verified' : 'evidence unavailable'}</span></div>
+      <div class="passport-head">
+        <div><span>Evidence coverage</span><strong>${Number(evidencePassport.coverage?.percent || 0)}%</strong><small>${Number(evidencePassport.coverage?.verifiedCount || 0)} of ${Number(evidencePassport.coverage?.claimCount || 0)} claims verified</small></div>
+        <div><span>Private subject</span><strong class="mono">${esc(evidencePassport.subjectRef || 'unavailable')}</strong><small>pseudonymous · no owner or credential ID</small></div>
+        <div><span>Evidence root</span><strong class="mono">${esc((evidencePassport.evidenceRoot || '').slice(0, 20) || 'unavailable')}…</strong><small>SHA-256 canonical bundle</small></div>
+        <button class="btn sm ghost" id="downloadEvidencePassport" ${evidencePassport.evidenceRoot ? '' : 'disabled'}>Download private proof</button>
+      </div>
+      <div class="passport-claims">${(evidencePassport.claims || []).map((item) => `<article class="is-${esc(item.status)}"><span>${esc(item.label)}</span><strong>${esc(item.status)}</strong><small class="mono">${esc((item.evidenceHash || '').slice(0, 12))}…</small></article>`).join('')}</div>
+      <p>This owner-private record connects authority, runtime supervision, release integrity, security observation, execution reconciliation, decision provenance, and evaluation results. It is an integrity record—not an identity credential, recommendation, permission grant, token, NFT, or public-chain publication.</p>
+    </section>
     <section class="card execution-readiness ${executionReady ? 'is-ready' : 'is-blocked'}" aria-labelledby="executionReadinessTitle">
       <div class="section-title" id="executionReadinessTitle">Agent Execution Readiness <span class="sub">every new agent paper position · fail closed</span><span class="receipt-chain ${executionReady ? 'is-valid' : 'is-invalid'}">${executionReady ? 'ready for preflight' : 'new exposure blocked'}</span></div>
       <div class="readiness-grid">${readinessChecks.map(([label, pass]) => `<div><span>${esc(label)}</span><strong class="${pass ? 'up' : 'down'}">${pass ? 'PASS' : 'BLOCK'}</strong></div>`).join('')}</div>
@@ -1764,6 +1776,16 @@ async function renderAgentControl() {
     try { await post(`/api/pacts/${b.dataset.pactTerminate}/terminate`, {}); toast('Paper Pact ended'); renderAgentControl(); }
     catch (e) { toast(`Could not end Pact: ${esc(e.message)}`); }
   }));
+  $('#downloadEvidencePassport', el)?.addEventListener('click', () => {
+    const blob = new Blob([JSON.stringify(evidencePassport, null, 2)], { type: 'application/json' });
+    const href = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = href;
+    link.download = `aitt-agent-evidence-passport-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(href);
+    toast('Private evidence passport downloaded', 'The file grants no trading authority and was not published.');
+  });
 }
 
 // ---------------- Agent Decision Trace (read-only) ----------------

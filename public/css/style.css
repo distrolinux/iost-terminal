@@ -1174,3 +1174,19 @@ body.onboarding-open #authReset { display: none !important; }
 @media (max-width:1000px) { .intel-market,.intel-scores,.intel-signals,.intel-news { grid-column:span 8; }.intel-composite,.intel-probability,.intel-trust,.intel-portfolio { grid-column:span 4; } }
 @media (max-width:720px) { .intel-head,.intel-actions { align-items:stretch; flex-direction:column; }.intel-selector,.intel-selector select { width:100%; }.intel-grid>* { grid-column:1/-1!important; }.intel-market dl { grid-template-columns:1fr; }.intel-actions>div:last-child { justify-content:flex-start; } }
 @media (max-width:700px) { .cmd.intel-mode .cmd-body { grid-template-columns:1fr; } }
+
+/* ---------- AITT Agent Evidence Passport ---------- */
+.evidence-passport { border-color:rgba(0,229,255,.28); background:linear-gradient(135deg,rgba(0,229,255,.05),rgba(47,255,208,.025)); }
+.evidence-passport.is-verified { border-color:rgba(47,255,208,.4); }
+.passport-head { display:grid; grid-template-columns:.7fr 1.25fr 1fr auto; gap:9px; align-items:stretch; margin:12px 0; }
+.passport-head>div { display:flex; flex-direction:column; gap:4px; min-width:0; padding:11px; border:1px solid var(--border); border-radius:9px; background:rgba(0,0,0,.15); }
+.passport-head span,.passport-claims span { color:var(--dim); font-size:9px; letter-spacing:.08em; text-transform:uppercase; }
+.passport-head strong { color:var(--cyan); font-size:12px; overflow-wrap:anywhere; }.passport-head small { color:var(--muted); font-size:9px; }
+.passport-head .btn { align-self:stretch; }
+.passport-claims { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:7px; margin-bottom:12px; }
+.passport-claims article { display:flex; flex-direction:column; gap:5px; min-width:0; padding:9px; border:1px solid var(--border); border-radius:8px; background:rgba(255,255,255,.015); }
+.passport-claims article.is-verified { border-color:rgba(47,255,208,.25); }.passport-claims article.is-attention,.passport-claims article.is-limited { border-color:rgba(255,184,77,.3); }
+.passport-claims strong { font-size:10px; text-transform:uppercase; }.passport-claims .is-verified strong { color:var(--mint); }.passport-claims small { color:var(--dim); overflow:hidden; text-overflow:ellipsis; }
+.evidence-passport>p { margin-bottom:0; color:var(--muted); font-size:10px; line-height:1.6; }
+@media (max-width:1000px) { .passport-head { grid-template-columns:repeat(2,minmax(0,1fr)); }.passport-claims { grid-template-columns:repeat(4,minmax(0,1fr)); } }
+@media (max-width:600px) { .passport-head,.passport-claims { grid-template-columns:1fr; } }

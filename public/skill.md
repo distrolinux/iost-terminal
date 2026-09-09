@@ -116,6 +116,11 @@ Use the private read-only `agent_decision_trace` tool to explain recent paper
 decisions across observe, analyze, risk-check, approval, execution, verification
 and journal stages. It uses authoritative retained evidence only and reports
 missing evidence as unavailable rather than inferring a narrative.
+Use the private read-only `agent_evidence_passport` tool to obtain one portable,
+pseudonymous proof bundle joining permissions, supervised runtime, release,
+security, reconciliation, decision-trace and evaluation evidence. Treat its
+SHA-256 root as an integrity checksum, not an identity credential or execution
+authorization. Never publish the private passport without explicit owner action.
 Before requesting new paper exposure, call the private read-only
 `agent_execution_readiness` tool. Every agent open independently recomputes the
 same fail-closed gate across supervised runtime health, incidents, SLO budget,

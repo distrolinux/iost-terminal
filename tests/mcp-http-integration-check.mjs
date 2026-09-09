@@ -220,6 +220,7 @@ try {
   const runtimeStatusTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_runtime_status');
   const agentEventTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_event_stream_status');
   const decisionTraceTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_decision_trace');
+  const evidencePassportTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_evidence_passport');
   const runtimeHeartbeatTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_runtime_heartbeat');
   const incidentStatusTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_incident_status');
   const safetySloTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_safety_slo_status');
@@ -239,6 +240,10 @@ try {
   assert.equal(decisionTraceTool.annotations.destructiveHint, false);
   assert.equal(decisionTraceTool.annotations.idempotentHint, true);
   assert.equal(decisionTraceTool.inputSchema.properties.limit.maximum, 100);
+  assert.equal(evidencePassportTool.annotations.readOnlyHint, true);
+  assert.equal(evidencePassportTool.annotations.destructiveHint, false);
+  assert.equal(evidencePassportTool.annotations.idempotentHint, true);
+  assert.equal(evidencePassportTool.annotations.openWorldHint, false);
   assert.equal(runtimeHeartbeatTool.annotations.readOnlyHint, false);
   assert.equal(runtimeHeartbeatTool.annotations.destructiveHint, false);
   assert.equal(runtimeHeartbeatTool.annotations.idempotentHint, true);
@@ -584,6 +589,39 @@ try {
   assert.equal(decisionTraceRest.status, 200);
   assert.match(decisionTraceRest.headers.get('cache-control') || '', /private, no-store/);
   assert.equal((await decisionTraceRest.json()).mode, 'paper-only');
+
+  const evidencePassport = await mcp('tools/call', {
+    name: 'agent_evidence_passport', arguments: {},
+  }, { key: keyA.key, name: 'agent_evidence_passport' });
+  assert.equal(evidencePassport.status, 200);
+  const passport = evidencePassport.body.result.structuredContent;
+  assert.equal(passport.mode, 'paper-only');
+  assert.match(passport.subjectRef, /^agt_[a-f0-9]{24}$/);
+  assert.match(passport.evidenceRoot, /^[a-f0-9]{64}$/);
+  assert.equal(passport.integrity.verified, true);
+  assert.equal(passport.claims.length, 7);
+  assert.equal(passport.guarantees.privateByDefault, true);
+  assert.equal(passport.guarantees.automaticPublication, false);
+  assert.equal(passport.guarantees.executionAuthority, 'none');
+  assert.equal(passport.execution.tradeCreated, false);
+  assert.equal(passport.liveScopeUsed, false);
+  assert.equal(passport.publicChainUsed, false);
+  assert(!JSON.stringify(passport).includes(keyA.entry.id), 'passport must omit the raw agent-key identifier');
+  assert(!JSON.stringify(passport).includes(wallet.walletId), 'passport must omit the raw wallet identifier');
+  assert(!JSON.stringify(passport).includes(pact.pactId), 'passport must omit the raw Pact identifier');
+  const otherPassport = await mcp('tools/call', { name: 'agent_evidence_passport', arguments: {} }, {
+    key: keyB.key, name: 'agent_evidence_passport',
+  });
+  assert.notEqual(otherPassport.body.result.structuredContent.subjectRef, passport.subjectRef,
+    'different owners must receive different pseudonymous passport subjects');
+  assert.equal(otherPassport.body.result.structuredContent.claims.find((item) => item.id === 'evaluation').status, 'unavailable',
+    'private evaluation evidence must not cross owner boundaries');
+  const evidencePassportRest = await fetch(`${BASE}/api/agent-evidence-passport`, {
+    headers: { 'X-API-Key': keyA.key },
+  });
+  assert.equal(evidencePassportRest.status, 200);
+  assert.match(evidencePassportRest.headers.get('cache-control') || '', /private, no-store/);
+  assert.match((await evidencePassportRest.json()).evidenceRoot, /^[a-f0-9]{64}$/);
 
   const scorecards = await mcp('tools/call', { name: 'strategy_promotion_scorecards', arguments: { limit: 5 } }, {
     key: keyReadOnly.key, name: 'strategy_promotion_scorecards',
