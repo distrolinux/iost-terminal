@@ -2991,6 +2991,7 @@ async function renderEvaluationLab() {
 function renderEvaluationResult(out, data) {
   const m = data.metrics || {}; const gate = data.promotion || {}; const cal = data.calibration || {};
   const scorecard = gate.scorecard || {}; const lifecycle = scorecard.lifecycle || {}; const components = scorecard.components || {};
+  const benchmark = data.benchmark || {}; const manifest = benchmark.manifest || {}; const trace = benchmark.trace || {};
   const pass = gate.allowed === true;
   const metric = (label, value, sub, cls = '') => `<div class="card kpi"><span class="k-label">${label}</span><span class="k-value ${cls}">${value}</span><span class="k-sub">${sub}</span></div>`;
   const baselineRows = Object.entries(data.baselines || {}).map(([key, row]) => {
@@ -3014,6 +3015,21 @@ function renderEvaluationResult(out, data) {
       <strong>${esc(lifecycle.targetStage || (pass ? 'PAPER_REVIEW' : 'HOLD'))}</strong>
       <p>${pass ? 'Evidence cleared every threshold for owner paper review.' : `${esc(lifecycle.action || 'HOLD')} is recommended; no authority changed.`} Human review remains required.</p>
     </article>
+    <section class="card benchmark-proof" aria-label="AITT verified agent benchmark">
+      <div class="benchmark-proof-head">
+        <div><span>AITT VERIFIED AGENT BENCHMARK · V${benchmark.version ?? '—'}</span><strong>${esc((benchmark.status || 'unavailable').toUpperCase())}</strong></div>
+        <span class="chip ${benchmark.status === 'verified' ? 'ok' : 'warn'}">${trace.coveragePct ?? 0}% trace coverage</span>
+      </div>
+      <p>A locked, replayable paper test. It proves the evidence package—not future performance—and grants no execution authority.</p>
+      <div class="benchmark-proof-grid">
+        <span><small>Manifest</small><b class="mono">${esc((manifest.checksum || 'unavailable').slice(0, 16))}${manifest.checksum ? '…' : ''}</b></span>
+        <span><small>Window</small><b>${manifest.evaluationWindow?.folds ?? 0} unseen folds</b></span>
+        <span><small>Baselines</small><b>${(manifest.baselines || []).length}</b></span>
+        <span><small>Privacy</small><b>${benchmark.safeguards?.privateByDefault ? 'Owner-only' : 'Unknown'}</b></span>
+        <span><small>Authority</small><b>${esc(benchmark.safeguards?.executionAuthority || 'none')}</b></span>
+      </div>
+      <div class="eval-hash mono">BENCHMARK EVIDENCE · ${esc(benchmark.evidenceHash || 'unavailable')}</div>
+    </section>
     <div class="grid g-3 eval-kpis">
       ${metric('OOS trades', m.trades ?? '—', `${m.wins ?? 0} wins · ${m.losses ?? 0} losses`)}
       ${metric('Win rate', m.winRatePct != null ? `${m.winRatePct}%` : '—', 'out-of-sample only')}
@@ -3113,11 +3129,12 @@ async function loadEvaluationHistory() {
     <td>${esc(run.timeframe)}</td><td>${new Date(run.createdAt).toLocaleString()}</td>
     <td class="${(run.metrics?.cumulativeReturnPct || 0) >= 0 ? 'up' : 'down'}">${fmtNum(run.metrics?.cumulativeReturnPct)}%</td>
     <td><strong class="mono">${run.promotion?.scorecard?.score ?? '—'}</strong><span class="eval-history-name">${esc(run.promotion?.scorecard?.lifecycle?.targetStage || 'HOLD')}</span></td>
+    <td><span class="chip ${run.benchmark?.status === 'verified' ? 'ok' : 'neut'}">${esc(run.benchmark?.status || 'legacy')}</span><span class="eval-history-name mono">${esc((run.benchmark?.manifest?.checksum || '').slice(0, 10))}</span></td>
     <td><span class="chip ${run.promotion?.allowed ? 'ok' : 'warn'}">${esc(run.promotion?.decision || 'HOLD')}</span></td>
     <td class="eval-history-actions"><button class="btn sm ghost" data-eval-view="${esc(run.id)}">View</button><a class="btn sm ghost" href="/api/evaluation-lab/history/${esc(run.id)}/export?format=json">JSON</a><a class="btn sm ghost" href="/api/evaluation-lab/history/${esc(run.id)}/export?format=csv">CSV</a></td>
   </tr>`).join('');
   box.innerHTML = `<div class="section-title">Private evaluation history <span class="sub">${runs.length}/${history.retention?.maxRuns || 25} retained · ${history.retention?.retentionDays || 90} days · owner-only</span><button class="btn sm" id="evalCompare" disabled>Compare selected</button></div>
-    ${rows ? `<div class="table-wrap"><table><thead><tr><th></th><th>Run</th><th>Bar</th><th>Created</th><th>Return</th><th>Score</th><th>Gate</th><th>Evidence</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty">No saved evaluations yet.</div>'}`;
+    ${rows ? `<div class="table-wrap"><table><thead><tr><th></th><th>Run</th><th>Bar</th><th>Created</th><th>Return</th><th>Score</th><th>Benchmark</th><th>Gate</th><th>Evidence</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty">No saved evaluations yet.</div>'}`;
   const checks = [...box.querySelectorAll('[data-eval-compare]')]; const compare = $('#evalCompare');
   checks.forEach(check => check.addEventListener('change', () => {
     const selected = checks.filter(x => x.checked);

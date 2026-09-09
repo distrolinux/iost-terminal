@@ -204,6 +204,10 @@ only public read tools. A resource-bound bearer token or per-user agent key with
 adds the user's private paper account, statistics and causal evaluation history. The
 read-only `strategy_promotion_scorecards` tool reports evidence-bound 0–100 scores and
 paper review, shadow, restriction or pause/demotion recommendations without applying them. The
+read-only `agent_benchmark_scorecards` tool packages those private paper evaluations as
+reproducible benchmarks with locked manifest checksums, baseline comparisons, trace coverage
+and tamper-evident evidence hashes. Benchmarks cannot publish themselves, promote an agent,
+trade, or change execution authority. The
 `trade-paper` scope adds paper open/close tools, but an open still requires an owned
 agent wallet and active wallet-bound Pact. Long evaluations support owner-bound MCP
 Tasks. MCP never exposes live orders, money movement, token conversion or public-chain
