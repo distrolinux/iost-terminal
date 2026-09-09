@@ -43,6 +43,8 @@ presented as profitable trading evidence.
   benchmark scorecards.
 - `agent_benchmark_scorecards` exposes the same private read-only evidence to
   authorized MCP agents.
+- The manifest binds the optional Agent Challenge Lab evidence hash so a
+  verified benchmark cannot silently detach or substitute its stress result.
 
 Legacy retained evaluations remain readable and are labelled `legacy` because
 they predate the benchmark envelope. New evaluations include the benchmark in

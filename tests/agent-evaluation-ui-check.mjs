@@ -8,12 +8,14 @@ const home = readFileSync(new URL('../public/index.html', import.meta.url), 'utf
 
 assert.match(html, /data-view="evaluation"[^>]+View Agent Evaluation Lab/);
 assert.match(html, /id="view-evaluation"[^>]+Agent Evaluation Lab view/);
-assert.match(html, /\/css\/style\.css\?v=2\.32/);
-assert.match(html, /\/js\/app\.js\?v=2\.54\.0/);
+assert.match(html, /\/css\/style\.css\?v=2\.33/);
+assert.match(html, /\/js\/app\.js\?v=2\.55\.0/);
 assert.match(app, /VALID_VIEWS = \[[^\]]*'evaluation'/);
 assert.match(app, /async function renderEvaluationLab\(\)/);
 assert.match(app, /post\('\/api\/evaluation-lab'/);
 assert.match(app, /next-bar-open/i);
+assert.match(app, /AITT AGENT CHALLENGE LAB/);
+assert.match(app, /locked paper stress tests/i);
 assert.match(app, /STRATEGY GOVERNANCE · PAPER ONLY/);
 assert.match(app, /promotion-scorecard/);
 assert.match(app, /PROMOTE_TO_PAPER_REVIEW|targetStage/);
@@ -30,6 +32,7 @@ assert.match(css, /\.eval-baseline/);
 assert.match(css, /\.eval-chart-grid/);
 assert.match(css, /\.eval-history/);
 assert.match(css, /\.promotion-scorecard/);
+assert.match(css, /\.challenge-proof/);
 assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.eval-form/);
 assert.match(home, /Agent Evaluation Lab/);
 assert.match(home, /walk-forward[^<]+future-data leakage/i);

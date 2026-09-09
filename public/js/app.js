@@ -2992,6 +2992,7 @@ function renderEvaluationResult(out, data) {
   const m = data.metrics || {}; const gate = data.promotion || {}; const cal = data.calibration || {};
   const scorecard = gate.scorecard || {}; const lifecycle = scorecard.lifecycle || {}; const components = scorecard.components || {};
   const benchmark = data.benchmark || {}; const manifest = benchmark.manifest || {}; const trace = benchmark.trace || {};
+  const challenge = data.challenge || {}; const challengeSummary = challenge.summary || {};
   const pass = gate.allowed === true;
   const metric = (label, value, sub, cls = '') => `<div class="card kpi"><span class="k-label">${label}</span><span class="k-value ${cls}">${value}</span><span class="k-sub">${sub}</span></div>`;
   const baselineRows = Object.entries(data.baselines || {}).map(([key, row]) => {
@@ -3009,6 +3010,13 @@ function renderEvaluationResult(out, data) {
     'Evidence depth': components.evidenceDepth,
   }).map(([label, value]) => `<div class="promotion-component"><span>${label}</span><i><b style="width:${Math.max(0, Math.min(100, Number(value) || 0))}%"></b></i><strong>${value ?? '—'}</strong></div>`).join('');
   const folds = (data.folds || []).map(f => `<tr><td>${f.id}</td><td class="mono">${f.train.fromIndex}–${f.train.toIndex}</td><td class="mono">${f.test.fromIndex}–${f.test.toIndex}</td><td>${f.result?.trades ?? 0}</td><td class="${(f.result?.returnPct || 0) >= 0 ? 'up' : 'down'}">${(f.result?.returnPct || 0) > 0 ? '+' : ''}${fmtNum(f.result?.returnPct)}%</td></tr>`).join('');
+  const challengeRows = (challenge.scenarios || []).map((scenario) => `<div class="challenge-row ${scenario.passed ? 'is-pass' : 'is-fail'}">
+    <span><b>${esc(scenario.label || scenario.id)}</b><small>${scenario.metrics?.trades ?? 0} trades · $${fmtNum(scenario.metrics?.totalCosts)}</small></span>
+    <span><small>Return</small><b>${Number(scenario.metrics?.returnPct || 0) > 0 ? '+' : ''}${fmtNum(scenario.metrics?.returnPct)}%</b></span>
+    <span><small>Drawdown</small><b>${fmtNum(scenario.metrics?.maxDrawdownPct)}%</b></span>
+    <span><small>Degradation</small><b>${fmtNum(scenario.metrics?.degradationPct)}%</b></span>
+    <strong>${scenario.passed ? 'PASS' : 'HOLD'}</strong>
+  </div>`).join('');
   out.innerHTML = `
     <article class="eval-verdict ${pass ? 'is-pass' : 'is-hold'}">
       <span class="eval-verdict-label">STRATEGY GOVERNANCE · PAPER ONLY</span>
@@ -3029,6 +3037,15 @@ function renderEvaluationResult(out, data) {
         <span><small>Authority</small><b>${esc(benchmark.safeguards?.executionAuthority || 'none')}</b></span>
       </div>
       <div class="eval-hash mono">BENCHMARK EVIDENCE · ${esc(benchmark.evidenceHash || 'unavailable')}</div>
+    </section>
+    <section class="card challenge-proof" aria-label="AITT agent challenge lab">
+      <div class="benchmark-proof-head">
+        <div><span>AITT AGENT CHALLENGE LAB · V${challenge.version ?? '—'}</span><strong>${esc((challenge.decision || 'unavailable').toUpperCase())}</strong></div>
+        <span class="chip ${challenge.decision === 'resilient' ? 'ok' : 'warn'}">${challengeSummary.passed ?? 0}/${challengeSummary.scenarioCount ?? 0} scenarios passed</span>
+      </div>
+      <p>Locked paper stress tests expose strategies that depend on cheap fees, perfect liquidity, or immediate fills. Results are advisory and never grant authority.</p>
+      <div class="challenge-rows">${challengeRows || '<div class="muted">Challenge evidence unavailable for this legacy run.</div>'}</div>
+      <div class="eval-hash mono">CHALLENGE EVIDENCE · ${esc(challenge.evidenceHash || 'unavailable')}</div>
     </section>
     <div class="grid g-3 eval-kpis">
       ${metric('OOS trades', m.trades ?? '—', `${m.wins ?? 0} wins · ${m.losses ?? 0} losses`)}

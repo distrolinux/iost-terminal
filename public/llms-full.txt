@@ -207,7 +207,9 @@ paper review, shadow, restriction or pause/demotion recommendations without appl
 read-only `agent_benchmark_scorecards` tool packages those private paper evaluations as
 reproducible benchmarks with locked manifest checksums, baseline comparisons, trace coverage
 and tamper-evident evidence hashes. Benchmarks cannot publish themselves, promote an agent,
-trade, or change execution authority. The
+trade, or change execution authority. The private read-only `agent_challenge_scorecards`
+tool adds five deterministic scenarios: nominal, fee shock, thin-book costs, delayed fill and
+combined stress. Its resilience result is advisory and cannot promote, authorize or trade. The
 `trade-paper` scope adds paper open/close tools, but an open still requires an owned
 agent wallet and active wallet-bound Pact. Long evaluations support owner-bound MCP
 Tasks. MCP never exposes live orders, money movement, token conversion or public-chain

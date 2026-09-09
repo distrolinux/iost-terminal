@@ -283,6 +283,10 @@ try {
   assert.equal(benchmarkTool.annotations.readOnlyHint, true);
   assert.equal(benchmarkTool.annotations.destructiveHint, false);
   assert.equal(benchmarkTool.annotations.idempotentHint, true);
+  const challengeTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_challenge_scorecards');
+  assert.equal(challengeTool.annotations.readOnlyHint, true);
+  assert.equal(challengeTool.annotations.destructiveHint, false);
+  assert.equal(challengeTool.annotations.idempotentHint, true);
   assert(!privateTools.body.result.tools.some((tool) => /live|swap|convert/i.test(tool.name)));
   const appTools = await mcp('tools/list', {}, { key: keyA.key, apps: true });
   const reviewTool = appTools.body.result.tools.find((tool) => tool.name === 'evaluation_review');
@@ -603,6 +607,18 @@ try {
     key: keyB.key, name: 'agent_benchmark_scorecards',
   });
   assert.equal(otherBenchmarks.body.result.structuredContent.benchmarks.length, 0, 'benchmarks must not cross owner boundaries');
+  const challenges = await mcp('tools/call', { name: 'agent_challenge_scorecards', arguments: { limit: 5 } }, {
+    key: keyReadOnly.key, name: 'agent_challenge_scorecards',
+  });
+  assert.equal(challenges.status, 200);
+  assert.equal(challenges.body.result.structuredContent.challenges.length, 2);
+  assert.equal(challenges.body.result.structuredContent.challenges[0].challenge.status, 'verified');
+  assert.equal(challenges.body.result.structuredContent.challenges[0].challenge.summary.scenarioCount, 5);
+  assert.equal(challenges.body.result.structuredContent.guarantees.automaticPromotion, false);
+  const otherChallenges = await mcp('tools/call', { name: 'agent_challenge_scorecards', arguments: { limit: 5 } }, {
+    key: keyB.key, name: 'agent_challenge_scorecards',
+  });
+  assert.equal(otherChallenges.body.result.structuredContent.challenges.length, 0, 'challenges must not cross owner boundaries');
 
   const preflightAccountBefore = await mcp('tools/call', { name: 'paper_account', arguments: {} }, {
     key: keyA.key, name: 'paper_account',
