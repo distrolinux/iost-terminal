@@ -40,6 +40,12 @@ try {
   const own = history.listEvaluations('user-a-private-id', 50, now);
   assert.equal(own.runs.length, 3, 'count and age retention must prune old history');
   assert.equal(own.retention.maxRuns, 3);
+  assert.equal(own.runs.every((run) => run.benchmark?.status === 'verified'), true);
+  const benchmarks = history.listAgentBenchmarks('user-a-private-id', 50, now);
+  assert.equal(benchmarks.benchmarks.length, 3);
+  assert.equal(benchmarks.guarantees.privateByDefault, true);
+  assert.equal(benchmarks.guarantees.executionAuthority, 'none');
+  assert.equal(benchmarks.benchmarks.every((run) => /^[a-f0-9]{64}$/.test(run.benchmark?.manifest?.checksum || '')), true);
   assert.equal(history.listEvaluations('user-b-private-id', 50, now).runs.length, 0, 'another user must see no runs');
   assert.equal(history.getEvaluation('user-b-private-id', first.id), null, 'cross-user id lookup must fail closed');
   const aging = history.saveEvaluation('aging-user', evaluation, now - 31 * 86_400_000);

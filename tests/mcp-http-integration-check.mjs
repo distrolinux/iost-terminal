@@ -279,6 +279,10 @@ try {
   const promotionTool = privateTools.body.result.tools.find((tool) => tool.name === 'strategy_promotion_scorecards');
   assert.equal(promotionTool.annotations.readOnlyHint, true);
   assert.equal(promotionTool.annotations.destructiveHint, false);
+  const benchmarkTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_benchmark_scorecards');
+  assert.equal(benchmarkTool.annotations.readOnlyHint, true);
+  assert.equal(benchmarkTool.annotations.destructiveHint, false);
+  assert.equal(benchmarkTool.annotations.idempotentHint, true);
   assert(!privateTools.body.result.tools.some((tool) => /live|swap|convert/i.test(tool.name)));
   const appTools = await mcp('tools/list', {}, { key: keyA.key, apps: true });
   const reviewTool = appTools.body.result.tools.find((tool) => tool.name === 'evaluation_review');
@@ -588,6 +592,17 @@ try {
     key: keyB.key, name: 'strategy_promotion_scorecards',
   });
   assert.equal(otherScorecards.body.result.structuredContent.scorecards.length, 0, 'scorecards must not cross owner boundaries');
+  const benchmarks = await mcp('tools/call', { name: 'agent_benchmark_scorecards', arguments: { limit: 5 } }, {
+    key: keyReadOnly.key, name: 'agent_benchmark_scorecards',
+  });
+  assert.equal(benchmarks.status, 200);
+  assert.equal(benchmarks.body.result.structuredContent.benchmarks.length, 2);
+  assert.equal(benchmarks.body.result.structuredContent.benchmarks[0].benchmark.status, 'verified');
+  assert.equal(benchmarks.body.result.structuredContent.guarantees.executionAuthority, 'none');
+  const otherBenchmarks = await mcp('tools/call', { name: 'agent_benchmark_scorecards', arguments: { limit: 5 } }, {
+    key: keyB.key, name: 'agent_benchmark_scorecards',
+  });
+  assert.equal(otherBenchmarks.body.result.structuredContent.benchmarks.length, 0, 'benchmarks must not cross owner boundaries');
 
   const preflightAccountBefore = await mcp('tools/call', { name: 'paper_account', arguments: {} }, {
     key: keyA.key, name: 'paper_account',

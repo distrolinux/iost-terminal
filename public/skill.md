@@ -72,6 +72,9 @@ live order, move real money, convert a token, or write to a public chain.
 The private read-only `strategy_promotion_scorecards` tool returns evidence-bound
 0–100 strategy scores and paper-review, shadow, restriction or pause/demotion
 recommendations without changing agent or execution authority.
+The private read-only `agent_benchmark_scorecards` tool returns AITT verified paper
+benchmarks with locked manifest checksums, baseline comparisons, causal trace coverage
+and evidence hashes. It cannot publish evidence, promote an agent, trade or change authority.
 The private read-only `paper_position_guardian` tool reports server-enforced
 paper bracket/OCO coverage, fresh-quote watchdog health and automatic-exit
 receipt evidence. Protection continues when the initiating agent disconnects.
