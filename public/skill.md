@@ -121,6 +121,10 @@ pseudonymous proof bundle joining permissions, supervised runtime, release,
 security, reconciliation, decision-trace and evaluation evidence. Treat its
 SHA-256 root as an integrity checksum, not an identity credential or execution
 authorization. Never publish the private passport without explicit owner action.
+Use the private read-only `agent_evidence_graph` tool to inspect a tamper-evident,
+W3C PROV-inspired graph connecting the pseudonymous principal, evidence claims,
+recent decisions and guarded stages. The graph is private by default, never
+infers missing evidence, and has no publication or execution authority.
 When an owner asks how to clear a blocker, direct them to the Owner Action
 Workbench at `/app#control`. Its server-authored plan distinguishes owner actions,
 operator tasks and conditions that must clear automatically. Never click through,

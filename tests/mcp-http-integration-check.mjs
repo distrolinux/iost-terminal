@@ -221,6 +221,7 @@ try {
   const agentEventTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_event_stream_status');
   const decisionTraceTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_decision_trace');
   const evidencePassportTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_evidence_passport');
+  const evidenceGraphTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_evidence_graph');
   const runtimeHeartbeatTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_runtime_heartbeat');
   const incidentStatusTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_incident_status');
   const safetySloTool = privateTools.body.result.tools.find((tool) => tool.name === 'agent_safety_slo_status');
@@ -238,6 +239,9 @@ try {
   assert.equal(agentEventTool.inputSchema.properties.afterSequence.minimum, 0);
   assert.equal(decisionTraceTool.annotations.readOnlyHint, true);
   assert.equal(decisionTraceTool.annotations.destructiveHint, false);
+  assert.equal(evidenceGraphTool.annotations.readOnlyHint, true);
+  assert.equal(evidenceGraphTool.annotations.destructiveHint, false);
+  assert.equal(evidenceGraphTool.annotations.idempotentHint, true);
   assert.equal(decisionTraceTool.annotations.idempotentHint, true);
   assert.equal(decisionTraceTool.inputSchema.properties.limit.maximum, 100);
   assert.equal(evidencePassportTool.annotations.readOnlyHint, true);
@@ -622,6 +626,28 @@ try {
   assert.equal(evidencePassportRest.status, 200);
   assert.match(evidencePassportRest.headers.get('cache-control') || '', /private, no-store/);
   assert.match((await evidencePassportRest.json()).evidenceRoot, /^[a-f0-9]{64}$/);
+
+  const evidenceGraph = await mcp('tools/call', {
+    name: 'agent_evidence_graph', arguments: {},
+  }, { key: keyA.key, name: 'agent_evidence_graph' });
+  assert.equal(evidenceGraph.status, 200);
+  const graph = evidenceGraph.body.result.structuredContent;
+  assert.equal(graph.mode, 'paper-only');
+  assert.equal(graph.provenance.profile, 'W3C-PROV-inspired');
+  assert.match(graph.evidenceRoot, /^[a-f0-9]{64}$/);
+  assert.equal(graph.integrity.verified, true);
+  assert.equal(graph.guarantees.privateByDefault, true);
+  assert.equal(graph.guarantees.automaticPublication, false);
+  assert.equal(graph.guarantees.executionAuthority, 'none');
+  assert.equal(graph.execution.attempted, false);
+  assert.equal(graph.liveScopeUsed, false);
+  assert.equal(graph.publicChainUsed, false);
+  assert(!JSON.stringify(graph).includes(keyA.entry.id), 'graph must omit the raw agent-key identifier');
+  assert(!JSON.stringify(graph).includes(wallet.walletId), 'graph must omit the raw wallet identifier');
+  assert(!JSON.stringify(graph).includes(pact.pactId), 'graph must omit the raw Pact identifier');
+  const evidenceGraphRest = await fetch(`${BASE}/api/agent-evidence-graph`, { headers: { 'X-API-Key': keyA.key } });
+  assert.equal(evidenceGraphRest.status, 200);
+  assert.match(evidenceGraphRest.headers.get('cache-control') || '', /private, no-store/);
 
   const scorecards = await mcp('tools/call', { name: 'strategy_promotion_scorecards', arguments: { limit: 5 } }, {
     key: keyReadOnly.key, name: 'strategy_promotion_scorecards',

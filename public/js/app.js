@@ -1336,6 +1336,7 @@ async function renderAgentControl() {
   const sessionSecurity = s.sessionSecurity || { status: 'unavailable', counts: {}, policy: {}, sessions: [] };
   const releaseTrust = s.releaseTrust || { status: 'unavailable', checks: {}, pipeline: {}, sbom: {}, failedChecks: [] };
   const evidencePassport = s.evidencePassport || { status: 'unavailable', coverage: {}, claims: [], guarantees: {} };
+  const evidenceGraph = s.evidenceGraph || { status: 'unavailable', counts: {}, latestDecision: { stages: [] }, sourceVerification: {}, guarantees: {} };
   const workbench = s.workbench || { status: 'unavailable', nextAction: {}, actions: [], counts: {}, guarantees: {} };
   const missionRunner = s.missionRunner || { status: 'idle', decision: 'hold', reasonCode: 'no-running-mission', timeline: [], checks: [], runtime: {}, guarantees: {}, execution: {} };
   const eventStream = s.eventStream || { status: 'unavailable', events: [], cursor: {}, replay: {}, chain: {}, transport: {} };
@@ -1385,6 +1386,20 @@ async function renderAgentControl() {
       </div>
       <div class="passport-claims">${(evidencePassport.claims || []).map((item) => `<article class="is-${esc(item.status)}"><span>${esc(item.label)}</span><strong>${esc(item.status)}</strong><small class="mono">${esc((item.evidenceHash || '').slice(0, 12))}…</small></article>`).join('')}</div>
       <p>This owner-private record connects authority, runtime supervision, release integrity, security observation, execution reconciliation, decision provenance, and evaluation results. It is an integrity record—not an identity credential, recommendation, permission grant, token, NFT, or public-chain publication.</p>
+    </section>
+    <section class="card evidence-graph ${evidenceGraph.status === 'verified' ? 'is-verified' : 'is-partial'}" aria-labelledby="evidenceGraphTitle">
+      <div class="section-title" id="evidenceGraphTitle">AITT Decision Evidence Graph <span class="sub">private provenance · agent-readable · tamper-evident</span><span class="receipt-chain ${evidenceGraph.integrity?.verified ? 'is-valid' : 'is-invalid'}">${evidenceGraph.status === 'verified' ? 'provenance verified' : 'evidence partial'}</span></div>
+      <div class="evidence-graph-summary">
+        <div><span>Graph</span><strong>${Number(evidenceGraph.counts?.nodes || 0)} nodes</strong><small>${Number(evidenceGraph.counts?.edges || 0)} provenance links</small></div>
+        <div><span>Decision evidence</span><strong>${Number(evidenceGraph.counts?.decisions || 0)} decisions</strong><small>${Number(evidenceGraph.counts?.stages || 0)} retained stages</small></div>
+        <div><span>Connectivity</span><strong class="${evidenceGraph.counts?.orphans ? 'down' : 'up'}">${evidenceGraph.counts?.orphans ? `${Number(evidenceGraph.counts.orphans)} orphaned` : 'fully linked'}</strong><small>missing evidence is never inferred</small></div>
+        <button class="btn sm ghost" id="downloadEvidenceGraph" ${evidenceGraph.evidenceRoot ? '' : 'disabled'}>Download private graph</button>
+      </div>
+      <div class="evidence-graph-flow" role="list" aria-label="Latest agent decision provenance">
+        ${(evidenceGraph.latestDecision?.stages || []).length ? evidenceGraph.latestDecision.stages.map((stage, index) => `<div class="graph-node is-${esc(stage.status)}" role="listitem"><span>${String(index + 1).padStart(2, '0')}</span><strong>${esc(String(stage.name || '').replace('-', ' '))}</strong><small>${esc(stage.status || 'unavailable')}</small></div>`).join('<i aria-hidden="true">→</i>') : '<p>No retained decision stages yet. The graph is ready to link the next paper decision.</p>'}
+      </div>
+      <div class="evidence-graph-boundary"><span>W3C PROV-inspired vocabulary</span><span>private by default</span><span>no automatic publication</span><span>no execution authority</span></div>
+      <p>Each relationship shows what evidence a decision used, which agent it was associated with, and how one stage informed the next. This AITT application profile is portable JSON—not an identity credential, investment recommendation, NFT, or formal public-chain publication.</p>
     </section>
     <section class="card execution-readiness ${executionReady ? 'is-ready' : 'is-blocked'}" aria-labelledby="executionReadinessTitle">
       <div class="section-title" id="executionReadinessTitle">Agent Execution Readiness <span class="sub">every new agent paper position · fail closed</span><span class="receipt-chain ${executionReady ? 'is-valid' : 'is-invalid'}">${executionReady ? 'ready for preflight' : 'new exposure blocked'}</span></div>
@@ -1819,6 +1834,16 @@ async function renderAgentControl() {
     link.click();
     URL.revokeObjectURL(href);
     toast('Private evidence passport downloaded', 'The file grants no trading authority and was not published.');
+  });
+  $('#downloadEvidenceGraph', el)?.addEventListener('click', () => {
+    const blob = new Blob([JSON.stringify(evidenceGraph, null, 2)], { type: 'application/json' });
+    const href = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = href;
+    link.download = `aitt-decision-evidence-graph-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(href);
+    toast('Private evidence graph downloaded', 'The graph grants no trading authority and was not published.');
   });
 }
 
