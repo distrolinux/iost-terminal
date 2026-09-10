@@ -31,7 +31,7 @@ assert.match(html, /data-view="control"/,
   'sidebar must expose the owner control center');
 assert.match(html, /id="view-control"/,
   'app must include the control-center view');
-assert.match(html, /\/js\/app\.js\?v=2\.57\.0/,
+assert.match(html, /\/js\/app\.js\?v=2\.58\.0/,
   'app asset cache key must be bumped');
 
 assert.match(app, /async function renderAgentControl\(\)/,
@@ -54,8 +54,16 @@ assert.match(app, /Agent Data Trust Firewall/,
   'control center must expose external-content and execution-evidence trust status');
 assert.match(app, /Agent Execution Readiness/,
   'control center must expose the new-exposure readiness gate');
+assert.match(app, /AITT Decision Evidence Graph/,
+  'control center must expose private agent decision provenance');
+assert.match(app, /private provenance · agent-readable · tamper-evident/,
+  'evidence graph must state its owner-private integrity boundary');
 assert.match(app, /Owner Action Workbench/,
   'control center must turn readiness evidence into plain-language owner guidance');
+assert.match(app, /AITT Decision Evidence Graph/,
+  'control center must expose the private provenance graph');
+assert.match(app, /private provenance · agent-readable · tamper-evident/,
+  'evidence graph must state its private integrity boundary');
 assert.match(app, /data-workbench-action/,
   'workbench items must navigate to their exact owner or system evidence');
 assert.match(app, /data-incident-toggle[\s\S]{0,200}aria-expanded/,

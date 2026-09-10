@@ -65,6 +65,7 @@ import { buildSupervisedMissionRunner } from './lib/supervised-mission-runner.js
 import * as agentEvents from './lib/agent-event-stream.js';
 import { buildAgentDecisionTrace } from './lib/agent-decision-trace.js';
 import { buildAgentEvidencePassport } from './lib/agent-evidence-passport.js';
+import { buildAgentEvidenceGraph } from './lib/agent-evidence-graph.js';
 import { buildOwnerActionWorkbench } from './lib/owner-action-workbench.js';
 import { buildAssetIntelligence } from './lib/asset-intelligence.js';
 import { observeSecurityResponse, securitySentinelStatus } from './lib/security-sentinel.js';
@@ -913,7 +914,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.54.1';
+const DISCOVERY_VERSION = '1.55.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -985,6 +986,7 @@ const OPENAPI_PATHS = {
   '/api/execution-intents/{intentId}': { get: { summary: 'Private status for one paper execution intent', tags: ['execution'] } },
   '/api/execution-reconciliation': { get: { summary: 'Private read-only reconciliation of paper intents, receipts, positions, journal and cash', tags: ['execution'] } },
   '/api/agent-evidence-passport': { get: { summary: 'Private portable AITT proof bundle across agent authority, runtime, release, security, execution and evaluation evidence', tags: ['autonomy'] } },
+  '/api/agent-evidence-graph': { get: { summary: 'Private tamper-evident provenance graph connecting AITT authority, decisions and evidence', tags: ['autonomy'] } },
   '/api/agent-portfolio-orchestrator': { get: { summary: 'Private read-only multi-agent portfolio coordination, conflict and execution-lane status', tags: ['autonomy'] } },
   '/api/agent-capability-registry': { get: { summary: 'Private read-only effective agent capabilities and owner delegation evidence', tags: ['autonomy'] } },
   '/api/signals': { post: { summary: 'Publish a signal as the authenticated principal; SHA-256 pinned on IOST mainnet', tags: ['agents'] } },
@@ -1406,6 +1408,12 @@ async function mcpToolCall(req, name, args) {
         throw Object.assign(new Error('user-bound evidence passport read scope required'), { protocolCode: -32602 });
       }
       return agentEvidencePassportFor(req);
+    }
+    case 'agent_evidence_graph': {
+      if (req.userAgent && !userAgentHas(req, 'read')) {
+        throw Object.assign(new Error('user-bound evidence graph read scope required'), { protocolCode: -32602 });
+      }
+      return agentEvidenceGraphFor(req);
     }
     case 'agent_incident_status': {
       if (req.userAgent) return agentIncidents.agentIncidentStatus(req.userAgent.userId, req.userAgent.keyId);
@@ -2084,6 +2092,11 @@ app.get('/api/agent-evidence-passport', requireUser, (req, res) => {
   res.set('Cache-Control', 'private, no-store');
   if (req.userAgent && !userAgentHas(req, 'read')) return res.status(403).json({ error: 'read scope required' });
   res.json(agentEvidencePassportFor(req));
+});
+app.get('/api/agent-evidence-graph', requireUser, (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (req.userAgent && !userAgentHas(req, 'read')) return res.status(403).json({ error: 'read scope required' });
+  res.json(agentEvidenceGraphFor(req));
 });
 app.get('/api/agent-mission-runner', requireUser, (req, res) => {
   res.set('Cache-Control', 'private, no-store');
@@ -3068,6 +3081,14 @@ function agentEvidencePassportFor(req, now = Date.now()) {
     reconciliation: executionReconciliationFor(accountId, account, now),
     decisionTrace: agentDecisionTraceFor(req, { limit: 25 }),
     evaluation: evaluations[0] || null,
+    generatedAt: now,
+  });
+}
+
+function agentEvidenceGraphFor(req, now = Date.now()) {
+  return buildAgentEvidenceGraph({
+    passport: agentEvidencePassportFor(req, now),
+    decisionTrace: agentDecisionTraceFor(req, { limit: 25 }),
     generatedAt: now,
   });
 }
@@ -4434,6 +4455,7 @@ const API_INDEX = {
     { path: '/api/agent-execution-readiness', method: 'GET', purpose: 'read-only fail-closed readiness for new agent paper exposure across runtime, incident, SLO, guardian, data-trust and authority evidence' },
     { path: '/api/agent-capability-registry', method: 'GET', purpose: 'private read-only effective agent capability and owner-delegation evidence' },
     { path: '/api/agent-evidence-passport', method: 'GET', purpose: 'private portable AITT integrity bundle across agent authority, runtime, release, security, reconciliation, decisions and evaluation evidence' },
+    { path: '/api/agent-evidence-graph', method: 'GET', purpose: 'private tamper-evident provenance graph connecting the pseudonymous principal, evidence claims, decisions and guarded stages' },
     { path: '/api/autopilot', method: 'GET', purpose: 'autopilot status + config + action audit trail + pending proposals' },
     { path: '/api/autopilot/start', method: 'POST', body: '{config?}', purpose: 'enable autonomous trading loop' },
     { path: '/api/autopilot/stop', method: 'POST', purpose: 'disable autonomous loop' },
@@ -4807,6 +4829,11 @@ app.get('/api/agent-control', requireUser, async (req, res) => {
   const sessionSecurity = agentSessions.agentSessionSecurityStatus({ userId: req.session.userId, isKeyActive: agentKeys.isActiveKey });
   const releaseTrust = agentReleaseTrustStatus();
   const evidencePassport = agentEvidencePassportFor(req);
+  const evidenceGraph = buildAgentEvidenceGraph({
+    passport: evidencePassport,
+    decisionTrace: agentDecisionTraceFor(req, { limit: 25 }),
+    generatedAt: evidencePassport.generatedAt,
+  });
   const runnerMission = ownerMissions.find((mission) => mission.status === 'running');
   const runnerApprovalRef = ownerApprovals.ownerApprovalMissionRef(runnerMission?.missionId);
   const missionRunner = buildSupervisedMissionRunner({
@@ -4866,6 +4893,7 @@ app.get('/api/agent-control', requireUser, async (req, res) => {
     sessionSecurity,
     releaseTrust,
     evidencePassport,
+    evidenceGraph,
     workbench,
     missionRunner,
     eventStream,

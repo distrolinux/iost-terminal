@@ -249,6 +249,12 @@ Owner testing instructions: `/docs/OWNER_MCP_APP_TESTING.md`.
 - Raw owner, credential, wallet, Pact, mission, receipt and trace identifiers are excluded. Each claim and the canonical bundle have SHA-256 integrity hashes.
 - The passport is not an identity credential, recommendation, permission grant, token, NFT or public publication. It cannot approve, reserve, trade, enable live scope or use a public chain.
 
+### AITT Decision Evidence Graph
+- `GET /api/agent-evidence-graph` and authenticated MCP tool `agent_evidence_graph` connect the private evidence passport, pseudonymous agent, decisions and guarded stages in portable JSON.
+- The compact application profile uses W3C PROV-inspired entity, activity, agent and derivation relations without claiming formal RDF/PROV serialization.
+- Graph nodes and links are canonicalized under a SHA-256 evidence root. Missing evidence and source-chain verification remain explicit.
+- The graph is owner-isolated and private by default. It cannot publish itself, authorize, approve, reserve, trade, enable live scope or use a public chain.
+
 ### Owner Action Workbench
 - The signed-in Agent Control Center begins with a deterministic answer to “What is blocking my agent?” assembled from incidents, runtime supervision, recovery probation, current Safety SLO burn, Position Guardian, Data Trust, reconciliation, emergency freeze, paper wallet/Pact authority and mission binding.
 - Actions are explicitly classified as owner-required, system/operator, automatically monitored or verified. Buttons navigate to the exact relevant section instead of asking the owner to interpret a reason code.
