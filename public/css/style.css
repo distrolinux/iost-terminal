@@ -974,6 +974,19 @@ body.onboarding-open #authReset { display: none !important; }
 .workbench-step { display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 50%; color: var(--cyan); font-size: 10px; }
 .workbench-list li>div { display: grid; gap: 3px; min-width: 0; }.workbench-list strong { font-size: 12px; }.workbench-list p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.4; }.workbench-list small { color: var(--dim); font-size: 9px; text-transform: uppercase; letter-spacing: .06em; }
 .workbench-boundary { margin: 10px 0 0; color: var(--dim); font-size: 10px; line-height: 1.5; }
+.owner-action-workbench .workbench-head p, .owner-action-workbench .workbench-list p { font-size: 1rem; line-height: 1.55; }
+.owner-action-workbench .workbench-list strong, .owner-action-workbench .btn, .owner-action-workbench summary { font-size: .875rem; }
+.owner-action-workbench .workbench-list small, .owner-action-workbench .workbench-boundary { font-size: .875rem; line-height: 1.5; text-transform: none; letter-spacing: normal; }
+.owner-action-workbench .btn { min-height: 44px; white-space: normal; }
+.recovery-progress { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 18px; font-size: .875rem; }
+.recovery-progress progress { accent-color: var(--cyan); width: min(100%, 220px); height: 12px; }
+.recovery-progress span { flex: 1 1 220px; color: var(--muted); }
+.owner-action-workbench summary { cursor: pointer; padding: 10px 0; }
+.owner-action-workbench summary:focus-visible, .owner-action-workbench button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+.recovery-completed { margin-top: 14px; font-size: .875rem; }
+.recovery-completed li { margin-bottom: 12px; }.recovery-completed p { margin: 4px 0; color: var(--muted); line-height: 1.5; }
+.recovery-advisories { margin-top: 14px; padding: 14px; border-left: 3px solid var(--cyan); font-size: .875rem; line-height: 1.5; }
+.recovery-advisories p { color: var(--muted); margin-bottom: 0; }
 .incident-disclosure { margin-left: 4px; }.incident-details[hidden] { display: none; }
 @media (max-width: 700px) { .workbench-head { align-items: stretch; flex-direction: column; }.workbench-status { width: 100%; }.workbench-list li { grid-template-columns: 30px minmax(0,1fr); }.workbench-list .btn { grid-column: 2; justify-self: start; } }
 .execution-readiness.is-ready { border-color: rgba(47,255,208,.35); background: linear-gradient(135deg,rgba(47,255,208,.06),rgba(0,229,255,.025)); }

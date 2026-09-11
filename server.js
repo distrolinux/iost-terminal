@@ -914,7 +914,7 @@ app.get('/sitemap.xml', (req, res) => {
 // metadata), RFC 9728 (protected-resource metadata), SEP-1649 (MCP server
 // card), Agent Skills Discovery RFC v0.2.0, ARD (ai-catalog.json), WebMCP.
 
-const DISCOVERY_VERSION = '1.55.0';
+const DISCOVERY_VERSION = '1.56.0';
 
 // ---- RFC 9727 API catalog (application/linkset+json) ----
 app.get('/.well-known/api-catalog', (req, res) => {
@@ -4849,6 +4849,7 @@ app.get('/api/agent-control', requireUser, async (req, res) => {
     afterSequence: Math.max(0, eventCursor - 12), limit: 12,
   });
   const workbench = buildOwnerActionWorkbench({
+    decisionTrace: agentDecisionTraceFor(req, { limit: 1 }),
     incidents: incidentStatus, runtime: runtimeStatus, safetySlo, guardian: guardianStatus,
     dataTrust, reconciliation, authorization: agentWallets.some((wallet) => (
       wallet.status === 'active' && wallet.capabilities?.includes('trade.paper')

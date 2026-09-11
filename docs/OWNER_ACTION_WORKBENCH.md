@@ -5,6 +5,10 @@ one ordered, plain-language recovery plan. It appears at the top of the signed-i
 Agent Control Center so an owner can answer **“What is blocking my agent?”**
 without interpreting internal reason codes.
 
+Version 2 adds the [Guided Safety Recovery Center](GUIDED_SAFETY_RECOVERY.md):
+responsible actors, completion evidence, current-snapshot progress, historical
+advisories, and an explicitly downloaded agent handoff without private IDs.
+
 ## Evidence composition
 
 The workbench observes, but does not replace, these authoritative controls:
@@ -29,7 +33,7 @@ from this plan and does not invent recovery actions.
   incident or creating a paper authorization envelope.
 - **System or operator task** — infrastructure must recover or authoritative
   evidence must become healthy.
-- **Monitoring automatically** — no click can safely accelerate the condition;
+- **Waiting for server evidence** — no click can safely accelerate the condition;
   the owner can inspect live evidence while the timer or burn rate clears.
 - **Verified** — all observed prerequisites are ready for a fresh read-only
   paper preflight.

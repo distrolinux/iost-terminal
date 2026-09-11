@@ -256,6 +256,7 @@ Owner testing instructions: `/docs/OWNER_MCP_APP_TESTING.md`.
 - The graph is owner-isolated and private by default. It cannot publish itself, authorize, approve, reserve, trade, enable live scope or use a public chain.
 
 ### Owner Action Workbench
+- Guided Safety Recovery (workbench version 2) includes an ordered checklist, responsible actor, completion evidence, current-snapshot progress, and an owner-downloaded agent handoff. No additional MCP tool or allowlist update is required. The handoff is advisory, excludes private identifiers, and requires fresh authoritative checks before any action.
 - The signed-in Agent Control Center begins with a deterministic answer to “What is blocking my agent?” assembled from incidents, runtime supervision, recovery probation, current Safety SLO burn, Position Guardian, Data Trust, reconciliation, emergency freeze, paper wallet/Pact authority and mission binding.
 - Actions are explicitly classified as owner-required, system/operator, automatically monitored or verified. Buttons navigate to the exact relevant section instead of asking the owner to interpret a reason code.
 - Recovered incident acknowledgement and resolution retain explicit owner confirmation and are followed by a fresh complete Control Center read. The workbench cannot self-approve, expand authority, reserve funds, trade or use a public chain.
