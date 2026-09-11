@@ -66,6 +66,17 @@ try {
   await waitForServer();
   const ownerCookie = await register('launchpad-owner@example.com');
   const outsiderCookie = await register('launchpad-outsider@example.com');
+  const anonymousConnections = await request('/api/exchange-connections');
+  assert.equal(anonymousConnections.response.status, 401);
+  for (const cookie of [ownerCookie, outsiderCookie]) {
+    const connections = await request('/api/exchange-connections', { cookie });
+    assert.equal(connections.response.status, 200);
+    assert.equal(connections.response.headers.get('cache-control'), 'private, no-store');
+    assert.equal(connections.json.launchDecision, 'locked');
+    assert.equal(connections.json.connections[0].configured, false);
+    assert.equal(connections.json.execution.attempted, false);
+    assert.equal(connections.json.plannedAdapters[0].status, 'not-integrated');
+  }
 
   const initial = await request('/api/agent-launchpad', { cookie: ownerCookie });
   assert.equal(initial.response.status, 200);
@@ -105,6 +116,8 @@ try {
     method: 'POST', cookie: ownerCookie, body: { name: 'Launchpad regression agent', scopes: ['read', 'trade-paper'] },
   });
   assert.equal(keyResult.response.status, 200, JSON.stringify(keyResult.json));
+  const agentConnections = await request('/api/exchange-connections', { key: keyResult.json.key });
+  assert.equal(agentConnections.response.status, 403, 'connection evidence requires a human owner session');
   const keyBlocked = await request('/api/agent-launchpad', { key: keyResult.json.key });
   assert.equal(keyBlocked.response.status, 403, 'agent credentials cannot bootstrap their own authority');
 

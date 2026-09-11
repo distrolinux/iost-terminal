@@ -982,7 +982,7 @@ function setupNavPalette() {
 setupNavPalette();
 
 // ARD: deterministic paths — every view has a stable deep link (/app#scanner, /app#risk, …)
-const VALID_VIEWS = ['scanner', 'intelligence', 'scores', 'risk', 'portfolio', 'onchain', 'news', 'assistant', 'journal', 'performance', 'evaluation', 'whales', 'smartmoney', 'audit', 'launchpad', 'agents', 'control', 'trace', 'points', 'aitt', 'wallet'];
+const VALID_VIEWS = ['scanner', 'intelligence', 'scores', 'risk', 'portfolio', 'onchain', 'news', 'assistant', 'journal', 'performance', 'evaluation', 'whales', 'smartmoney', 'audit', 'launchpad', 'agents', 'control', 'trace', 'points', 'aitt', 'wallet', 'live'];
 function switchView(view) {
   if (!VALID_VIEWS.includes(view)) view = 'scanner';
   state.activeView = view;
@@ -1027,6 +1027,7 @@ function gotoApiKeyInput() {
   })();
 }
 function refreshView(view) {
+  if (view === 'live') return renderExchangeConnections();
   // auth-gated views: paper account data (portfolio, journal, performance) + points + wallet
   if (['portfolio', 'journal', 'performance', 'evaluation', 'launchpad', 'control', 'trace', 'points', 'wallet'].includes(view) && !window.Auth?.state?.loggedIn) {
     const el = $(`#view-${view}`);
@@ -1042,6 +1043,46 @@ function refreshView(view) {
   return ({ scanner: renderScanner, intelligence: renderAssetIntelligence, scores: renderScores, risk: renderRisk, portfolio: renderPortfolio,
     onchain: renderOnchain, news: renderNews, assistant: renderAssistant, journal: renderJournal, performance: renderPerformance, evaluation: renderEvaluationLab, whales: renderWhales, smartmoney: renderSmartMoney, audit: renderAudit, launchpad: renderAgentLaunchpad, agents: renderAgents, control: renderAgentControl, trace: renderDecisionTrace, points: renderPoints, aitt: renderAITT, wallet: renderWallet })[view]();
 }
+
+// Separate real-money readiness workspace; GET only, never executes orders.
+let connectionRequestGeneration = 0;
+async function renderExchangeConnections() {
+  const generation = ++connectionRequestGeneration;
+  const el = $('#view-live');
+  el.innerHTML = skeleton();
+  if (!window.Auth?.state?.loggedIn) {
+    el.innerHTML = '<div class="card empty">Sign in to inspect your private exchange connections. <button class="btn" id="liveSignIn">Sign in</button></div>';
+    $('#liveSignIn').onclick = () => window.Auth?.open('login');
+    return;
+  }
+  try {
+    const s = await api('/api/exchange-connections');
+    if (generation !== connectionRequestGeneration) return;
+    if (!window.Auth?.state?.loggedIn) { el.replaceChildren(); return; }
+    el.innerHTML = `
+      <section class="card"><div class="section-title">Live Trading · Connections &amp; Permissions <span class="chip warn">${s.launchDecision === 'canary-review-required' ? 'Canary review required' : 'Public live locked'}</span></div>
+      <p>Real-money readiness, separate from paper practice. This page cannot connect credentials, authorize orders, or enable execution.</p>
+      <p><a class="btn" href="#launchpad">Paper agent Launchpad</a> <button class="btn ghost" id="refreshConnections">Refresh evidence</button></p>
+      <p class="muted">Evidence fetched ${esc(new Date().toLocaleTimeString())}. This is a snapshot, not continuous monitoring.</p></section>
+      <div class="grid g-2">${s.connections.map(c => `<section class="card"><h2>${esc(c.name)}</h2>
+      <p><strong>${c.configured ? 'Credentials configured — not live authorization' : 'Not connected'}</strong></p>
+      <dl><dt>Connection type</dt><dd>${esc(c.transport)}</dd><dt>Permission evidence</dt><dd>${esc(c.permissionStatus)}</dd><dt>Account health</dt><dd>Not probed</dd><dt>Symbol and order support</dt><dd>Requires fresh provider verification</dd></dl>
+      <p class="muted">Configured credentials are not proof of current account access, eligibility, or trading permission.</p></section>`).join('')}
+      <section class="card"><h2>Robinhood</h2><span class="chip neut">Not integrated</span><p>Authenticated MCP adapter under consideration. No account connection or trading support is available here.</p><p>Provider authentication, account eligibility, order preview, cancellation, and fill reconciliation must be validated before integration.</p></section></div>
+      <section class="card"><h2>Public live launch requirements</h2><ul class="public-live-gates">${(s.readiness?.gates || []).map(g => `<li class="${g.pass === true ? 'is-ready' : 'is-locked'}"><span>${g.pass === true ? '✓' : '×'}</span><strong>${esc(g.label)}</strong></li>`).join('')}</ul><p>No checklist item can be toggled here. Missing evidence keeps public launch locked.</p></section>
+      <section class="card"><h2>Agent permission boundary</h2><ul><li>Paper balances and paper approvals never authorize real-money orders.</li><li>Each live order needs separate owner authorization and server-side risk checks.</li><li>Withdrawals and transfers are not supported by this workspace.</li><li>Direct agent-to-provider orders bypass IOST controls and are not covered by our execution guarantees.</li></ul><p>Planned lifecycle: preview → owner approval → provider submission → fills → reconciliation → audit. Opening this page performs none of these actions.</p></section>`;
+    $('#refreshConnections').onclick = renderExchangeConnections;
+  } catch (e) {
+    if (generation !== connectionRequestGeneration) return;
+    el.innerHTML = `<section class="card"><h2>Live readiness unavailable</h2><p>${esc(e.message)}</p><p>No connection or authorization can be inferred. Real-money readiness remains unverified.</p><button class="btn" id="retryConnections">Retry</button></section>`;
+    $('#retryConnections').onclick = renderExchangeConnections;
+  }
+}
+window.addEventListener('authchange', () => {
+  connectionRequestGeneration++;
+  $('#view-live')?.replaceChildren();
+  if (state.activeView === 'live') renderExchangeConnections();
+});
 
 // ---------------- Asset Intelligence Workspace ----------------
 let intelligenceSymbol = 'IOST';
