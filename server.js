@@ -70,6 +70,7 @@ import { buildOwnerActionWorkbench } from './lib/owner-action-workbench.js';
 import { buildAssetIntelligence } from './lib/asset-intelligence.js';
 import { observeSecurityResponse, securitySentinelStatus } from './lib/security-sentinel.js';
 import { buildPublicLiveReadiness } from './lib/public-live-readiness.js';
+import { buildExchangeConnections } from './lib/exchange-connections.js';
 import * as liveProposals from './lib/live-proposals.js';
 import * as management from './lib/management.js';
 import * as triggers from './lib/triggers.js';
@@ -4712,6 +4713,13 @@ app.get('/api/security-sentinel', requireUser, (req, res) => {
   res.set('Cache-Control', 'private, no-store');
   if (req.userAgent && !userAgentHas(req, 'read')) return res.status(403).json({ error: 'read scope required' });
   return res.json(securitySentinelStatus());
+});
+
+app.get('/api/exchange-connections', requireUser, (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (req.userAgent || !req.session?.userId) return res.status(403).json({ error: 'account owner session required' });
+  const readiness = publicLiveReadinessFor(req);
+  return res.json({ ...buildExchangeConnections({ kraken: userKrakenStatus(auth.findById(req.session.userId)), readiness }), readiness });
 });
 
 app.get('/api/public-live-readiness', requireUser, (req, res) => {

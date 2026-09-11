@@ -61,6 +61,7 @@
         <button class="nav-btn" data-view="launchpad" aria-label="Launch and connect your paper trading agent"><span class="ic">🚀</span><span class="lbl">Launch</span></button>
         <button class="nav-btn" data-view="agents" aria-label="View decentralized AI agents marketplace"><span class="ic">🤖</span><span class="lbl">Agents</span></button>
         <button class="nav-btn" data-view="control" aria-label="View owner agent control center"><span class="ic">⏻</span><span class="lbl">Control</span></button>
+        <button class="nav-btn" data-view="live" aria-label="View real-money connection readiness"><span class="ic">◇</span><span class="lbl">Live</span></button>
         <button class="nav-btn" data-view="trace" aria-label="View agent decision trace"><span class="ic">⌁</span><span class="lbl">Trace</span></button>
         <button class="nav-btn" data-view="onchain" aria-label="View IOST on-chain dashboard"><span class="ic">⛓</span><span class="lbl">Chain</span></button>
         <button class="nav-btn" data-view="audit" aria-label="View token security audit"><span class="ic">🛡</span><span class="lbl">Audit</span></button>
@@ -99,6 +100,7 @@
     <div class="view hidden" id="view-launchpad" aria-label="Self-service Agent Launchpad view"></div>
     <div class="view hidden" id="view-agents" aria-label="Decentralized AI agents view"></div>
     <div class="view hidden" id="view-control" aria-label="Owner agent control center view"></div>
+    <div class="view hidden" id="view-live" aria-label="Live connections and permissions"></div>
     <div class="view hidden" id="view-trace" aria-label="Agent decision trace view"></div>
     <div class="view hidden" id="view-points" aria-label="Platform points view"></div>
     <div class="view hidden" id="view-aitt" aria-label="AITT token view"></div>
@@ -210,7 +212,7 @@
 
 <script defer src="/js/vendor/lightweight-charts.js"></script>
 <script defer src="/js/vendor/tweetnacl.min.js"></script>
-<script type="module" src="/js/app.js?v=2.59.0"></script>
+<script type="module" src="/js/app.js?v=2.59.1"></script>
 <script type="module" src="/js/auth.js?v=2.10.0"></script>
 <script type="module" src="/js/onboarding.js?v=1.2.0"></script>
 <script type="application/json" id="agent-state">null</script>
