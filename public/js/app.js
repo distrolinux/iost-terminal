@@ -992,7 +992,7 @@ function switchView(view) {
   $$('.view').forEach(v => v.classList.add('hidden'));
   $(`#view-${view}`).classList.remove('hidden');
   if (location.hash !== `#${view}`) history.replaceState(null, '', `#${view}`);
-  refreshView(view);
+  return refreshView(view);
 }
 addEventListener('hashchange', () => switchView(location.hash.replace('#', '')));
 
@@ -1039,7 +1039,7 @@ function refreshView(view) {
     }
     return;
   }
-  ({ scanner: renderScanner, intelligence: renderAssetIntelligence, scores: renderScores, risk: renderRisk, portfolio: renderPortfolio,
+  return ({ scanner: renderScanner, intelligence: renderAssetIntelligence, scores: renderScores, risk: renderRisk, portfolio: renderPortfolio,
     onchain: renderOnchain, news: renderNews, assistant: renderAssistant, journal: renderJournal, performance: renderPerformance, evaluation: renderEvaluationLab, whales: renderWhales, smartmoney: renderSmartMoney, audit: renderAudit, launchpad: renderAgentLaunchpad, agents: renderAgents, control: renderAgentControl, trace: renderDecisionTrace, points: renderPoints, aitt: renderAITT, wallet: renderWallet })[view]();
 }
 
@@ -1361,14 +1361,17 @@ async function renderAgentControl() {
     <div class="control-boundary" role="status">Execution boundary · <strong>PAPER</strong> · live and on-chain execution remain separately gated</div>
     <section class="card owner-action-workbench ${workbench.status === 'ready' ? 'is-ready' : 'is-attention'}" aria-labelledby="ownerActionWorkbenchTitle" aria-live="polite">
       <div class="workbench-head">
-        <div><span class="eyebrow">Owner Action Workbench</span><h2 id="ownerActionWorkbenchTitle">${workbench.status === 'ready' ? 'Agent workflow is ready' : 'What is blocking my agent?'}</h2><p>${esc(workbench.nextAction?.detail || 'Review current owner and system readiness evidence.')}</p></div>
+        <div><span class="eyebrow">Owner Action Workbench · Guided Safety Recovery</span><h2 id="ownerActionWorkbenchTitle">${workbench.status === 'ready' ? 'Ready for a fresh paper preflight' : 'Your next recovery step'}</h2><p><strong>${esc(workbench.nextAction?.title || 'Refresh recovery evidence')}</strong> — ${esc(workbench.nextAction?.detail || 'Review current owner and system readiness evidence.')}</p></div>
         <div class="workbench-status"><span class="chip ${workbench.status === 'ready' ? 'bull' : 'warn'}">${esc(workbench.status || 'unavailable')}</span><strong>${Number(workbench.counts?.ownerAction || 0)}</strong><small>owner action${Number(workbench.counts?.ownerAction || 0) === 1 ? '' : 's'}</small></div>
       </div>
+      <div class="recovery-progress"><label for="recoveryProgress">${Number(workbench.progress?.completed || 0)} of ${Number(workbench.progress?.total || 0)} recovery checks complete</label><progress id="recoveryProgress" value="${Number(workbench.progress?.completed || 0)}" max="${Number(workbench.progress?.total || 1)}"></progress><span>Current snapshot · ${workbench.checkedAt ? esc(new Date(workbench.checkedAt).toLocaleTimeString()) : 'time unavailable'}. Refresh to confirm changes.</span><button class="btn sm ghost" type="button" id="refreshRecovery">Refresh recovery checks</button><button class="btn sm ghost" type="button" id="downloadRecoveryPlan" ${workbench.checklist ? '' : 'disabled'}>Download agent handoff</button></div>
       <ol class="workbench-list">${(workbench.actions || []).map((task, index) => {
         const operation = task.action?.kind === 'incident' ? task.action.operation : '';
         const label = task.state === 'complete' ? 'Review readiness' : operation === 'acknowledge' ? 'Review & acknowledge' : operation === 'resolve' ? 'Resolve & release' : task.state === 'waiting' ? 'View live evidence' : task.state === 'system-action' ? 'View system status' : 'Continue safely';
-        return `<li class="is-${esc(task.state)} ${index === 0 ? 'is-next' : ''}"><span class="workbench-step mono">${String(index + 1).padStart(2, '0')}</span><div><strong>${esc(task.title)}</strong><p>${esc(task.detail)}</p><small>${task.state === 'owner-action' ? 'Requires you' : task.state === 'waiting' ? 'Monitoring automatically' : task.state === 'system-action' ? 'System or operator task' : 'Verified'}</small></div><button class="btn sm ${task.state === 'owner-action' ? 'green' : 'ghost'}" type="button" data-workbench-action data-target-view="${esc(task.target?.view || 'control')}" data-target-anchor="${esc(task.target?.anchor || 'executionReadinessTitle')}" data-incident-operation="${esc(operation)}" data-incident-ref="${esc(task.action?.incidentRef || '')}">${esc(label)}</button></li>`;
+        return `<li class="is-${esc(task.state)} ${index === 0 ? 'is-next' : ''}"><span class="workbench-step mono">${String(index + 1).padStart(2, '0')}</span><div><strong>${esc(task.title)}</strong><p>${esc(task.detail)}</p><small>Responsible: ${esc(task.actor || 'operator')} · ${task.state === 'waiting' ? 'Waiting for server evidence' : task.state === 'complete' ? 'Verified' : 'Action needed'}</small>${task.completionEvidence ? `<details><summary>How we confirm this is done</summary><p>${esc(task.completionEvidence)}</p></details>` : ''}</div><button class="btn sm ${task.state === 'owner-action' ? 'green' : 'ghost'}" type="button" data-workbench-action data-target-view="${esc(task.target?.view || 'control')}" data-target-anchor="${esc(task.target?.anchor || 'executionReadinessTitle')}" data-incident-operation="${esc(operation)}" data-incident-ref="${esc(task.action?.incidentRef || '')}">${esc(label)}</button></li>`;
       }).join('')}</ol>
+      <details class="recovery-completed"><summary>View completed checks (${Number(workbench.progress?.completed || 0)})</summary><ul>${(workbench.checklist || []).filter((task) => task.state === 'complete').map((task) => `<li><strong>${esc(task.title)}</strong><p>${esc(task.completionEvidence)}</p></li>`).join('')}</ul></details>
+      ${(workbench.advisories || []).length ? `<aside class="recovery-advisories" aria-label="Historical evidence, not current blockers"><strong>Historical evidence — not a current blocker</strong>${workbench.advisories.map((item) => `<p>${esc(item.detail)}</p>`).join('')}</aside>` : ''}
       <p class="workbench-boundary">The workbench explains and navigates. It never approves itself, changes permissions, creates a reservation, or trades. After an owner incident action, the complete read-only safety plan is fetched again.</p>
     </section>
     <div class="grid g-3 control-kpis">
@@ -1701,9 +1704,29 @@ async function renderAgentControl() {
     if (button.dataset.incidentOperation) return performIncidentAction(button.dataset.incidentOperation, button.dataset.incidentRef);
     const view = button.dataset.targetView || 'control';
     const anchor = button.dataset.targetAnchor;
-    if (view !== state.activeView) switchView(view);
-    setTimeout(() => document.getElementById(anchor)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), view === state.activeView ? 0 : 250);
+    if (view !== state.activeView) await switchView(view);
+    const target = document.getElementById(anchor);
+    if (!target) return toast('This section is unavailable. Refresh the page and try again.');
+    target.setAttribute('tabindex', '-1');
+    target.focus({ preventScroll: true });
+    target.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
   }));
+  $('#refreshRecovery', el)?.addEventListener('click', () => renderAgentControl());
+  $('#downloadRecoveryPlan', el)?.addEventListener('click', () => {
+    // Explicit allowlist: never export owner, incident, wallet, key, or mission IDs.
+    const handoff = {
+      version: workbench.version, mode: 'paper-only', checkedAt: workbench.checkedAt,
+      status: workbench.status, progress: workbench.progress,
+      instruction: 'Recheck authoritative status before acting. This snapshot grants no permission. Owner actions require the signed-in owner; supervisor recovery belongs to the operator. Do not trade or bypass controls.',
+      checklist: (workbench.checklist || []).map(({ code, title, detail, actor, state, completionEvidence, remainingMs }) =>
+        ({ code, title, detail, actor, state, completionEvidence, remainingMs })),
+      advisories: workbench.advisories || [], guarantees: workbench.guarantees,
+      executionAuthority: 'none', automaticPublication: false,
+    };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(handoff, null, 2)], { type: 'application/json' }));
+    const link = document.createElement('a'); link.href = url; link.download = 'aitt-recovery-handoff.json'; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
   el.querySelectorAll('[data-approval-action]').forEach((button) => button.addEventListener('click', async () => {
     const action = button.dataset.approvalAction;
     const order = approvalQueue.find((item) => item.approvalId === button.dataset.approvalId)?.order || {};
