@@ -9,6 +9,7 @@ process.env.KRAKEN_API_SECRET = Buffer.from('offline-fixture-only').toString('ba
 let result, tradeResult, tradeFailure = false, calls = 0;
 globalThis.fetch = async (url, options) => {
   calls++;
+  if (url.endsWith('/GetApiKeyInfo')) return new Response(JSON.stringify({ error: [], result: { apiKey: process.env.KRAKEN_API_KEY, iban: 'FIXTURE ACCOUNT', validUntil: '0', permissions: ['query-open-trades', 'query-closed-trades'] } }));
   assert.ok(['https://api.kraken.com/0/private/QueryOrders', 'https://api.kraken.com/0/private/QueryTrades'].includes(url));
   const isTrade = url.endsWith('/QueryTrades');
   assert.equal(new URLSearchParams(options.body).get('txid'), isTrade ? 'fixture-fill' : 'fixture-order');
@@ -21,8 +22,9 @@ const scratch = mkdtempSync(join(tmpdir(), 'iost-order-evidence-'));
 try {
   const { createKrakenBroker } = await import('../lib/broker/kraken.js');
   const broker = createKrakenBroker({ apiKey: process.env.KRAKEN_API_KEY, apiSecret: process.env.KRAKEN_API_SECRET, ownerId: 'owner' });
+  const identity = await broker.getVenueIdentity('owner');
   const holds = createLiveSubmissionHold(scratch);
-  const claim = holds.claim('owner', { symbol: 'BTC', side: 'long', size: 1, entry: 50000 }, broker.credentialBinding('owner'));
+  const claim = holds.claim('owner', { symbol: 'BTC', side: 'long', size: 1, entry: 50000 }, broker.credentialBinding('owner'), identity.venueAccountBinding);
   assert.equal(holds.acknowledge('owner', 'wrong-client', 'fixture-order').ok, false);
   assert.equal(holds.acknowledge('owner', claim.clientOrderId, 'fixture-order').ok, true);
   assert.equal(holds.acknowledge('owner', claim.clientOrderId, 'different-order').ok, false);
@@ -39,7 +41,7 @@ try {
   tradeResult = { 'fixture-fill': { ordertxid: 'fixture-order', pair: 'XXBTZUSD', type: 'buy', vol: '0.25', price: '50000', cost: '12500', fee: '12.5', margin: '0' } };
   const queryStart = calls;
   review = await inspectHeldLiveOrder(holds, 'owner', broker);
-  assert.equal(calls - queryStart, 2, 'one order query and one fill query');
+  assert.equal(calls - queryStart, 3, 'one identity, order and fill query');
   assert.equal(review.fillEvidence.status, 'fill-totals-matched');
   assert.equal(review.fillEvidence.feesVerified, false);
   assert.equal(review.releaseAllowed, false);
@@ -55,7 +57,7 @@ try {
   tradeFailure = true;
   const failureStart = calls;
   assert.equal((await inspectHeldLiveOrder(holds, 'owner', broker)).fillEvidence.status, 'unknown');
-  assert.equal(calls - failureStart, 2, 'failed fill query not retried');
+  assert.equal(calls - failureStart, 3, 'failed fill query not retried');
   tradeFailure = false;
   assert.equal(review.feesVerified, false);
   result = {};
@@ -69,10 +71,10 @@ try {
   assert.equal(review.status, 'filled-evidence');
   assert.equal(review.releaseAllowed, false);
   const before = calls;
-  holds.claim('unacknowledged', { symbol: 'BTC', side: 'long', size: 1 }, 'a'.repeat(64));
+  holds.claim('unacknowledged', { symbol: 'BTC', side: 'long', size: 1 }, 'a'.repeat(64), 'b'.repeat(64));
   assert.equal((await inspectHeldLiveOrder(holds, 'unacknowledged', broker)).status, 'unknown');
   assert.equal(calls, before, 'no guessed venue ID or discovery retry');
-  assert.equal(holds.claim('owner', { symbol: 'BTC', side: 'long', size: 1 }, broker.credentialBinding('owner')).ok, false);
+  assert.equal(holds.claim('owner', { symbol: 'BTC', side: 'long', size: 1 }, broker.credentialBinding('owner'), identity.venueAccountBinding).ok, false);
   const file = join(scratch, readdirSync(scratch).find(name => name.endsWith('.ack')));
   const ackBefore = readFileSync(file, 'utf8');
   assert.equal(holds.acknowledge('owner', claim.clientOrderId, 'different-order').ok, false);

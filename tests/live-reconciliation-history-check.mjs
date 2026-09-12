@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { spawnSync, spawn } from 'node:child_process';
 import { createLiveReconciliationHistory } from '../lib/live-reconciliation-history.js';
 const dir = mkdtempSync(join(tmpdir(), 'iost-history-'));
-const expected = { clientOrderId: 'client', venueOrderId: 'venue', pair: 'XBTUSD', side: 'buy', quantity: '1', credentialBinding: 'a'.repeat(64) };
+const expected = { clientOrderId: 'client', venueOrderId: 'venue', pair: 'XBTUSD', side: 'buy', quantity: '1', credentialBinding: 'a'.repeat(64), venueAccountBinding: 'b'.repeat(64) };
 const observation = { ...expected, status: 'open', filledQuantity: '0.25' };
 const fills = { status: 'fill-totals-matched', reportedFilledQuantity: '0.25', reportedCost: '10', reportedFee: '1', fills: [{ id: 'fill-a', digest: 'a'.repeat(64) }] };
 try {

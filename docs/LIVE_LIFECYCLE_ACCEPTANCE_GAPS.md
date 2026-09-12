@@ -77,6 +77,22 @@ These changes are still draft-only. Reconnecting/rotating credentials while an
 order is held needs a reviewed recovery workflow rather than deleting evidence.
 Actual HTTP owner isolation and venue account identity checks remain unfinished.
 
+Venue-reported identity update: the adapter now queries GetApiKeyInfo, validates
+the echoed key, nonempty bounded account identifier, key expiry and allowed
+permissions, and privately HMAC-binds the reported account to owner/credential.
+Submission additionally requires modify/close permissions. Reconciliation checks
+the current reported identity against the persisted hold before querying orders.
+Raw account identifiers and echoed keys are never returned by this helper.
+New holds/history require both bindings; unbound draft-era records stay blocked.
+Reference: https://docs.kraken.com/api-reference/account-data/get-api-key-info
+
+This is authenticated venue-reported continuity, not independent identity/KYC,
+jurisdiction eligibility, settlement proof, or cross-owner account deduplication.
+Broker-instance nonces now increase within the same millisecond; global ordering
+across multiple instances/processes sharing a key remains a launch blocker.
+No real API calls were made. HTTP lifecycle/owner isolation, global request
+coordination, settlement accounting and recovery acceptance remain unfinished.
+
 The five initial broker regressions now pass: bounded no-redirect transport,
 explicit accepted status, missing-ID rejection, unknown submission outcomes and
 exact partial-fill quantity evidence. Server acceptance no longer invents a fill

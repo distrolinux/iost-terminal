@@ -3905,6 +3905,8 @@ async function executeLiveOrder(req, { symbol, side = 'long', size, entry }) {
   if (!kraken) return { status: 403, error: 'connect your own Kraken key first (platform venue is owner-only)' };
   const credentialBinding = kraken.credentialBinding?.(u.id);
   if (!credentialBinding) return { status: 409, error: 'An owner-bound exchange connection is required; no submission made.' };
+  const venueIdentity = await kraken.getVenueIdentity(u.id);
+  if (!venueIdentity.ok || !venueIdentity.submissionPermissions) return { status: 409, error: 'Exchange account identity or permissions unavailable; no submission made.' };
   // rails need live venue state — fetch before touching anything
   const [acct, pos] = await Promise.all([kraken.getAccount(), kraken.getPositions()]);
   if (!acct.ok) return { status: 502, error: `venue: ${acct.error}` };
@@ -3933,7 +3935,7 @@ async function executeLiveOrder(req, { symbol, side = 'long', size, entry }) {
   const fee = canTrade(st);
   if (!fee.ok) return { status: 400, error: fee.error };
 
-  const hold = liveSubmissionHold.claim(u.id, { symbol, side, size: effSize, entry }, credentialBinding);
+  const hold = liveSubmissionHold.claim(u.id, { symbol, side, size: effSize, entry }, credentialBinding, venueIdentity.venueAccountBinding);
   if (!hold.ok) return { status: 409, outcome: 'unknown', error: hold.error };
   const r = await kraken.placeOrder({ symbol, side, size: effSize, entry, clientOrderId: hold.clientOrderId });
   if (!r.ok) return { status: 502, outcome: r.outcome, error: 'Venue submission not confirmed; reconcile before retrying.' };

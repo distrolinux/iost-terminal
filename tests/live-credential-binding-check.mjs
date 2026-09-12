@@ -23,5 +23,5 @@ assert.equal(calls, 0, 'binding failures happen before any exchange request');
 const server = readFileSync(new URL('../server.js', import.meta.url), 'utf8');
 const execute = server.slice(server.indexOf('async function executeLiveOrder'), server.indexOf("app.post('/api/trade/live'"));
 assert.ok(execute.indexOf('if (!credentialBinding)') < execute.indexOf('kraken.getAccount()'), 'server checks binding before venue reads');
-assert.ok(execute.includes('entry }, credentialBinding)'), 'server persists connection binding');
+assert.ok(execute.includes('entry }, credentialBinding, venueIdentity.venueAccountBinding)'), 'server persists connection and venue bindings');
 console.log('Owner and credential binding checks passed without network access');
