@@ -1,5 +1,12 @@
 # Live connections workspace
 
+The landing page offers Paper Trading and Real-Money Trading (setup/readiness,
+execution locked). Login URLs retain `#launchpad` or `#live`. A persistent
+workspace navigation row in the terminal keeps both destinations visible with
+an accessible current-state indicator. This is navigation, not an execution-mode
+switch: it never persists live authority, changes account scope, or submits orders.
+No recurring sign-in modal is needed to find either workspace.
+
 `/app#live` is an owner-private, read-only workspace separate from paper Launchpad.
 `GET /api/exchange-connections` requires an owner session, uses that session's user
 record and returns private/no-store evidence. Agent API keys cannot access it.

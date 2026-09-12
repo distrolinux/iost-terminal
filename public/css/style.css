@@ -439,6 +439,14 @@ body.cmd .tb-agent.is-active { background: rgba(0, 229, 255, .18); border-color:
 /* main */
 .cmd-main { overflow-y: auto; padding: 18px 20px 60px; scrollbar-width: thin; }
 .cmd-main .view { animation: fadeIn .25s ease; }
+.trading-workspaces { margin-bottom:18px; padding:12px; border:1px solid #33445a; border-radius:12px; background:#0c1420; }
+.trading-workspace-links { display:flex; flex-wrap:wrap; gap:8px; }
+.trading-workspace-links a { display:inline-flex; align-items:center; min-height:44px; padding:8px 16px; border:1px solid #536479; border-radius:8px; color:#d1dce9; text-decoration:none; }
+.trading-workspace-links a[aria-current] { color:#8df5d3; background:#15332f; border-color:#8df5d3; }
+.trading-workspace-links #liveWorkspace[aria-current] { color:#ffd75e; background:#332e1c; border-color:#ffd75e; }
+.trading-workspace-links a:focus-visible { outline:3px solid #fff; outline-offset:3px; }
+.trading-workspaces p { margin:10px 0 0; color:#b6c5d8; font-size:12px; line-height:1.5; }
+@media(max-width:520px) { .trading-workspace-links a { flex:1 1 100%; justify-content:center; } }
 /* right intelligence rail */
 .rail { display: flex; flex-direction: column; gap: 12px; padding: 14px; overflow-y: auto; background: rgba(5, 8, 14, .5); border-left: 1px solid rgba(255, 255, 255, .06); scrollbar-width: thin; }
 .glass {

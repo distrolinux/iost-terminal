@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Sora:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/css/style.css?v=2.38">
+<link rel="stylesheet" href="/css/style.css?v=2.39">
 </head>
 <body class="cmd">
 <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -83,6 +83,10 @@
   </aside>
 
   <main class="cmd-main" id="main-content" tabindex="-1">
+    <nav class="trading-workspaces" aria-label="Trading workspace">
+      <div class="trading-workspace-links"><a href="#launchpad" id="paperWorkspace">Paper trading</a><a href="#live" id="liveWorkspace">Live · Setup &amp; readiness</a></div>
+      <p id="workspaceBoundary" role="status">Paper workspace · simulated funds. Live execution requires separate authorization.</p>
+    </nav>
     <div class="view" id="view-scanner" aria-label="AI market scanner view"></div>
     <div class="view hidden" id="view-intelligence" aria-label="Asset Intelligence Workspace view"></div>
     <div class="view hidden" id="view-scores" aria-label="AI trade scores view"></div>
@@ -212,7 +216,7 @@
 
 <script defer src="/js/vendor/lightweight-charts.js"></script>
 <script defer src="/js/vendor/tweetnacl.min.js"></script>
-<script type="module" src="/js/app.js?v=2.59.1"></script>
+<script type="module" src="/js/app.js?v=2.60.0"></script>
 <script type="module" src="/js/auth.js?v=2.10.0"></script>
 <script type="module" src="/js/onboarding.js?v=1.2.0"></script>
 <script type="application/json" id="agent-state">null</script>

@@ -986,6 +986,16 @@ const VALID_VIEWS = ['scanner', 'intelligence', 'scores', 'risk', 'portfolio', '
 function switchView(view) {
   if (!VALID_VIEWS.includes(view)) view = 'scanner';
   state.activeView = view;
+  const liveWorkspace = view === 'live';
+  for (const [id, current] of [['paperWorkspace', !liveWorkspace], ['liveWorkspace', liveWorkspace]]) {
+    const link = document.getElementById(id);
+    if (current) link?.setAttribute('aria-current', 'true');
+    else link?.removeAttribute('aria-current');
+  }
+  const boundary = document.getElementById('workspaceBoundary');
+  if (boundary) boundary.textContent = liveWorkspace
+    ? 'Live setup only · viewing this workspace never enables real-money trading.'
+    : 'Paper workspace · simulated funds. Live execution requires separate authorization.';
   document.body.classList.toggle('intel-mode', view === 'intelligence');
   if (view !== 'control' && agentEventSource) { agentEventSource.close(); agentEventSource = null; }
   $$('.nav-btn').forEach(b => b.classList.toggle('is-active', b.dataset.view === view));
