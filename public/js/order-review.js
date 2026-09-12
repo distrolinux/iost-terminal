@@ -1,8 +1,10 @@
 // In-memory draft UI only. Never stores inputs or calls an approval/order API.
 import { summarizeOrderReview } from './order-review-summary.js?v=1';
 import { mountPairPicker } from './order-pair-picker.js?v=1';
+import { strategyReviewSections } from './strategy-review.js?v=1';
 export function mountOrderReview(host, { post, isCurrent }) {
-  host.innerHTML = `<h2>Review an order draft <span class="chip warn">Execution locked</span></h2>
+  host.innerHTML = `<h2>Review your trading plan <span class="chip warn">Execution locked</span></h2>
+    <p>One order draft, not an automated strategy. Review the entry, exit, spending and approval requirements together before taking any next step.</p>
     <p>Kraken · USD spot-buy limit draft. Asset availability is not verified. Enter your own assumptions; this is not a recommendation, market quote or exchange preview.</p>
     <section data-pair-picker></section><h3>2. Enter draft amounts</h3><p>Choose a market above or enter a symbol manually. Nothing is submitted to an exchange.</p>
     <form><div class="grid g-2">
@@ -45,9 +47,23 @@ export function mountOrderReview(host, { post, isCurrent }) {
       for (const message of summary.blockers) { const p = document.createElement('p'); const strong = document.createElement('strong'); strong.textContent = message; p.append(strong); panel.append(p); }
       for (const message of summary.unknowns) { const p = document.createElement('p'); p.textContent = message; panel.append(p); }
       const approval = document.createElement('p'); approval.textContent = summary.approval; panel.append(approval); output.append(panel);
+      const sections = document.createElement('div'); sections.className = 'grid g-2';
+      for (const group of strategyReviewSections(result)) {
+        const card = document.createElement('section'); card.className = 'card';
+        const title = document.createElement('h3'); title.textContent = group.title; card.append(title);
+        const facts = document.createElement('dl');
+        for (const [label, value] of group.rows) {
+          const dt = document.createElement('dt'), dd = document.createElement('dd');
+          dt.textContent = label; dd.textContent = value; facts.append(dt, dd);
+        }
+        card.append(facts); sections.append(card);
+      }
+      output.append(sections);
+      const details = document.createElement('details');
+      const toggle = document.createElement('summary'); toggle.textContent = 'Inspect calculation and market evidence'; details.append(toggle); output.append(details);
       const heading = document.createElement('h3');
       heading.textContent = `Buy ${result.order.quantity} ${result.order.symbol} · limit draft only`;
-      output.append(heading);
+      details.append(heading);
       const list = document.createElement('dl');
       const money = value => value === null ? 'Unknown — not verified' : `$${value} USD`;
       const rows = [
@@ -80,7 +96,7 @@ export function mountOrderReview(host, { post, isCurrent }) {
         const dt = document.createElement('dt'), dd = document.createElement('dd');
         dt.textContent = label; dd.textContent = value; list.append(dt, dd);
       }
-      output.append(list);
+      details.append(list);
       for (const warning of result.warnings) {
         const p = document.createElement('p'); p.textContent = warning; output.append(p);
       }
