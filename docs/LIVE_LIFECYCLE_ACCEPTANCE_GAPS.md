@@ -102,6 +102,24 @@ This is PROCESS-LOCAL, not cross-process or restart-durable coordination. Extern
 clients sharing the key and process restarts still require a reviewed operational
 design before live readiness. Offline integration verifies broker/verifier overlap.
 
+Durable coordinator update: server boot configures a private directory under
+IOST_DATA_DIR/kraken-request-coordination. Server broker and verifier calls now
+use exclusive per-key filesystem locks and a nonce persisted/synced before the
+request. Processes sharing this exact local directory cannot overlap that key.
+A fresh process advances beyond the saved nonce even after clock rollback.
+Success removes only its request lock; callback failure, malformed state, or a
+crash retains the lock and blocks further requests. There is no automatic stale
+lock cleanup. Do not delete coordination files to retry an unknown order.
+
+This intentionally also holds after read-only provider errors, trading availability
+for fail-closed behavior. A reviewed recovery workflow is required before release.
+Backups must preserve both lock and nonce state; restoring old nonce state is not
+safe without recovery review. Tests simulate process exit and competing processes,
+not power loss, network partitions, backup restore or distributed filesystems.
+External clients and servers with different coordination directories are not
+coordinated. Standalone library tests without server configuration still use the
+process-local lane. No live execution or production deployment was performed.
+
 The five initial broker regressions now pass: bounded no-redirect transport,
 explicit accepted status, missing-ID rejection, unknown submission outcomes and
 exact partial-fill quantity evidence. Server acceptance no longer invents a fill

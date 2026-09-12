@@ -24,6 +24,7 @@ import { issueCredentialProof, consumeCredentialProof, credentialAuthState } fro
 import { createKrakenDraftEvidence, createKrakenPairCatalog, krakenSystemEvidence } from './lib/kraken-draft-evidence.js';
 import { combineKrakenReview } from './lib/combined-kraken-review.js';
 import { createLiveSubmissionHold } from './lib/live-submission-hold.js';
+import { configureKrakenCoordination } from './lib/kraken-request-coordinator.js';
 import { getFeeConfig, setFeeConfig, canTrade, burnCredits, grantCredits, walletSummary } from './lib/fees.js';
 import { getUserKrakenKeys, userKrakenStatus } from './lib/keys.js';
 import { createPayment, listPayments, confirmPayment, rejectPayment } from './lib/payments.js';
@@ -102,6 +103,7 @@ import { MCP_APP_MIME_TYPE, listMcpAppResources, readMcpAppResource } from './li
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.IOST_DATA_DIR || join(ROOT, 'data');
+configureKrakenCoordination(join(DATA_DIR, 'kraken-request-coordination'));
 const PORT = process.env.PORT || 8787;
 const AITT_DOC_VERSION = '2.3';
 process.umask(0o077);
