@@ -24,6 +24,7 @@ import { issueCredentialProof, consumeCredentialProof, credentialAuthState } fro
 import { createKrakenDraftEvidence, createKrakenPairCatalog, krakenSystemEvidence } from './lib/kraken-draft-evidence.js';
 import { combineKrakenReview } from './lib/combined-kraken-review.js';
 import { createLiveSubmissionHold } from './lib/live-submission-hold.js';
+import { inspectLiveSettlementReview } from './lib/live-settlement-review.js';
 import { configureKrakenCoordination } from './lib/kraken-request-coordinator.js';
 import { getFeeConfig, setFeeConfig, canTrade, burnCredits, grantCredits, walletSummary } from './lib/fees.js';
 import { getUserKrakenKeys, userKrakenStatus } from './lib/keys.js';
@@ -4848,7 +4849,8 @@ app.get('/api/exchange-connections', requireUser, (req, res) => {
   const readiness = publicLiveReadinessFor(req);
   const user = auth.findById(req.session.userId);
   const onboarding = krakenOnboarding.status(user);
-  return res.json({ ...buildExchangeConnections({ kraken: userKrakenStatus(user), readiness, onboarding }), readiness, storage: credentialStorageStatus(user), onboarding });
+  const settlementReview = inspectLiveSettlementReview(join(DATA_DIR, 'live-settlement-history'), user.id);
+  return res.json({ ...buildExchangeConnections({ kraken: userKrakenStatus(user), readiness, onboarding }), readiness, storage: credentialStorageStatus(user), onboarding, settlementReview });
 });
 
 app.get('/api/public-live-readiness', requireUser, (req, res) => {
