@@ -114,6 +114,10 @@ button { font-family: inherit; cursor: pointer; }
 }
 .grid { display: grid; gap: var(--sp-4); }
 .g-2 { grid-template-columns: repeat(2, 1fr); }
+.strategy-review-cards .card { min-width:0; }
+.strategy-review-cards dl { margin:0; }
+.strategy-review-cards dt { color:var(--muted); font-size:12px; font-weight:600; margin-top:14px; }
+.strategy-review-cards dd { margin:4px 0 0; line-height:1.5; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
 .g-3 { grid-template-columns: repeat(3, 1fr); }
 .g-4 { grid-template-columns: repeat(4, 1fr); }
 @media (max-width: 1024px) { .g-4 { grid-template-columns: repeat(2, 1fr); } .g-3 { grid-template-columns: repeat(2, 1fr); } }

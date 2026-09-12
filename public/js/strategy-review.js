@@ -1,7 +1,8 @@
 // Presentation of server-calculated evidence only; no execution or persistence.
+import { formatDraftUsd } from './draft-format.js?v=1';
 export function strategyReviewSections(review) {
   const order = review.order || {}, amounts = review.amounts || {}, policy = review.policy || {};
-  const money = value => value == null ? 'Unknown — not verified' : `$${value} USD`;
+  const money = formatDraftUsd;
   return [
     { title: 'Mode & account', rows: [
       ['Mode', 'Real-money workspace · draft only · execution locked'],
