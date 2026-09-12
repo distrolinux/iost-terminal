@@ -3930,26 +3930,10 @@ async function executeLiveOrder(req, { symbol, side = 'long', size, entry }) {
   if (!fee.ok) return { status: 400, error: fee.error };
 
   const r = await kraken.placeOrder({ symbol, side, size: effSize, entry });
-  if (!r.ok) return { status: 502, error: `venue: ${r.error}` };
-  // journal the live fill (live:true) — previously live fills never reached
-  // the journal, so the daily-loss rail and account views saw nothing
-  const lastQuote = quotes[symbol]?.last || null;
-  const fillPrice = entry && entry > 0 ? entry : lastQuote;
-  if (fillPrice) {
-    st.journal.push({
-      id: r.order.venueOrderId || `live_${Date.now()}`,
-      symbol, side, entry: fillPrice, size: effSize, reason: 'live (venue fill)',
-      status: 'open', openedAt: Date.now(), closedAt: null, exitPrice: null,
-      pnl: 0, pnlPct: null, result: null, live: true, venue: 'kraken',
-    });
-  }
-  // fee: burn credits on the executed notional (entry price or last quote)
-  let notional = entry && entry > 0 ? effSize * entry : 0;
-  if (!notional && lastQuote) notional = effSize * lastQuote;
-  const burn = burnCredits(st, notional);
-  persistAccounts();
-  logLiveEvent(st.accountId, 'live.order', { symbol, side, size: effSize, requestedSize: Number(size), entry: entry || null, garchMult: gs.multiplier, garchRegime: gs.regime, stormCapped: gs.stormCapped || false, venueOrderId: r.order.venueOrderId, burn: burn.ok ? burn.burn : 0 });
-  return { status: 200, ok: true, order: { venue: 'kraken', venueOrderId: r.order.venueOrderId, symbol, side, size: effSize, entry: entry || null, garch: { multiplier: gs.multiplier, regime: gs.regime, requestedSize: Number(size) } }, fee: burn.ok ? { burn: burn.burn, credits: burn.credits } : { error: burn.error } };
+  if (!r.ok) return { status: 502, outcome: r.outcome, error: 'Venue submission not confirmed; reconcile before retrying.' };
+  // Acceptance is not a fill. No invented position, execution price or credit burn.
+  logLiveEvent(st.accountId, 'live.order.accepted', { symbol, venueOrderId: r.order.venueOrderId });
+  return { status: 200, ok: true, order: { ...r.order, symbol, side, requestedSize: effSize, requestedEntry: entry || null }, fee: { platformFeeUsd: '0' }, reconciliationRequired: true };
 }
 
 app.post('/api/trade/live', requireUser, async (req, res) => {
@@ -4047,9 +4031,9 @@ app.post('/api/live/proposals/:id/approve', requireUser, async (req, res) => {
   try {
     r = await executeLiveOrder(req, { symbol: p.symbol, side: p.side, size: p.size, entry: p.entry });
   } catch (e) {
-    const error = e instanceof Error ? e.message : 'live execution failed';
-    liveProposals.finalizeExecution(p.id, { status: 'rejected', by: 'owner', error });
-    logLiveEvent(p.userId, 'live.proposal.rejected', { proposalId: p.id, error });
+    const error = 'Execution outcome unknown; reconciliation required.';
+    liveProposals.finalizeExecution(p.id, { status: 'unknown', by: 'owner', error });
+    logLiveEvent(p.userId, 'live.proposal.unknown', { proposalId: p.id });
     return res.status(502).json({ ok: false, error, proposal: liveProposals.getProposal(p.id) });
   }
   if (r.status === 200) {
@@ -4057,8 +4041,8 @@ app.post('/api/live/proposals/:id/approve', requireUser, async (req, res) => {
     logLiveEvent(p.userId, 'live.proposal.approved', { proposalId: p.id, venueOrderId: r.order.venueOrderId });
     res.json({ ok: true, proposal: liveProposals.getProposal(p.id), order: r.order });
   } else {
-    liveProposals.finalizeExecution(p.id, { status: 'rejected', by: 'owner', error: r.error });
-    logLiveEvent(p.userId, 'live.proposal.rejected', { proposalId: p.id, error: r.error });
+    liveProposals.finalizeExecution(p.id, { status: r.outcome === 'unknown' ? 'unknown' : 'rejected', by: 'owner', error: r.error });
+    logLiveEvent(p.userId, r.outcome === 'unknown' ? 'live.proposal.unknown' : 'live.proposal.rejected', { proposalId: p.id });
     res.status(r.status).json({ ok: false, error: r.error, proposal: liveProposals.getProposal(p.id) });
   }
 });

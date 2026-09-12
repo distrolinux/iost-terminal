@@ -1,11 +1,24 @@
 # Live lifecycle acceptance — HOLD
 
+## Remediation update
+
+The five initial broker regressions now pass: bounded no-redirect transport,
+explicit accepted status, missing-ID rejection, unknown submission outcomes and
+exact partial-fill quantity evidence. Server acceptance no longer invents a fill
+or burns credits. Unknown proposals persist as unknown and cannot be reclaimed.
+The probe now runs in the offline suite. These fixes do NOT complete live readiness.
+
+Still blocking: durable per-submission identity, cross-request/account retry
+control, confirmed fill/fee ingestion, cancel/fill races, full process recovery and
+HTTP execution-path acceptance. Keep this PR draft and do not deploy it as a live
+readiness upgrade. The historical baseline findings below explain the regressions.
+
 Baseline: 6aa386fd6796984b05b8b22c01b70c1083e0f302.
 Run `node tests/live-lifecycle-acceptance.mjs` in a disposable local test process.
 It replaces fetch before importing the broker, supplies fixture credentials and
 uses a fresh temporary proposal store. No server is booted; no real exchange is
 contacted. The test exits nonzero intentionally while release blockers remain.
-It is not folded into the green legacy suite and must not be described as passing.
+The historical baseline failed; the remediated checks now run in the offline suite.
 
 ## Observed blockers
 
@@ -37,6 +50,6 @@ It is not folded into the green legacy suite and must not be described as passin
   independent owner/account isolation using fixtures and the actual execution path.
 - Preserve launch locks and independent audit/eligibility requirements.
 
-No production patch or deployment is included. These tests establish gaps, not
-live readiness, certification, or permission to trade. Review the draft before
-turning the individual failures into production fixes and regression tests.
+Runtime remediation is now included but no deployment was performed. Passing
+the limited regressions is not live readiness, certification or permission to
+trade. Keep the draft on HOLD until the remaining lifecycle work is verified.

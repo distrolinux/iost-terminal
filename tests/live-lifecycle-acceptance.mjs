@@ -1,8 +1,8 @@
 // Release-blocking acceptance probe. Entirely offline: global fetch is replaced
 // BEFORE broker import, fixture keys prevent .env fallback, state is temporary.
-// This intentionally fails until the real implementation satisfies the checks.
+// Passing these limited regressions is not complete live lifecycle acceptance.
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 const scratch = mkdtempSync(join(tmpdir(), 'iost-lifecycle-'));
@@ -42,6 +42,10 @@ try {
   check('duplicate approval cannot obtain another lease', !proposals.claimForExecution(p.id, 'owner').ok);
   const reloaded = await import(`../lib/live-proposals.js?reload=${Date.now()}`);
   check('execution lease survives module reload from persisted store', !reloaded.claimForExecution(p.id, 'owner').ok && reloaded.getProposal(p.id).status === 'executing');
-  console.log(`Live lifecycle acceptance: ${failures} blockers. No network or production data used.`);
+  check('unknown proposal remains unclaimable', reloaded.finalizeExecution(p.id, { status: 'unknown' }).ok && !reloaded.claimForExecution(p.id, 'owner').ok);
+  const server = readFileSync(new URL('../server.js', import.meta.url), 'utf8');
+  const execution = server.slice(server.indexOf('const r = await kraken.placeOrder'), server.indexOf("app.post('/api/trade/live'"));
+  check('acceptance branch cannot synthesize fills or burn credits', !execution.includes('st.journal.push') && !execution.includes('burnCredits('));
+  console.log(`Limited live regressions: ${failures} failed checks. Full lifecycle remains HOLD. No network or production data used.`);
   process.exitCode = failures ? 1 : 0;
 } finally { rmSync(scratch, { recursive: true, force: true }); }
