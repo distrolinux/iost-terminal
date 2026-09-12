@@ -13,7 +13,7 @@ export function mountOrderReview(host, { post, isCurrent }) {
       <label>Limit price (USD per unit)<input name="limitPrice" required inputmode="decimal" maxlength="19" placeholder="Enter price" autocomplete="off"></label>
       <label>Protective stop price (optional, USD)<input name="protectiveStop" inputmode="decimal" maxlength="19" placeholder="Not armed by this draft" autocomplete="off"></label>
       <label>Assumed fee (optional, basis points)<input name="assumedFeeBps" inputmode="decimal" maxlength="13" placeholder="100 bps = 1%" autocomplete="off"></label>
-    </div><p><button class="btn" type="submit">Review draft — no order sent</button> <button class="btn ghost" type="submit" data-market-review>Check Kraken market rules</button> <button class="btn ghost" type="submit" data-account-review>Check BTC/USD cash + fees</button></p><p>Market checks send only the pair symbol to Kraken’s public API. They do not use your credentials or submit this draft.</p><p>Cash + fees requires your saved Kraken connection and queries balances and the BTC/USD account fee schedule. No order or balance amount is sent back; the draft stays on IOST. This is not eligibility or full affordability verification.</p></form>
+    </div><p><button class="btn" type="submit">Review draft — no order sent</button> <button class="btn ghost" type="submit" data-market-review>Check Kraken market rules</button> <button class="btn ghost" type="submit" data-account-review>Combined BTC/USD review</button></p><p>Market checks send only the pair symbol to Kraken’s public API. They do not use your credentials or submit this draft.</p><p>Combined review requires your saved Kraken connection and queries balances and the BTC/USD account fee schedule. No order or balance amount is sent back; the draft stays on IOST. This is not eligibility or full affordability verification.</p></form>
     <div role="status" aria-live="polite" data-review-result>No draft reviewed. Inputs stay in this page and are sent only for calculation; they are not saved.</div>
     <p><button class="btn ghost" disabled>Live execution locked</button></p>`;
   const form = host.querySelector('form');
@@ -42,6 +42,16 @@ export function mountOrderReview(host, { post, isCurrent }) {
       if (!valid(requestRevision)) return;
       if (result.mode !== 'draft-review-only' || result.decision !== 'not-authorized') throw Error('unexpected review');
       output.replaceChildren();
+      if (result.combined) {
+        const section = document.createElement('section'); section.className = 'card';
+        const heading = document.createElement('h3'); heading.textContent = 'Combined Kraken review — not authorized'; section.append(heading);
+        const names = { fresh: 'Shared evidence freshness', marketRules: 'Market rules', venueOnline: 'Exchange online', venueAdvisoriesClear: 'No reported venue advisories', cashEstimate: 'Cash covers fee estimate', notionalCap: 'Configured notional limit', stopDrafted: 'Stop drafted (not armed)' };
+        for (const [key, pass] of Object.entries(result.combined.checks)) {
+          const p = document.createElement('p'); p.textContent = `${names[key] || key}: ${pass ? 'checked' : 'blocked or unavailable'}`; section.append(p);
+        }
+        const pending = document.createElement('p'); pending.textContent = `Still required: ${result.combined.outstanding.join(', ')}. No order is authorized.`; section.append(pending);
+        output.append(section);
+      }
       if (result.accountFunding) {
         const f = result.accountFunding, notice = document.createElement('p');
         const labels = { 'cash-indication-covers-estimate': 'Reported cash covers this estimate only', 'cash-indication-below-estimate': 'Reported cash is below this estimate', unavailable: 'Account evidence unavailable — do not assume sufficient funds' };
