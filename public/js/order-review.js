@@ -1,7 +1,7 @@
 // In-memory draft UI only. Never stores inputs or calls an approval/order API.
 import { summarizeOrderReview } from './order-review-summary.js?v=1';
 import { mountPairPicker } from './order-pair-picker.js?v=1';
-import { strategyReviewSections } from './strategy-review.js?v=1';
+import { strategyReviewSections } from './strategy-review.js?v=2';
 export function mountOrderReview(host, { post, isCurrent }) {
   host.innerHTML = `<h2>Review your trading plan <span class="chip warn">Execution locked</span></h2>
     <p>One order draft, not an automated strategy. Review the entry, exit, spending and approval requirements together before taking any next step.</p>
@@ -47,7 +47,7 @@ export function mountOrderReview(host, { post, isCurrent }) {
       for (const message of summary.blockers) { const p = document.createElement('p'); const strong = document.createElement('strong'); strong.textContent = message; p.append(strong); panel.append(p); }
       for (const message of summary.unknowns) { const p = document.createElement('p'); p.textContent = message; panel.append(p); }
       const approval = document.createElement('p'); approval.textContent = summary.approval; panel.append(approval); output.append(panel);
-      const sections = document.createElement('div'); sections.className = 'grid g-2';
+      const sections = document.createElement('div'); sections.className = 'grid g-2 strategy-review-cards';
       for (const group of strategyReviewSections(result)) {
         const card = document.createElement('section'); card.className = 'card';
         const title = document.createElement('h3'); title.textContent = group.title; card.append(title);
