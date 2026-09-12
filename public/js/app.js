@@ -1,6 +1,6 @@
 // IOST Terminal frontend — all views, live SSE updates, charts, chat
 import bs58 from '/js/vendor/bs58.mjs'; // vendored base58 (MIT) — for wallet key display
-import { mountOrderReview } from '/js/order-review.js?v=1';
+import { mountOrderReview } from '/js/order-review.js?v=2';
 import { AITT_CHAIN_ID, chainIdNumber, claimGateReason, requestClaimIfOpen, shouldAllowClaim } from '/js/wallet-claims.js';
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];

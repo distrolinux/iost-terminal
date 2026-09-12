@@ -5,6 +5,12 @@ const nativeFetch = globalThis.fetch;
 
 globalThis.fetch = async (input, init) => {
   const url = String(input?.url || input);
+  if (url.startsWith('https://api.kraken.com/0/public/AssetPairs?pair=IOSTUSD')) {
+    return new Response(JSON.stringify({ error: [], result: { IOSTUSD: { wsname: 'IOST/USD', aclass_base: 'currency', aclass_quote: 'currency', lot_multiplier: 1, lot_decimals: 8, pair_decimals: 6, tick_size: '0.000001', ordermin: '1', costmin: '0.5', status: 'online' } } }));
+  }
+  if (url.startsWith('https://api.kraken.com/0/public/Ticker?pair=IOSTUSD')) {
+    return new Response(JSON.stringify({ error: [], result: { IOSTUSD: { a: ['0.0011'], b: ['0.0010'] } } }));
+  }
   if (url.startsWith('https://www.okx.com/api/v5/market/ticker?instId=IOST-USDT')) {
     return new Response(JSON.stringify({
       code: '0', data: [{

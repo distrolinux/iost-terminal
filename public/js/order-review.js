@@ -8,25 +8,27 @@ export function mountOrderReview(host, { post, isCurrent }) {
       <label>Limit price (USD per unit)<input name="limitPrice" required inputmode="decimal" maxlength="19" placeholder="Enter price" autocomplete="off"></label>
       <label>Protective stop price (optional, USD)<input name="protectiveStop" inputmode="decimal" maxlength="19" placeholder="Not armed by this draft" autocomplete="off"></label>
       <label>Assumed fee (optional, basis points)<input name="assumedFeeBps" inputmode="decimal" maxlength="13" placeholder="100 bps = 1%" autocomplete="off"></label>
-    </div><p><button class="btn" type="submit">Review draft — no order sent</button></p></form>
+    </div><p><button class="btn" type="submit">Review draft — no order sent</button> <button class="btn ghost" type="submit" data-market-review>Check Kraken market rules</button></p><p>Market checks send only the pair symbol to Kraken’s public API. They do not use your credentials or submit this draft.</p></form>
     <div role="status" aria-live="polite" data-review-result>No draft reviewed. Inputs stay in this page and are sent only for calculation; they are not saved.</div>
     <p><button class="btn ghost" disabled>Live execution locked</button></p>`;
   const form = host.querySelector('form');
   const output = host.querySelector('[data-review-result]');
   const submit = form.querySelector('button');
+  const marketSubmit = form.querySelector('[data-market-review]');
   let revision = 0, expiryTimer;
   const valid = r => r === revision && host.isConnected && isCurrent();
   form.addEventListener('input', () => {
-    revision++; clearTimeout(expiryTimer); submit.disabled = false;
+    revision++; clearTimeout(expiryTimer); submit.disabled = false; marketSubmit.disabled = false;
     output.textContent = 'Inputs changed. Review again; any previous calculation is no longer current.';
   });
   form.addEventListener('submit', async event => {
     event.preventDefault();
     const requestRevision = ++revision;
-    clearTimeout(expiryTimer); submit.disabled = true;
+    clearTimeout(expiryTimer); submit.disabled = true; marketSubmit.disabled = true;
     output.textContent = 'Calculating draft only…';
     try {
-      const result = await post('/api/exchange-connections/order-review', Object.fromEntries(new FormData(form)));
+      const endpoint = event.submitter === marketSubmit ? 'market-review' : 'order-review';
+      const result = await post(`/api/exchange-connections/${endpoint}`, Object.fromEntries(new FormData(form)));
       if (!valid(requestRevision)) return;
       if (result.mode !== 'draft-review-only' || result.decision !== 'not-authorized') throw Error('unexpected review');
       output.replaceChildren();
@@ -46,8 +48,21 @@ export function mountOrderReview(host, { post, isCurrent }) {
         ['Configured notional cap', `${money(result.policy.maxOrderUsd)} · ${result.policy.notionalCap}`],
         ['Full risk, balance and venue checks', 'Not performed'],
         ['Owner approval', 'Not requested — no approval binding or expiry'],
-        ['Review validity', '60 seconds from calculation; changing inputs invalidates it'],
+        ['Review validity', result.market?.quote ? 'Market snapshot valid for at most 30 seconds after retrieval; changing inputs invalidates it' : 'Arithmetic only: 60 seconds from calculation; changing inputs invalidates it'],
       ];
+      if (result.market) {
+        const m = result.market;
+        rows.push(['Kraken public checks', `${m.status} · ${m.reasonCode}`]);
+        if (m.rules && m.quote) rows.push(
+          ['Market pair', m.pair], ['Pair online', m.rules.pairOnline ? 'Yes — account eligibility not verified' : 'No — draft blocked'],
+          ['Minimum asset quantity', m.rules.minimumQuantity], ['Minimum notional', money(m.rules.minimumNotionalUsd)],
+          ['Quantity precision', `${m.rules.quantityDecimals} decimal places`], ['Price tick', money(m.rules.priceTick)],
+          ['Bid / ask', `${money(m.quote.bid)} / ${money(m.quote.ask)}`], ['Spread', `${m.quote.spreadBps} bps (rounded down)`],
+          ['Retrieved at', new Date(m.observedAt).toLocaleTimeString()], ['Source quote age', 'Unknown — Kraken ticker has no source timestamp'],
+          ['Failed market rules', m.failures.length ? m.failures.join(', ') : 'None in checked public rules — not authorization'],
+        );
+        rows.push(['Account fees and eligibility', 'Not verified']);
+      }
       for (const [label, value] of rows) {
         const dt = document.createElement('dt'), dd = document.createElement('dd');
         dt.textContent = label; dd.textContent = value; list.append(dt, dd);
@@ -63,6 +78,6 @@ export function mountOrderReview(host, { post, isCurrent }) {
       if (!remaining) expire(); else expiryTimer = setTimeout(expire, remaining);
     } catch {
       if (valid(requestRevision)) output.textContent = 'Review unavailable. Use positive decimal quantity/price (up to 8 decimal places), an uppercase symbol, a stop below the limit and an optional fee of 0–1000 bps. Nothing was sent to an exchange.';
-    } finally { if (valid(requestRevision)) submit.disabled = false; }
+    } finally { if (valid(requestRevision)) { submit.disabled = false; marketSubmit.disabled = false; } }
   });
 }
