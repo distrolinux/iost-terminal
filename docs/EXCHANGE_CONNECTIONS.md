@@ -45,4 +45,5 @@ tools, vault claims, automatic verification or trading permissions are added.
 Official schema: https://docs.kraken.com/api/docs/rest-api/get-api-key-info
 
 Run `node tests/exchange-connections-check.mjs` and the full offline safety suite.
+The owner can optionally include a `BalanceEx` query through the same verification route; see [USD held-funds evidence](KRAKEN_HELD_FUNDS_EVIDENCE.md). The option defaults off, returns no amounts, and never satisfies a live launch gate.
 Deployment is separate; server/boot-cached markup changes require container restart.

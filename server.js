@@ -4750,6 +4750,8 @@ for (const phase of ['preview', 'commit']) {
 app.post('/api/exchange-connections/kraken/verify', requireUser, connectionVerificationLimiter, async (req, res) => {
   res.set('Cache-Control', 'private, no-store');
   if (req.userAgent || !req.session?.userId || req.agentKey) return res.status(403).json({ error: 'account owner session required' });
+  const input = req.body || {};
+  if (Array.isArray(input) || typeof input !== 'object' || Object.keys(input).some(k => k !== 'includeFundingEvidence') || (input.includeFundingEvidence !== undefined && typeof input.includeFundingEvidence !== 'boolean')) return res.status(400).json({ error: 'Invalid verification request.' });
   const userId = req.session.userId;
   const user = auth.findById(userId);
   const originalCredential = user?.krakenKey;
@@ -4758,7 +4760,7 @@ app.post('/api/exchange-connections/kraken/verify', requireUser, connectionVerif
   if (connectionVerificationPending.has(userId)) return res.status(409).json({ error: 'Verification already running.' });
   connectionVerificationPending.add(userId);
   try {
-    const result = await verifyKrakenConnection(keys);
+    const result = await verifyKrakenConnection(keys, { includeFundingEvidence: input.includeFundingEvidence === true });
     if (auth.findById(userId)?.krakenKey !== originalCredential) return res.status(409).json({ error: 'Connection changed. Discarding verification.' });
     logLiveEvent(userId, 'user.key.verified', { provider: 'kraken', outcome: result.reasonCode });
     return res.json(result);

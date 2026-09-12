@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import { assessKrakenFunding } from '../lib/kraken-funding-evidence.js';
+const record = { balance: '123.45', credit: '1000', credit_used: '3.45', hold_trade: '20' };
+assert.equal(assessKrakenFunding({ ZUSD: record }).usdCashStatus, 'positive');
+assert.equal(assessKrakenFunding({ ZUSD: { ...record, balance: '23.45' } }).usdCashStatus, 'zero');
+assert.equal(assessKrakenFunding({ ZUSD: { ...record, balance: '0' } }).usdCashStatus, 'negative');
+assert.equal(assessKrakenFunding({ ZUSD: { ...record, balance: '0.00000001', credit_used: '0', hold_trade: '0' } }).usdCashStatus, 'positive');
+for (const bad of [null, {}, [], { USD: record, ZUSD: record }, { 'ZUSD.F': record }, { ZUSD: { ...record, credit: undefined } }, { ZUSD: { ...record, balance: 123.45 } }, { ZUSD: { ...record, hold_trade: '-1' } }, { ZUSD: { ...record, balance: '1e3' } }]) assert.equal(assessKrakenFunding(bad).usdCashStatus, 'unavailable');
+const result = assessKrakenFunding({ ZUSD: record });
+assert.equal(result.executionAuthorized, false);
+assert.equal(result.borrowedCreditIncluded, false);
+assert.doesNotMatch(JSON.stringify(result), /123\.45|1000|ZUSD/);
+console.log('Kraken held-funds evidence checks passed');

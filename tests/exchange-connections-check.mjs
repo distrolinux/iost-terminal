@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import './trading-workspace-entry-check.mjs';
 import './kraken-connection-verification-check.mjs';
+import './kraken-funding-evidence-check.mjs';
 import './credential-vault-check.mjs';
 import './credential-recovery-check.mjs';
 import './credential-maintenance-check.mjs';
