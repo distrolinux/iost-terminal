@@ -79,8 +79,9 @@ check('legal documents describe the public launch as paper-only and keep financi
 
 check('real-money trading and exchange-key connection fail closed by default',
   /process\.env\.LIVE_TRADING_ENABLED === '1'/.test(readFileSync(new URL('../lib/live.js', import.meta.url), 'utf8'))
-  && /if \(!liveTradingAvailable\(\)\) return res\.status\(403\)/.test(server)
-  && /Exchange-key connection and real-money execution are unavailable/.test(appJs));
+  && /Direct credential saving is disabled/.test(server)
+  && /process\.env\.KRAKEN_READONLY_ONBOARDING_ENABLED === '1'/.test(readFileSync(new URL('../lib/kraken-onboarding.js', import.meta.url), 'utf8'))
+  && /real-money execution are separately gated/.test(appJs));
 
 check('public-chain writes and account creation fail closed by default',
   /process\.env\.PUBLIC_CHAIN_ACTIONS_ENABLED === '1'/.test(chainJs)

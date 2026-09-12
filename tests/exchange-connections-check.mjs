@@ -7,6 +7,7 @@ import './credential-vault-file-check.mjs';
 import './order-review-check.mjs';
 import './kraken-draft-evidence-check.mjs';
 import './pair-picker-summary-check.mjs';
+import './kraken-onboarding-check.mjs';
 import { readFileSync } from 'node:fs';
 import { buildExchangeConnections } from '../lib/exchange-connections.js';
 const empty = buildExchangeConnections();

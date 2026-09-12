@@ -19,9 +19,10 @@ import { getBroker } from './lib/broker/index.js';
 import { enableLive, disableLive, getLiveState, logLiveEvent, anyLiveEnabled, isLiveAllowed, isOwnerIdentity, liveTradingAvailable } from './lib/live.js';
 import { checkLiveOrder, liveRailConfig } from './lib/rails.js';
 import { buildOrderReview } from './lib/order-review.js';
+import { createKrakenOnboarding } from './lib/kraken-onboarding.js';
 import { createKrakenDraftEvidence, createKrakenPairCatalog } from './lib/kraken-draft-evidence.js';
 import { getFeeConfig, setFeeConfig, canTrade, burnCredits, grantCredits, walletSummary } from './lib/fees.js';
-import { setUserKrakenKey, getUserKrakenKeys, clearUserKrakenKey, userKrakenStatus } from './lib/keys.js';
+import { getUserKrakenKeys, userKrakenStatus } from './lib/keys.js';
 import { createPayment, listPayments, confirmPayment, rejectPayment } from './lib/payments.js';
 import { answer, assistantStatus } from './lib/assistant.js';
 import { getAutopilot, startAutopilot, stopAutopilot, setAutopilotConfig, tickAutopilot, getProposals, approveProposal, rejectProposal } from './lib/autopilot.js';
@@ -3829,32 +3830,23 @@ function brokerForUser(u) {
 
 // ---- per-user Kraken key connection (v3 — customers trade their own account) ----
 app.get('/api/account/kraken', requireUser, (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (req.userAgent || req.agentKey) return res.status(403).json({ error: 'account owner session required' });
   if (!req.session?.userId) return res.status(401).json({ error: 'auth required' });
-  res.json({ ok: true, available: liveTradingAvailable(), status: userKrakenStatus(auth.findById(req.session.userId)) });
+  res.json({ ok: true, available: false, status: userKrakenStatus(auth.findById(req.session.userId)), setupLocation: 'exchange-connections' });
 });
 
 app.put('/api/account/kraken', requireUser, async (req, res) => {
-  if (!liveTradingAvailable()) return res.status(403).json({ error: 'exchange-key connection is unavailable in the paper-only launch' });
-  if (!req.session?.userId) return res.status(401).json({ error: 'auth required' });
-  const { apiKey, apiSecret } = req.body || {};
-  if (!apiKey || !apiSecret) return res.status(400).json({ error: 'apiKey and apiSecret required' });
-  // validate the PROVIDED key with a read-only balance call before storing
-  const test = createKrakenBroker({ apiKey: String(apiKey).trim(), apiSecret: String(apiSecret).trim() });
-  const acct = await test.getAccount();
-  if (!acct.ok) return res.status(400).json({ error: `key rejected by Kraken: ${acct.error}` });
-  const u = auth.findById(req.session.userId);
-  const r = setUserKrakenKey(u, String(apiKey).trim(), String(apiSecret).trim());
-  if (!r.ok) return res.status(400).json({ error: r.error });
-  auth.persistUsers();
-  logLiveEvent(u.id, 'user.key.connected', { provider: 'kraken', storageVersion: 1 });
-  res.json({ ok: true, status: userKrakenStatus(u) });
+  res.set('Cache-Control', 'private, no-store');
+  return res.status(403).json({ error: 'Direct credential saving is disabled. Use the verified owner onboarding flow.' });
 });
 
 app.delete('/api/account/kraken', requireUser, (req, res) => {
-  if (!req.session?.userId) return res.status(401).json({ error: 'auth required' });
+  res.set('Cache-Control', 'private, no-store');
+  if (req.userAgent || req.agentKey || !req.session?.userId) return res.status(403).json({ error: 'account owner session required' });
   const u = auth.findById(req.session.userId);
-  clearUserKrakenKey(u);
-  auth.persistUsers();
+  try { auth.persistCredentialReplacement(u, null); }
+  catch { return res.status(503).json({ error: 'Disconnect unconfirmed. Refresh status before retrying.' }); }
   logLiveEvent(u.id, 'user.key.disconnected', { provider: 'kraken' });
   res.json({ ok: true });
 });
@@ -4723,6 +4715,18 @@ app.get('/api/security-sentinel', requireUser, (req, res) => {
 
 const connectionVerificationLimiter = rateLimit({ windowMs: 60_000, limit: 3, standardHeaders: 'draft-7', legacyHeaders: false, message: { error: 'Please wait before verifying again.' } });
 const connectionVerificationPending = new Set();
+const krakenOnboarding = createKrakenOnboarding({ persist: auth.persistCredentialReplacement });
+for (const phase of ['preview', 'commit']) {
+  app.post(`/api/exchange-connections/kraken/onboarding-${phase}`, requireUser, connectionVerificationLimiter, async (req, res) => {
+    res.set('Cache-Control', 'private, no-store');
+    if (req.userAgent || req.agentKey || !req.session?.userId) return res.status(403).json({ error: 'account owner session required' });
+    const user = auth.findById(req.session.userId);
+    const result = phase === 'preview' ? await krakenOnboarding.preview(user, req.sessionID, req.body) : krakenOnboarding.commit(user, req.sessionID, req.body);
+    if (phase === 'preview' && req.body) { delete req.body.apiKey; delete req.body.apiSecret; }
+    if (phase === 'commit' && result.ok) logLiveEvent(user.id, 'user.key.connected', { provider: 'kraken', profile: 'read-only', storageVersion: 1 });
+    return res.status(result.ok ? 200 : 409).json(result);
+  });
+}
 app.post('/api/exchange-connections/kraken/verify', requireUser, connectionVerificationLimiter, async (req, res) => {
   res.set('Cache-Control', 'private, no-store');
   if (req.userAgent || !req.session?.userId || req.agentKey) return res.status(403).json({ error: 'account owner session required' });
@@ -4792,7 +4796,8 @@ app.get('/api/exchange-connections', requireUser, (req, res) => {
   if (req.userAgent || !req.session?.userId || req.agentKey) return res.status(403).json({ error: 'account owner session required' });
   const readiness = publicLiveReadinessFor(req);
   const user = auth.findById(req.session.userId);
-  return res.json({ ...buildExchangeConnections({ kraken: userKrakenStatus(user), readiness }), readiness, storage: credentialStorageStatus(user) });
+  const onboarding = krakenOnboarding.status(user);
+  return res.json({ ...buildExchangeConnections({ kraken: userKrakenStatus(user), readiness, onboarding }), readiness, storage: credentialStorageStatus(user), onboarding });
 });
 
 app.get('/api/public-live-readiness', requireUser, (req, res) => {
