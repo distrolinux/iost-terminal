@@ -33,13 +33,39 @@ try {
   assert.equal(helper.status, 'replay');
   assert.equal((await recordHeldSettlementEvidence({ read: () => ({ ok: false }) }, 'owner', { getLinkedSettlementEvidence: () => assert.fail('unexpected broker call') }, store, {})).status, 'held');
   assert.equal(readFileSync(file, 'utf8'), bytes);
+  let conflictIndex = 0;
   for (const changed of [
     { ...link, fillDigest: 'd'.repeat(64) },
     { ...link, fillId: 'T-OTHER' },
     { ...link, ledgerIds: ['L-1', 'L-NEW'] },
+    { ...link, assets: [{ ...link.assets[0], fee: '0.000002', netChange: '0.000998' }, link.assets[1]] },
     { ...link, assets: [{ ...link.assets[0], fee: '0' }, link.assets[1]] }
-  ]) assert.equal(store.append('owner', binding, { ...evidence, links: [changed] }).status, 'held');
-  assert.equal(store.append('owner', { ...binding, venueOrderId: 'O-OTHER' }, evidence).status, 'held');
+  ]) {
+    const subject = 'conflict-' + conflictIndex++;
+    assert.equal(store.append(subject, binding, evidence).status, 'recorded');
+    const rejected = store.append(subject, binding, { ...evidence, links: [changed] });
+    assert.equal(rejected.status, 'held');
+    if (rejected.reasonCode === 'settlement-evidence-review-required') assert.equal(store.append(subject, binding, evidence).status, 'held');
+  }
+  const correctionRoot = join(scratch, 'correction');
+  const correction = createLiveSettlementHistory(correctionRoot);
+  correction.append('owner', binding, evidence);
+  const originalDir = join(correctionRoot, readdirSync(correctionRoot)[0]);
+  const originalBytes = readFileSync(join(originalDir, '00000001.json'), 'utf8');
+  const conflict = correction.append('owner', { ...binding, venueOrderId: 'O-OTHER' }, evidence);
+  assert.equal(conflict.status, 'held'); assert.equal(conflict.ownerReviewRequired, true);
+  assert.equal(correction.append('owner', binding, evidence).status, 'held');
+  const restarted = spawnSync(process.execPath, ['--input-type=module', '-e', script, correctionRoot, JSON.stringify(binding), JSON.stringify(evidence)], { encoding: 'utf8' });
+  assert.equal(restarted.status, 0); assert.equal(restarted.stdout.trim(), 'held');
+  assert.equal(readFileSync(join(originalDir, '00000001.json'), 'utf8'), originalBytes);
+  assert.equal(statSync(join(originalDir, 'review-required.json')).mode & 0o777, 0o600);
+  const markerPath = join(originalDir, 'review-required.json');
+  const marker = readFileSync(markerPath, 'utf8');
+  assert.ok(!marker.includes(binding.venueOrderId)); assert.ok(!marker.includes(link.fillId));
+  correction.append('owner', binding, { ...evidence, links: [{ ...link, fillDigest: 'e'.repeat(64) }] });
+  assert.equal(readFileSync(markerPath, 'utf8'), marker);
+  writeFileSync(markerPath, '{partial');
+  assert.equal(correction.append('owner', binding, evidence).status, 'held');
   const second = { ...link, fillId: 'T-2', ledgerIds: ['L-3', 'L-4'] };
   assert.equal(store.append('owner', binding, { ...evidence, links: [link, second] }).newEvidenceFills, 1);
   assert.equal(readdirSync(directory).length, 2);
