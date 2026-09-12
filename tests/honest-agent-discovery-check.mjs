@@ -12,3 +12,7 @@ for (const path of ['public/llms.txt', 'public/llms-full.txt']) {
   assert.ok(!read(path).includes('decentralized agent signals hash-pinned on the IOST mainnet'));
 }
 console.log('Honest agent discovery checks passed');
+const kit = read('public/agent-connection-kit.md');
+for (const text of ['tools/list', 'inputSchema', 'X-API-Key', 'read-only', 'outside IOST', 'Platform fee: $0']) assert.ok(kit.includes(text), text);
+assert.ok(page.includes('/agent-connection-kit.md'));
+assert.ok(read('server.js').includes("connectionKit: '/agent-connection-kit.md'"));
