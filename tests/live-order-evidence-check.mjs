@@ -19,17 +19,17 @@ globalThis.fetch = async (url, options) => {
 };
 const scratch = mkdtempSync(join(tmpdir(), 'iost-order-evidence-'));
 try {
+  const { createKrakenBroker } = await import('../lib/broker/kraken.js');
+  const broker = createKrakenBroker({ apiKey: process.env.KRAKEN_API_KEY, apiSecret: process.env.KRAKEN_API_SECRET, ownerId: 'owner' });
   const holds = createLiveSubmissionHold(scratch);
-  const claim = holds.claim('owner', { symbol: 'BTC', side: 'long', size: 1, entry: 50000 });
+  const claim = holds.claim('owner', { symbol: 'BTC', side: 'long', size: 1, entry: 50000 }, broker.credentialBinding('owner'));
   assert.equal(holds.acknowledge('owner', 'wrong-client', 'fixture-order').ok, false);
   assert.equal(holds.acknowledge('owner', claim.clientOrderId, 'fixture-order').ok, true);
   assert.equal(holds.acknowledge('owner', claim.clientOrderId, 'different-order').ok, false);
   assert.equal(holds.read('other-owner').ok, false);
   const persisted = createLiveSubmissionHold(scratch).read('owner');
   assert.equal(persisted.hold.venueOrderId, 'fixture-order');
-  const { createKrakenBroker } = await import('../lib/broker/kraken.js');
   const { inspectHeldLiveOrder, recordHeldLiveOrderEvidence } = await import('../lib/live-order-evidence.js');
-  const broker = createKrakenBroker();
   const observation = { cl_ord_id: claim.clientOrderId, vol: '1.00000000', vol_exec: '0.25', status: 'open', descr: { pair: 'XBTUSD', type: 'buy', ordertype: 'limit', price: '50000.0' } };
   result = { 'fixture-order': observation };
   let review = await inspectHeldLiveOrder(holds, 'owner', broker);
@@ -69,10 +69,10 @@ try {
   assert.equal(review.status, 'filled-evidence');
   assert.equal(review.releaseAllowed, false);
   const before = calls;
-  holds.claim('unacknowledged', { symbol: 'BTC', side: 'long', size: 1 });
+  holds.claim('unacknowledged', { symbol: 'BTC', side: 'long', size: 1 }, 'a'.repeat(64));
   assert.equal((await inspectHeldLiveOrder(holds, 'unacknowledged', broker)).status, 'unknown');
   assert.equal(calls, before, 'no guessed venue ID or discovery retry');
-  assert.equal(holds.claim('owner', { symbol: 'BTC', side: 'long', size: 1 }).ok, false);
+  assert.equal(holds.claim('owner', { symbol: 'BTC', side: 'long', size: 1 }, broker.credentialBinding('owner')).ok, false);
   const file = join(scratch, readdirSync(scratch).find(name => name.endsWith('.ack')));
   const ackBefore = readFileSync(file, 'utf8');
   assert.equal(holds.acknowledge('owner', claim.clientOrderId, 'different-order').ok, false);

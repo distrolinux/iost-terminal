@@ -62,6 +62,21 @@ Conflicting observations are rejected, not permanently quarantined by this helpe
 No HTTP/MCP route or scheduler invokes the writer. Account/credential binding and
 operational backup/recovery acceptance remain required. No hold is released.
 
+Connection continuity update: per-user brokers now derive a private opaque HMAC
+binding from owner ID and the exact credential pair. New submission holds and
+history retain this binding. Reconciliation rejects missing/mismatching bindings
+before venue requests, including owner changes and key/secret rotation. This is
+credential continuity, NOT independently verified exchange-account identity.
+It does not detect the same exchange account connected under multiple owners.
+Partial explicit credentials can no longer mix with environment fallback keys;
+environment-only brokers cannot submit through the owner-bound execution path.
+Bindings must never be returned in HTTP/MCP, discovery or logs.
+
+Old unbound holds/history remain held; there is no automatic migration or rebinding.
+These changes are still draft-only. Reconnecting/rotating credentials while an
+order is held needs a reviewed recovery workflow rather than deleting evidence.
+Actual HTTP owner isolation and venue account identity checks remain unfinished.
+
 The five initial broker regressions now pass: bounded no-redirect transport,
 explicit accepted status, missing-ID rejection, unknown submission outcomes and
 exact partial-fill quantity evidence. Server acceptance no longer invents a fill

@@ -3828,7 +3828,7 @@ function isOwnerSession(req) {
 // Per-user broker: the user's OWN Kraken keys (encrypted). null when not set.
 function brokerForUser(u) {
   const keys = u ? getUserKrakenKeys(u) : null;
-  return keys ? createKrakenBroker(keys) : null;
+  return keys ? createKrakenBroker({ ...keys, ownerId: u.id }) : null;
 }
 
 // ---- per-user Kraken key connection (v3 — customers trade their own account) ----
@@ -3900,9 +3900,11 @@ async function executeLiveOrder(req, { symbol, side = 'long', size, entry }) {
   if (!u) return { status: 403, error: 'session required' };
   const st = accountFor(req);
   if (!getLiveState(st).enabled) return { status: 400, error: 'live mode not enabled for this account' };
-  // venue: user's own keys when connected, else the platform key (owner only)
+  // Legacy fallback is rejected by the binding check before any venue request.
   const kraken = brokerForUser(u) || (isOwnerSession(req) ? getBroker('kraken') : null);
   if (!kraken) return { status: 403, error: 'connect your own Kraken key first (platform venue is owner-only)' };
+  const credentialBinding = kraken.credentialBinding?.(u.id);
+  if (!credentialBinding) return { status: 409, error: 'An owner-bound exchange connection is required; no submission made.' };
   // rails need live venue state — fetch before touching anything
   const [acct, pos] = await Promise.all([kraken.getAccount(), kraken.getPositions()]);
   if (!acct.ok) return { status: 502, error: `venue: ${acct.error}` };
@@ -3931,7 +3933,7 @@ async function executeLiveOrder(req, { symbol, side = 'long', size, entry }) {
   const fee = canTrade(st);
   if (!fee.ok) return { status: 400, error: fee.error };
 
-  const hold = liveSubmissionHold.claim(u.id, { symbol, side, size: effSize, entry });
+  const hold = liveSubmissionHold.claim(u.id, { symbol, side, size: effSize, entry }, credentialBinding);
   if (!hold.ok) return { status: 409, outcome: 'unknown', error: hold.error };
   const r = await kraken.placeOrder({ symbol, side, size: effSize, entry, clientOrderId: hold.clientOrderId });
   if (!r.ok) return { status: 502, outcome: r.outcome, error: 'Venue submission not confirmed; reconcile before retrying.' };
