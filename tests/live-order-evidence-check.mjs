@@ -1,0 +1,60 @@
+import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync, writeFileSync, readdirSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createLiveSubmissionHold } from '../lib/live-submission-hold.js';
+process.env.KRAKEN_API_KEY = 'offline-fixture-only';
+process.env.KRAKEN_API_SECRET = Buffer.from('offline-fixture-only').toString('base64');
+let result, calls = 0;
+globalThis.fetch = async (url, options) => {
+  calls++;
+  assert.equal(url, 'https://api.kraken.com/0/private/QueryOrders');
+  assert.equal(new URLSearchParams(options.body).get('txid'), 'fixture-order');
+  assert.equal(options.redirect, 'error');
+  assert.ok(options.signal);
+  return new Response(JSON.stringify({ error: [], result }));
+};
+const scratch = mkdtempSync(join(tmpdir(), 'iost-order-evidence-'));
+try {
+  const holds = createLiveSubmissionHold(scratch);
+  const claim = holds.claim('owner', { symbol: 'BTC', side: 'long', size: 1, entry: 50000 });
+  assert.equal(holds.acknowledge('owner', 'wrong-client', 'fixture-order').ok, false);
+  assert.equal(holds.acknowledge('owner', claim.clientOrderId, 'fixture-order').ok, true);
+  assert.equal(holds.acknowledge('owner', claim.clientOrderId, 'different-order').ok, false);
+  assert.equal(holds.read('other-owner').ok, false);
+  const persisted = createLiveSubmissionHold(scratch).read('owner');
+  assert.equal(persisted.hold.venueOrderId, 'fixture-order');
+  const { createKrakenBroker } = await import('../lib/broker/kraken.js');
+  const { inspectHeldLiveOrder } = await import('../lib/live-order-evidence.js');
+  const broker = createKrakenBroker();
+  const observation = { cl_ord_id: claim.clientOrderId, vol: '1.00000000', vol_exec: '0.25', status: 'open', descr: { pair: 'XBTUSD', type: 'buy', ordertype: 'limit', price: '50000.0' } };
+  result = { 'fixture-order': observation };
+  let review = await inspectHeldLiveOrder(holds, 'owner', broker);
+  assert.equal(review.status, 'partial-evidence');
+  assert.equal(review.releaseAllowed, false);
+  assert.equal(review.feesVerified, false);
+  result = {};
+  assert.equal((await inspectHeldLiveOrder(holds, 'owner', broker)).status, 'unknown');
+  for (const change of [{ cl_ord_id: 'different' }, { cl_ord_id: undefined }, { vol_exec: '2' }, { vol_exec: '-1' }, { vol: '2' }, { descr: { ...observation.descr, type: 'sell' } }, { descr: { ...observation.descr, pair: 'ETHUSD' } }, { descr: { ...observation.descr, price: '60000' } }, { status: 'closed' }]) {
+    result = { 'fixture-order': { ...observation, ...change } };
+    assert.equal((await inspectHeldLiveOrder(holds, 'owner', broker)).status, 'unknown');
+  }
+  result = { 'fixture-order': { ...observation, status: 'closed', vol_exec: '1' } };
+  review = await inspectHeldLiveOrder(holds, 'owner', broker);
+  assert.equal(review.status, 'filled-evidence');
+  assert.equal(review.releaseAllowed, false);
+  const before = calls;
+  holds.claim('unacknowledged', { symbol: 'BTC', side: 'long', size: 1 });
+  assert.equal((await inspectHeldLiveOrder(holds, 'unacknowledged', broker)).status, 'unknown');
+  assert.equal(calls, before, 'no guessed venue ID or discovery retry');
+  assert.equal(holds.claim('owner', { symbol: 'BTC', side: 'long', size: 1 }).ok, false);
+  const file = join(scratch, readdirSync(scratch).find(name => name.endsWith('.ack')));
+  const ackBefore = readFileSync(file, 'utf8');
+  assert.equal(holds.acknowledge('owner', claim.clientOrderId, 'different-order').ok, false);
+  assert.equal(readFileSync(file, 'utf8'), ackBefore, 'acknowledgement cannot be overwritten');
+  writeFileSync(file, '{broken');
+  const callsBeforeCorruption = calls;
+  assert.equal((await inspectHeldLiveOrder(holds, 'owner', broker)).status, 'unknown');
+  assert.equal(calls, callsBeforeCorruption, 'corrupt evidence cannot cause a query');
+  console.log('Held order evidence checks passed; no exchange calls or hold release');
+} finally { rmSync(scratch, { recursive: true, force: true }); }

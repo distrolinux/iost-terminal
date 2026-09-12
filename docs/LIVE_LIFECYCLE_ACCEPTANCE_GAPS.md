@@ -15,10 +15,21 @@ and separate owners. Actual power-loss/filesystem durability is not proven.
 Kraken client IDs identify open orders; they are not claimed as venue-wide exactly-once
 guarantees. Reference: https://docs.kraken.com/api-reference/trading/add-order
 
-A pure reconciliation preview recognizes partial/filled/terminal evidence and
-holds on conflicting terminal observations or decreasing quantities. It is NOT
-connected to a venue query, ledger, fee accounting or hold release. Fees remain
-unverified and releaseAllowed remains false in every preview.
+A reconciliation preview recognizes partial/filled/terminal evidence and holds
+on conflicting terminal observations or decreasing quantities. An internal
+read-only inspector now queries Kraken QueryOrders using an immutable persisted
+acknowledgement sidecar. It compares client ID, venue ID, pair, direction, quantity
+and limit terms; missing evidence remains unknown. There is no HTTP/MCP exposure,
+scheduler, ledger integration or hold release. Fees remain unverified and
+releaseAllowed remains false. This inspector does not yet persist observation
+history, so cross-query monotonicity remains an integration requirement.
+
+The sidecar is exclusively created and synced; failures leave the original hold
+blocking. A lost acknowledgement requires further recovery work, not a guessed
+venue ID or retry. Corrupt sidecars fail closed. QueryOrders requires venue IDs,
+so unknown submissions without one remain unresolved. No real authenticated
+exchange call has been used in verification; tests replace transport entirely.
+Reference: https://docs.kraken.com/api-reference/account-data/query-orders-info
 
 The five initial broker regressions now pass: bounded no-redirect transport,
 explicit accepted status, missing-ID rejection, unknown submission outcomes and
@@ -26,7 +37,8 @@ exact partial-fill quantity evidence. Server acceptance no longer invents a fill
 or burns credits. Unknown proposals persist as unknown and cannot be reclaimed.
 The probe now runs in the offline suite. These fixes do NOT complete live readiness.
 
-Still blocking: confirmed fill/fee ingestion, authenticated venue reconciliation,
+Still blocking: confirmed fill/fee ingestion, owner-bound reconciliation exposure
+and unknown-outcome recovery,
 verified hold release, end-to-end cancel/fill races, full recovery and
 HTTP execution-path acceptance. Keep this PR draft and do not deploy it as a live
 readiness upgrade. The historical baseline findings below explain the regressions.

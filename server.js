@@ -3936,6 +3936,9 @@ async function executeLiveOrder(req, { symbol, side = 'long', size, entry }) {
   const r = await kraken.placeOrder({ symbol, side, size: effSize, entry, clientOrderId: hold.clientOrderId });
   if (!r.ok) return { status: 502, outcome: r.outcome, error: 'Venue submission not confirmed; reconcile before retrying.' };
   // Acceptance is not a fill. No invented position, execution price or credit burn.
+  if (!liveSubmissionHold.acknowledge(u.id, hold.clientOrderId, r.order.venueOrderId).ok) {
+    return { status: 503, outcome: 'unknown', error: 'Venue acknowledgement could not be retained; submission remains held. Do not retry.' };
+  }
   logLiveEvent(st.accountId, 'live.order.accepted', { symbol, venueOrderId: r.order.venueOrderId });
   return { status: 200, ok: true, order: { ...r.order, symbol, side, requestedSize: effSize, requestedEntry: entry || null }, fee: { platformFeeUsd: '0' }, reconciliationRequired: true };
 }
