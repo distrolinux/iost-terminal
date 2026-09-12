@@ -120,6 +120,15 @@ External clients and servers with different coordination directories are not
 coordinated. Standalone library tests without server configuration still use the
 process-local lane. No live execution or production deployment was performed.
 
+Recovery diagnostics update: new lock records retain only a request class
+(read-only, submission, cancellation, unknown). A private owner-bound broker
+method inspects bounded local files without exposing IDs, keys or nonce values.
+It distinguishes held/absent/unavailable evidence but always denies release/retry.
+Legacy locks remain unknown; corrupt records fail closed. This is an internal
+diagnostic, not an HTTP/MCP route or completed recovery mechanism. See
+KRAKEN_HELD_REQUEST_RECOVERY.md for the still-required recovery-read lane and
+evidence-bound owner release design. Tests verify inspection leaves files unchanged.
+
 The five initial broker regressions now pass: bounded no-redirect transport,
 explicit accepted status, missing-ID rejection, unknown submission outcomes and
 exact partial-fill quantity evidence. Server acceptance no longer invents a fill
