@@ -1,7 +1,10 @@
 // In-memory draft UI only. Never stores inputs or calls an approval/order API.
+import { summarizeOrderReview } from './order-review-summary.js?v=1';
+import { mountPairPicker } from './order-pair-picker.js?v=1';
 export function mountOrderReview(host, { post, isCurrent }) {
   host.innerHTML = `<h2>Review an order draft <span class="chip warn">Execution locked</span></h2>
     <p>Kraken · USD spot-buy limit draft. Asset availability is not verified. Enter your own assumptions; this is not a recommendation, market quote or exchange preview.</p>
+    <section data-pair-picker></section><h3>2. Enter draft amounts</h3><p>Choose a market above or enter a symbol manually. Nothing is submitted to an exchange.</p>
     <form><div class="grid g-2">
       <label>Asset symbol<input name="symbol" required pattern="[A-Z0-9]{2,12}" maxlength="12" placeholder="IOST" autocomplete="off"></label>
       <label>Quantity (asset units)<input name="quantity" required inputmode="decimal" maxlength="19" placeholder="Enter units" autocomplete="off"></label>
@@ -15,6 +18,10 @@ export function mountOrderReview(host, { post, isCurrent }) {
   const output = host.querySelector('[data-review-result]');
   const submit = form.querySelector('button');
   const marketSubmit = form.querySelector('[data-market-review]');
+  mountPairPicker(host.querySelector('[data-pair-picker]'), { isCurrent, onSelect: symbol => {
+    form.elements.symbol.value = symbol;
+    form.dispatchEvent(new Event('input', { bubbles: true }));
+  } });
   let revision = 0, expiryTimer;
   const valid = r => r === revision && host.isConnected && isCurrent();
   form.addEventListener('input', () => {
@@ -32,6 +39,12 @@ export function mountOrderReview(host, { post, isCurrent }) {
       if (!valid(requestRevision)) return;
       if (result.mode !== 'draft-review-only' || result.decision !== 'not-authorized') throw Error('unexpected review');
       output.replaceChildren();
+      const summary = summarizeOrderReview(result);
+      const panel = document.createElement('section'); panel.className = 'card';
+      const summaryHeading = document.createElement('h3'); summaryHeading.textContent = `3. ${summary.title}`; panel.append(summaryHeading);
+      for (const message of summary.blockers) { const p = document.createElement('p'); const strong = document.createElement('strong'); strong.textContent = message; p.append(strong); panel.append(p); }
+      for (const message of summary.unknowns) { const p = document.createElement('p'); p.textContent = message; panel.append(p); }
+      const approval = document.createElement('p'); approval.textContent = summary.approval; panel.append(approval); output.append(panel);
       const heading = document.createElement('h3');
       heading.textContent = `Buy ${result.order.quantity} ${result.order.symbol} · limit draft only`;
       output.append(heading);
