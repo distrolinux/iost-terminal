@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import './trading-workspace-entry-check.mjs';
+import './kraken-connection-verification-check.mjs';
 import { readFileSync } from 'node:fs';
 import { buildExchangeConnections } from '../lib/exchange-connections.js';
 const empty = buildExchangeConnections();
@@ -25,7 +26,8 @@ assert.match(route, /private, no-store/);
 assert.match(route, /auth.findById\(req.session.userId\)/);
 const ui = readFileSync(new URL('../public/js/app.js', import.meta.url), 'utf8');
 const view = ui.slice(ui.indexOf('async function renderExchangeConnections'), ui.indexOf('// ---------------- Asset Intelligence Workspace'));
-assert.doesNotMatch(view, /\bpost\(|method:\s*['"](?:POST|DELETE|PUT)/);
+assert.match(view, /post\('\/api\/exchange-connections\/kraken\/verify'/);
+assert.doesNotMatch(view, /\/api\/live\/.*approve|AddOrder|\/api\/trade/);
 assert.match(view, /Not integrated/);
 assert.match(view, /replaceChildren/);
 console.log('Exchange connections checks passed');

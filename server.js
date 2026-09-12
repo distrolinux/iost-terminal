@@ -71,6 +71,7 @@ import { buildAssetIntelligence } from './lib/asset-intelligence.js';
 import { observeSecurityResponse, securitySentinelStatus } from './lib/security-sentinel.js';
 import { buildPublicLiveReadiness } from './lib/public-live-readiness.js';
 import { buildExchangeConnections } from './lib/exchange-connections.js';
+import { verifyKrakenConnection } from './lib/kraken-connection-verification.js';
 import * as liveProposals from './lib/live-proposals.js';
 import * as management from './lib/management.js';
 import * as triggers from './lib/triggers.js';
@@ -4713,6 +4714,25 @@ app.get('/api/security-sentinel', requireUser, (req, res) => {
   res.set('Cache-Control', 'private, no-store');
   if (req.userAgent && !userAgentHas(req, 'read')) return res.status(403).json({ error: 'read scope required' });
   return res.json(securitySentinelStatus());
+});
+
+const connectionVerificationLimiter = rateLimit({ windowMs: 60_000, limit: 3, standardHeaders: 'draft-7', legacyHeaders: false, message: { error: 'Please wait before verifying again.' } });
+const connectionVerificationPending = new Set();
+app.post('/api/exchange-connections/kraken/verify', requireUser, connectionVerificationLimiter, async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (req.userAgent || !req.session?.userId) return res.status(403).json({ error: 'account owner session required' });
+  const userId = req.session.userId;
+  const user = auth.findById(userId);
+  const originalCredential = user?.krakenKey;
+  const keys = getUserKrakenKeys(user);
+  if (!keys) return res.status(409).json({ error: 'No usable saved connection. Credential onboarding remains separately gated.' });
+  if (connectionVerificationPending.has(userId)) return res.status(409).json({ error: 'Verification already running.' });
+  connectionVerificationPending.add(userId);
+  try {
+    const result = await verifyKrakenConnection(keys);
+    if (auth.findById(userId)?.krakenKey !== originalCredential) return res.status(409).json({ error: 'Connection changed. Discarding verification.' });
+    return res.json(result);
+  } finally { connectionVerificationPending.delete(userId); }
 });
 
 app.get('/api/exchange-connections', requireUser, (req, res) => {
