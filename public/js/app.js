@@ -1054,7 +1054,7 @@ function refreshView(view) {
     onchain: renderOnchain, news: renderNews, assistant: renderAssistant, journal: renderJournal, performance: renderPerformance, evaluation: renderEvaluationLab, whales: renderWhales, smartmoney: renderSmartMoney, audit: renderAudit, launchpad: renderAgentLaunchpad, agents: renderAgents, control: renderAgentControl, trace: renderDecisionTrace, points: renderPoints, aitt: renderAITT, wallet: renderWallet })[view]();
 }
 
-// Separate real-money readiness workspace; GET only, never executes orders.
+// Separate real-money readiness workspace; never executes orders.
 let connectionRequestGeneration = 0;
 async function renderExchangeConnections() {
   const generation = ++connectionRequestGeneration;
@@ -1082,9 +1082,51 @@ async function renderExchangeConnections() {
       ${c.configured ? '<button class="btn" id="verifyKrakenConnection">Verify saved Kraken connection</button> <button class="btn ghost" id="disconnectKrakenConnection">Disconnect from IOST</button>' : '<p>Connection setup is unavailable during the paper-only launch. Do not send API keys to an agent or chat.</p>'}
       <p id="krakenVerificationResult" role="status">No fresh verification in this view. A check inspects permissions and queries balance access; balances are not displayed or stored.</p></section>`).join('')}
       <section class="card"><h2>Robinhood</h2><span class="chip neut">Not integrated</span><p>Authenticated MCP adapter under consideration. No account connection or trading support is available here.</p><p>Provider authentication, account eligibility, order preview, cancellation, and fill reconciliation must be validated before integration.</p></section></div>
+      <section class="card"><h2>Credential storage</h2>
+      <dl><dt>Dedicated encryption configured</dt><dd>${s.storage?.vaultConfigured === true ? 'Yes — application encryption, not external KMS verification' : 'Not available — operator setup required'}</dd><dt>Your saved Kraken credential</dt><dd>${esc(s.storage?.format || 'Unknown')}</dd><dt>Storage upgrade</dt><dd>${s.storage?.migrationNeeded === true ? 'Review required' : 'No upgrade indicated'}</dd></dl>
+      <p>A dry run checks only your saved credential and verifies that it can be re-encrypted and read back. It does not save changes or contact an exchange. Storage status alone does not prove credential integrity or authorize trading.</p>
+      <button class="btn" id="previewCredentialStorage" ${s.storage?.canPreview === true ? '' : 'disabled'}>Run storage dry run</button>
+      <button class="btn ghost" id="upgradeCredentialStorage" disabled>Back up &amp; upgrade my credential</button>
+      <p id="credentialStorageResult" role="status">${s.storage?.canPreview === true ? 'Start with a dry run. A separate confirmation is required to save.' : 'No migration is available now. If setup is missing, ask the operator to provision the vault securely; never paste keys here or into chat.'}</p>
+      <p class="muted">Encrypted backups are retained privately on the server. Keep the old encryption keys and session secret until backup recovery has been verified. This panel never changes exchange permissions or live launch gates.</p></section>
       <section class="card"><h2>Public live launch requirements</h2><ul class="public-live-gates">${(s.readiness?.gates || []).map(g => `<li class="${g.pass === true ? 'is-ready' : 'is-locked'}"><span>${g.pass === true ? '✓' : '×'}</span><strong>${esc(g.label)}</strong></li>`).join('')}</ul><p>No checklist item can be toggled here. Missing evidence keeps public launch locked.</p></section>
       <section class="card"><h2>Agent permission boundary</h2><ul><li>Paper balances and paper approvals never authorize real-money orders.</li><li>Each live order needs separate owner authorization and server-side risk checks.</li><li>Withdrawals and transfers are not supported by this workspace.</li><li>Direct agent-to-provider orders bypass IOST controls and are not covered by our execution guarantees.</li></ul><p>Planned lifecycle: preview → owner approval → provider submission → fills → reconciliation → audit. Opening this page performs none of these actions.</p></section>`;
     $('#refreshConnections').onclick = renderExchangeConnections;
+    let storagePlan = null;
+    $('#previewCredentialStorage').onclick = async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      storagePlan = null;
+      $('#upgradeCredentialStorage').disabled = true;
+      const output = $('#credentialStorageResult');
+      output.textContent = 'Checking encryption round trip; nothing is being saved…';
+      try {
+        const result = await post('/api/exchange-connections/kraken/storage-preview', {});
+        if (generation !== connectionRequestGeneration) return;
+        if (!result.ok || !result.roundtripVerified) throw Error('dry run failed');
+        storagePlan = result;
+        $('#upgradeCredentialStorage').disabled = false;
+        output.textContent = 'Dry run passed for one credential. Nothing saved. Confirmation expires in five minutes; no trade will be placed.';
+      } catch { if (generation === connectionRequestGeneration) output.textContent = 'Dry run unavailable. Refresh storage status; do not change or remove encryption keys.'; }
+      finally { if (generation === connectionRequestGeneration) button.disabled = false; }
+    };
+    $('#upgradeCredentialStorage').onclick = async (event) => {
+      if (!storagePlan || Date.now() >= storagePlan.expiresAt) {
+        storagePlan = null; event.currentTarget.disabled = true;
+        $('#credentialStorageResult').textContent = 'Dry run expired. Run it again before confirming.';
+        return;
+      }
+      if (!confirm('Back up and re-encrypt your saved Kraken credential now? This changes its server storage only, not exchange permissions. Keep old encryption keys for recovery.')) return;
+      const token = storagePlan.token;
+      storagePlan = null; event.currentTarget.disabled = true;
+      const output = $('#credentialStorageResult');
+      try {
+        const result = await post('/api/exchange-connections/kraken/storage-upgrade', { token, confirmed: true });
+        if (generation !== connectionRequestGeneration) return;
+        if (!result.ok) throw Error('upgrade failed');
+        output.textContent = 'Encrypted backup created and storage upgraded. No trade or permission change. Refresh evidence to see the new format.';
+      } catch { if (generation === connectionRequestGeneration) output.textContent = 'Upgrade not confirmed. Refresh before doing anything else; do not retry blindly or remove old keys. An encrypted recovery backup may have been retained.'; }
+    };
     $('#verifyKrakenConnection')?.addEventListener('click', async (event) => {
       const button = event.currentTarget;
       button.disabled = true;

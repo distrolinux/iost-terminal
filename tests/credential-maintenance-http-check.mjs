@@ -1,0 +1,67 @@
+import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const scratch = mkdtempSync(join(tmpdir(), 'iost-vault-http-'));
+process.env.IOST_DATA_DIR = scratch;
+process.env.IOST_CREDENTIAL_VAULT_KEYS = JSON.stringify({ before: Buffer.alloc(32, 61).toString('base64'), after: Buffer.alloc(32, 67).toString('base64') });
+process.env.IOST_CREDENTIAL_VAULT_ACTIVE_KEY_ID = 'before';
+const auth = await import('../lib/auth.js');
+const { setUserKrakenKey } = await import('../lib/keys.js');
+const agentKeys = await import('../lib/agent-keys.js');
+const registered = await auth.registerUser('vault-fixture@example.com', 'fixture-password-for-tests');
+assert.equal(registered.ok, true);
+assert.equal(setUserKrakenKey(registered.user, 'fixture-credential-key', 'fixture-credential-secret').ok, true);
+auth.persistUsers();
+const agent = agentKeys.createKey({ userId: registered.user.id, name: 'fixture agent', scopes: ['read'] });
+const port = 22000 + Math.floor(Math.random() * 2000);
+const base = `http://127.0.0.1:${port}`;
+const child = spawn(process.execPath, ['--import', './tests/market-fetch-fixture.mjs', 'server.js'], { cwd: root,
+  env: { ...process.env, AGENT_KEYS: 'fixture-platform-key', IOST_CREDENTIAL_VAULT_ACTIVE_KEY_ID: 'after', PORT: String(port), SITE_URL: base, SESSION_SECRET: 'fixture-http-session-secret-only', LIVE_TRADING_ENABLED: 'false', PUBLIC_CHAIN_ACTIONS_ENABLED: 'false', AITT_CONVERSION_ENABLED: 'false', KRAKEN_API_KEY: '', KRAKEN_API_SECRET: '', IOST_PIN_KEY: '' }, stdio: 'ignore' });
+const exited = new Promise(resolve => child.once('exit', resolve));
+async function request(path, { cookie, key, body, origin = base } = {}) {
+  const response = await fetch(base + path, { method: body ? 'POST' : 'GET', headers: { Origin: origin, ...(cookie ? { Cookie: cookie } : {}), ...(key ? { 'X-API-Key': key } : {}), 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) });
+  return { status: response.status, headers: response.headers, data: await response.json() };
+}
+try {
+  let ready = false;
+  for (let i = 0; i < 100; i++) {
+    try { if ((await fetch(base + '/api/health')).ok) { ready = true; break; } } catch { /* scratch server starting */ }
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  assert.equal(ready, true, 'scratch server ready');
+  assert.equal((await request('/api/exchange-connections/kraken/storage-preview', { body: {} })).status, 401);
+  assert.equal((await request('/api/exchange-connections', { key: agent.key })).status, 403);
+  const login = await request('/api/auth/login', { body: { email: 'vault-fixture@example.com', password: 'fixture-password-for-tests' } });
+  assert.equal(login.status, 200);
+  const cookie = login.headers.get('set-cookie').split(';')[0];
+  assert.equal((await request('/api/exchange-connections', { cookie, key: 'fixture-platform-key' })).status, 403);
+  const connection = await request('/api/exchange-connections', { cookie });
+  assert.equal(connection.data.storage.canPreview, true);
+  assert.equal(connection.headers.get('cache-control'), 'private, no-store');
+  assert.doesNotMatch(JSON.stringify(connection.data.storage), /keyId|fixture|before|after/);
+  assert.equal((await request('/api/exchange-connections/kraken/storage-preview', { cookie, body: {}, origin: 'https://foreign.invalid' })).status, 403);
+  const before = readFileSync(join(scratch, 'users.json'), 'utf8');
+  const plan = await request('/api/exchange-connections/kraken/storage-preview', { cookie, body: {} });
+  assert.equal(plan.status, 200);
+  assert.equal(plan.data.roundtripVerified, true);
+  assert.equal(readFileSync(join(scratch, 'users.json'), 'utf8'), before);
+  const upgraded = await request('/api/exchange-connections/kraken/storage-upgrade', { cookie, body: { token: plan.data.token, confirmed: true } });
+  assert.equal(upgraded.status, 200);
+  assert.equal(upgraded.data.persisted, true);
+  assert.equal(upgraded.data.authorityExpanded, false);
+  assert.equal(JSON.parse(readFileSync(join(scratch, 'users.json'), 'utf8'))[0].krakenKey.keyId, 'after');
+  const replay = await request('/api/exchange-connections/kraken/storage-upgrade', { cookie, body: { token: plan.data.token, confirmed: true } });
+  assert.equal(replay.status, 409);
+  const status = await request('/api/exchange-connections', { cookie });
+  assert.equal(status.data.storage.migrationNeeded, false);
+  assert.equal(status.data.launchDecision, 'locked');
+  assert.doesNotMatch(JSON.stringify([upgraded.data, status.data.storage]), /fixture-credential/);
+} finally {
+  child.kill('SIGTERM'); await exited;
+  rmSync(scratch, { recursive: true, force: true });
+}
+console.log('Credential maintenance HTTP checks passed');
