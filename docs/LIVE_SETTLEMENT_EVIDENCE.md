@@ -15,3 +15,9 @@ Matching two supplied legs is not proof of authenticated, complete settlement. T
 Every result retains `settlementVerified: false`, `releaseAllowed: false`, and `executionAuthorized: false`. No endpoint, MCP tool, exchange request, accounting write, hold release or trading permission is added. It is not yet wired into the broker. Draft #104 remains HOLD pending authenticated settlement acquisition, replay-safe ledger posting and the other lifecycle acceptance requirements.
 
 Verification uses synthetic buy/sell fixtures, base/quote fees, invalid records and immutable safety flags. Production is unchanged.
+
+## Authenticated window reader (internal)
+
+`broker.getLedgerWindow(hold, ownerId, window)` now checks the exact credential and venue account binding and fresh `query-ledger` permission before reading `Ledgers`. It uses the existing signed, bounded, serialized transport. It reads only the default wallet, a maximum 24-hour historical window, at most four pages / 200 entries, and requires stable counts, exact page sizes, unique IDs and valid timestamps/fields. It strips balance and unrecognized fields from returned private rows. Unsupported asset suffixes and trade subtypes fail closed. No retry, route, MCP exposure, scheduler or financial posting is added.
+
+`windowCountMatched` describes only the observed pagination count. `snapshotComplete` and `settlementVerified` remain false: offset pages are not an atomic snapshot; late ledger entries, fill/reference linkage, default-wallet continuity, reversals and full settlement coverage still require verification. Do not feed arbitrary window records into accounting or release a hold based on this result. The earlier arithmetic helper remains separate. An uncertain transport failure retains the existing coordination lock; no lock cleanup is added.
