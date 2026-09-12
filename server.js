@@ -4483,6 +4483,7 @@ app.get('/.well-known/agent.json', (req, res) => {
   res.json({
     name: 'IOST Terminal', version: DISCOVERY_VERSION, machineReadable: true,
     agentGuide: '/agents.html',
+    connectionKit: '/agent-connection-kit.md',
     pricing: { platformFee: 0, currency: 'USD', policy: 'currently-free', providerCosts: 'separate', unknownCosts: 'not-zero' },
     discoveryBoundary: { executionAuthority: 'none', publicLiveExecution: 'launch-gated', ownerAuthorizationRequired: true, independentAuditClaimed: false },
     api: '/api', index: '/api', meta: '/api/meta', uiState: '/api/ui-state',
@@ -4754,7 +4755,7 @@ app.post('/api/exchange-connections/kraken/verify', requireUser, connectionVerif
   res.set('Cache-Control', 'private, no-store');
   if (req.userAgent || !req.session?.userId || req.agentKey) return res.status(403).json({ error: 'account owner session required' });
   const input = req.body || {};
-  if (Array.isArray(input) || typeof input !== 'object' || Object.keys(input).some(k => k !== 'includeFundingEvidence') || (input.includeFundingEvidence !== undefined && typeof input.includeFundingEvidence !== 'boolean')) return res.status(400).json({ error: 'Invalid verification request.' });
+  if (Array.isArray(input) || typeof input !== 'object' || Object.keys(input).some(k => !['includeFundingEvidence', 'includeFeeEvidence'].includes(k)) || Object.values(input).some(v => typeof v !== 'boolean')) return res.status(400).json({ error: 'Invalid verification request.' });
   const userId = req.session.userId;
   const user = auth.findById(userId);
   const originalCredential = user?.krakenKey;
@@ -4763,7 +4764,7 @@ app.post('/api/exchange-connections/kraken/verify', requireUser, connectionVerif
   if (connectionVerificationPending.has(userId)) return res.status(409).json({ error: 'Verification already running.' });
   connectionVerificationPending.add(userId);
   try {
-    const result = await verifyKrakenConnection(keys, { includeFundingEvidence: input.includeFundingEvidence === true });
+    const result = await verifyKrakenConnection(keys, { includeFundingEvidence: input.includeFundingEvidence === true, includeFeeEvidence: input.includeFeeEvidence === true });
     if (auth.findById(userId)?.krakenKey !== originalCredential) return res.status(409).json({ error: 'Connection changed. Discarding verification.' });
     logLiveEvent(userId, 'user.key.verified', { provider: 'kraken', outcome: result.reasonCode });
     return res.json(result);

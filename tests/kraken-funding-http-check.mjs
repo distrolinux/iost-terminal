@@ -30,13 +30,17 @@ try {
   const login = await request('/api/auth/login', { email: user.email, password: 'fixture-password-only' });
   const cookie = login.headers.get('set-cookie').split(';')[0];
   assert.equal((await request(path, { includeFundingEvidence: true }, cookie, agent.key)).status, 403);
-  assert.equal((await request(path, { includeFundingEvidence: 'true' }, cookie)).status, 400);
+  assert.equal((await request(path, { includeFeeEvidence: 'true' }, cookie)).status, 400);
   const before = readFileSync(join(scratch, 'users.json'), 'utf8');
-  const result = await request(path, { includeFundingEvidence: true }, cookie);
+  const result = await request(path, { includeFundingEvidence: true, includeFeeEvidence: true }, cookie);
   assert.equal(result.status, 200);
   assert.equal(result.headers.get('cache-control'), 'private, no-store');
   assert.equal(result.data.fundingEvidence.usdCashStatus, 'positive');
   assert.equal(result.data.executionAuthorized, false);
+  assert.equal(result.data.feeEvidence.status, 'schedule-observed');
+  assert.equal(result.data.feeEvidence.platformFeeUsd, '0');
+  assert.equal(result.data.feeEvidence.takerPercent, '0.40');
+  assert.doesNotMatch(JSON.stringify(result.data), /98765|volume|tiervolume/);
   assert.doesNotMatch(JSON.stringify(result.data), /12\.34|ZUSD|fixture-not-real-key/);
   assert.equal(readFileSync(join(scratch, 'users.json'), 'utf8'), before);
 } finally { child.kill('SIGTERM'); await exited; rmSync(scratch, { recursive: true, force: true }); }

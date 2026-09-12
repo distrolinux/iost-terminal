@@ -15,6 +15,7 @@
 
 ## Machine-readable interfaces
 
+- [Agent connection kit](/agent-connection-kit.md) — read-only acceptance steps, client allowlists and authority boundaries
 - [Agent discovery manifest](/.well-known/agent.json) — what this service is + where everything lives
 - [A2A agent card](/.well-known/agent-card.json) — agent-to-agent capability card
 - [Agent API index](/api) — every endpoint, method, body and purpose

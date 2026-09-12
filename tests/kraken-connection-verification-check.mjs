@@ -52,3 +52,30 @@ const unsafe = await verifyKrakenConnection(keys, { includeFundingEvidence: true
 } });
 assert.equal(unsafeCalls, 1);
 assert.equal(unsafe.fundingEvidence, undefined);
+const { assessKrakenFees } = await import('../lib/kraken-fee-evidence.js');
+const feePayload = { fees: { XXBTZUSD: { fee: '0.40' } }, fees_maker: { XXBTZUSD: { fee: '0.00' } } };
+assert.equal(assessKrakenFees(feePayload).status, 'schedule-observed');
+for (const value of [undefined, null, 0, 'NaN', '-1', '1e-2', '100', '<script>']) {
+  assert.equal(assessKrakenFees({ ...feePayload, fees: { XXBTZUSD: { fee: value } } }).status, 'unavailable');
+}
+assert.equal(assessKrakenFees({ fees: feePayload.fees }).status, 'unavailable');
+assert.equal(assessKrakenFees({ ...feePayload, fees: { ...feePayload.fees, XBTUSD: { fee: '0.4' } } }).status, 'unavailable');
+const feeCalls = [];
+const fees = await verifyKrakenConnection(keys, { includeFeeEvidence: true, fetchFn: async (url, opts) => {
+  feeCalls.push(url);
+  if (url.endsWith('TradeVolume')) {
+    assert.equal(new URLSearchParams(opts.body).get('pair'), 'XXBTZUSD');
+    return new Response(JSON.stringify({ error: [], result: feePayload }));
+  }
+  return fetchFn(url, opts);
+} });
+assert.equal(fees.feeEvidence.status, 'schedule-observed');
+assert.equal(fees.feeEvidence.executionAuthorized, false);
+assert.equal(feeCalls.length, 3);
+const feeFail = await verifyKrakenConnection(keys, { includeFeeEvidence: true, fetchFn: async (url, opts) => {
+  if (url.endsWith('TradeVolume')) throw Error('sensitive-provider-message');
+  return fetchFn(url, opts);
+} });
+assert.equal(feeFail.feeEvidence.status, 'unavailable');
+assert.doesNotMatch(JSON.stringify(feeFail), /sensitive-provider-message/);
+console.log('Account fee evidence checks passed');
