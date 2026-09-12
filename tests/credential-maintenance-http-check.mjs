@@ -61,6 +61,15 @@ try {
   assert.equal(review.data.execution.attempted, false);
   assert.equal(review.data.execution.tradeCreated, false);
   const marketPath = '/api/exchange-connections/market-review';
+  const pairsPath = '/api/exchange-connections/market-pairs';
+  assert.equal((await request(pairsPath)).status, 401);
+  assert.equal((await request(pairsPath, { key: agent.key })).status, 403);
+  assert.equal((await request(pairsPath, { cookie, key: 'fixture-platform-key' })).status, 403);
+  const pairs = await request(pairsPath, { cookie });
+  assert.equal(pairs.status, 200);
+  assert.equal(pairs.headers.get('cache-control'), 'private, no-store');
+  assert.deepEqual(pairs.data.pairs, [{ symbol: 'IOST', pair: 'IOST/USD' }]);
+  assert.equal(pairs.data.executionAuthority, 'none');
   assert.equal((await request(marketPath, { body: draft })).status, 401);
   assert.equal((await request(marketPath, { key: agent.key, body: draft })).status, 403);
   assert.equal((await request(marketPath, { cookie, key: 'fixture-platform-key', body: draft })).status, 403);

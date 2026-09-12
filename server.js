@@ -19,7 +19,7 @@ import { getBroker } from './lib/broker/index.js';
 import { enableLive, disableLive, getLiveState, logLiveEvent, anyLiveEnabled, isLiveAllowed, isOwnerIdentity, liveTradingAvailable } from './lib/live.js';
 import { checkLiveOrder, liveRailConfig } from './lib/rails.js';
 import { buildOrderReview } from './lib/order-review.js';
-import { createKrakenDraftEvidence } from './lib/kraken-draft-evidence.js';
+import { createKrakenDraftEvidence, createKrakenPairCatalog } from './lib/kraken-draft-evidence.js';
 import { getFeeConfig, setFeeConfig, canTrade, burnCredits, grantCredits, walletSummary } from './lib/fees.js';
 import { setUserKrakenKey, getUserKrakenKeys, clearUserKrakenKey, userKrakenStatus } from './lib/keys.js';
 import { createPayment, listPayments, confirmPayment, rejectPayment } from './lib/payments.js';
@@ -4750,6 +4750,12 @@ app.post('/api/exchange-connections/order-review', requireUser, orderReviewLimit
 });
 
 const krakenDraftEvidence = createKrakenDraftEvidence();
+const krakenPairCatalog = createKrakenPairCatalog();
+app.get('/api/exchange-connections/market-pairs', requireUser, orderReviewLimiter, async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (req.userAgent || !req.session?.userId || req.agentKey) return res.status(403).json({ error: 'account owner session required' });
+  return res.json(await krakenPairCatalog());
+});
 app.post('/api/exchange-connections/market-review', requireUser, orderReviewLimiter, async (req, res) => {
   res.set('Cache-Control', 'private, no-store');
   if (req.userAgent || !req.session?.userId || req.agentKey) return res.status(403).json({ error: 'account owner session required' });

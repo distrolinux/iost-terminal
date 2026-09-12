@@ -5,7 +5,7 @@ const nativeFetch = globalThis.fetch;
 
 globalThis.fetch = async (input, init) => {
   const url = String(input?.url || input);
-  if (url.startsWith('https://api.kraken.com/0/public/AssetPairs?pair=IOSTUSD')) {
+  if (url === 'https://api.kraken.com/0/public/AssetPairs' || url.startsWith('https://api.kraken.com/0/public/AssetPairs?pair=IOSTUSD')) {
     return new Response(JSON.stringify({ error: [], result: { IOSTUSD: { wsname: 'IOST/USD', aclass_base: 'currency', aclass_quote: 'currency', lot_multiplier: 1, lot_decimals: 8, pair_decimals: 6, tick_size: '0.000001', ordermin: '1', costmin: '0.5', status: 'online' } } }));
   }
   if (url.startsWith('https://api.kraken.com/0/public/Ticker?pair=IOSTUSD')) {
