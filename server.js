@@ -19,6 +19,7 @@ import { getBroker } from './lib/broker/index.js';
 import { enableLive, disableLive, getLiveState, logLiveEvent, anyLiveEnabled, isLiveAllowed, isOwnerIdentity, liveTradingAvailable } from './lib/live.js';
 import { checkLiveOrder, liveRailConfig } from './lib/rails.js';
 import { buildOrderReview } from './lib/order-review.js';
+import { createKrakenDraftEvidence } from './lib/kraken-draft-evidence.js';
 import { getFeeConfig, setFeeConfig, canTrade, burnCredits, grantCredits, walletSummary } from './lib/fees.js';
 import { setUserKrakenKey, getUserKrakenKeys, clearUserKrakenKey, userKrakenStatus } from './lib/keys.js';
 import { createPayment, listPayments, confirmPayment, rejectPayment } from './lib/payments.js';
@@ -4746,6 +4747,20 @@ app.post('/api/exchange-connections/order-review', requireUser, orderReviewLimit
   if (req.userAgent || !req.session?.userId || req.agentKey) return res.status(403).json({ error: 'account owner session required' });
   try { return res.json(buildOrderReview(req.body, { maxOrderUsd: String(liveRailConfig.maxOrderUsd) })); }
   catch { return res.status(400).json({ error: 'Invalid draft. Check the symbol, positive quantity/price, stop below price, and fee assumption (0–1000 bps). Use at most eight decimal places.' }); }
+});
+
+const krakenDraftEvidence = createKrakenDraftEvidence();
+app.post('/api/exchange-connections/market-review', requireUser, orderReviewLimiter, async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (req.userAgent || !req.session?.userId || req.agentKey) return res.status(403).json({ error: 'account owner session required' });
+  let review;
+  try { review = buildOrderReview(req.body, { maxOrderUsd: String(liveRailConfig.maxOrderUsd) }); }
+  catch { return res.status(400).json({ error: 'Invalid order draft.' }); }
+  const market = await krakenDraftEvidence(review);
+  review.market = market;
+  if (market.expiresAt) review.expiresAt = Math.min(review.expiresAt, market.expiresAt);
+  review.warnings = ['Public market rules are not account eligibility, provider order validation, or owner approval.', 'Fees remain assumptions. Balance, jurisdiction, venue system status and full risk checks are not verified.', 'A drafted stop is not armed; gaps and fees can increase losses. No order is sent.'];
+  return res.json(review);
 });
 
 const credentialMaintenance = createCredentialMaintenance({
