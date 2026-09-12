@@ -8,6 +8,8 @@ const app = read('public/js/app.js');
 assert.match(home, /href="\/app\?auth=login#launchpad"/);
 assert.match(home, /href="\/app\?auth=login#live"/);
 assert.match(home, /Real-money orders are not available yet/);
+assert.match(home, /\.trading-paths\s*\{[^}]*padding:0;/, 'entry cards must not inherit full-section spacing');
+assert.match(home, /\.trading-path h2\s*\{[^}]*font-size:24px;/, 'card headings stay compact');
 assert.match(html, /aria-label="Trading workspace"/);
 assert.match(html, /href="#live" id="liveWorkspace"/);
 assert.match(html, /href="#launchpad" id="paperWorkspace"/);
