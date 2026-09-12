@@ -13,13 +13,14 @@ export function mountOrderReview(host, { post, isCurrent }) {
       <label>Limit price (USD per unit)<input name="limitPrice" required inputmode="decimal" maxlength="19" placeholder="Enter price" autocomplete="off"></label>
       <label>Protective stop price (optional, USD)<input name="protectiveStop" inputmode="decimal" maxlength="19" placeholder="Not armed by this draft" autocomplete="off"></label>
       <label>Assumed fee (optional, basis points)<input name="assumedFeeBps" inputmode="decimal" maxlength="13" placeholder="100 bps = 1%" autocomplete="off"></label>
-    </div><p><button class="btn" type="submit">Review draft — no order sent</button> <button class="btn ghost" type="submit" data-market-review>Check Kraken market rules</button></p><p>Market checks send only the pair symbol to Kraken’s public API. They do not use your credentials or submit this draft.</p></form>
+    </div><p><button class="btn" type="submit">Review draft — no order sent</button> <button class="btn ghost" type="submit" data-market-review>Check Kraken market rules</button> <button class="btn ghost" type="submit" data-account-review>Check BTC/USD cash + fees</button></p><p>Market checks send only the pair symbol to Kraken’s public API. They do not use your credentials or submit this draft.</p><p>Cash + fees requires your saved Kraken connection and queries balances and the BTC/USD account fee schedule. No order or balance amount is sent back; the draft stays on IOST. This is not eligibility or full affordability verification.</p></form>
     <div role="status" aria-live="polite" data-review-result>No draft reviewed. Inputs stay in this page and are sent only for calculation; they are not saved.</div>
     <p><button class="btn ghost" disabled>Live execution locked</button></p>`;
   const form = host.querySelector('form');
   const output = host.querySelector('[data-review-result]');
   const submit = form.querySelector('button');
   const marketSubmit = form.querySelector('[data-market-review]');
+  const accountSubmit = form.querySelector('[data-account-review]');
   mountPairPicker(host.querySelector('[data-pair-picker]'), { isCurrent, onSelect: symbol => {
     form.elements.symbol.value = symbol;
     form.dispatchEvent(new Event('input', { bubbles: true }));
@@ -27,20 +28,26 @@ export function mountOrderReview(host, { post, isCurrent }) {
   let revision = 0, expiryTimer;
   const valid = r => r === revision && host.isConnected && isCurrent();
   form.addEventListener('input', () => {
-    revision++; clearTimeout(expiryTimer); submit.disabled = false; marketSubmit.disabled = false;
+    revision++; clearTimeout(expiryTimer); submit.disabled = false; marketSubmit.disabled = false; accountSubmit.disabled = false;
     output.textContent = 'Inputs changed. Review again; any previous calculation is no longer current.';
   });
   form.addEventListener('submit', async event => {
     event.preventDefault();
     const requestRevision = ++revision;
-    clearTimeout(expiryTimer); submit.disabled = true; marketSubmit.disabled = true;
+    clearTimeout(expiryTimer); submit.disabled = true; marketSubmit.disabled = true; accountSubmit.disabled = true;
     output.textContent = 'Calculating draft only…';
     try {
-      const endpoint = event.submitter === marketSubmit ? 'market-review' : 'order-review';
+      const endpoint = event.submitter === accountSubmit ? 'account-review' : event.submitter === marketSubmit ? 'market-review' : 'order-review';
       const result = await post(`/api/exchange-connections/${endpoint}`, Object.fromEntries(new FormData(form)));
       if (!valid(requestRevision)) return;
       if (result.mode !== 'draft-review-only' || result.decision !== 'not-authorized') throw Error('unexpected review');
       output.replaceChildren();
+      if (result.accountFunding) {
+        const f = result.accountFunding, notice = document.createElement('p');
+        const labels = { 'cash-indication-covers-estimate': 'Reported cash covers this estimate only', 'cash-indication-below-estimate': 'Reported cash is below this estimate', unavailable: 'Account evidence unavailable — do not assume sufficient funds' };
+        notice.textContent = `${labels[f.status] || labels.unavailable}. IOST fee: $0. Estimated provider fee: ${f.estimatedFeeUsd ? '$' + f.estimatedFeeUsd : 'unknown'}; estimated total: ${f.estimatedRequiredUsd ? '$' + f.estimatedRequiredUsd : 'unknown'}. Uses the higher observed maker/taker rate, not your fee assumption. Valid at most 30 seconds; nothing reserved or authorized. Margin obligations and eligibility unverified.`;
+        output.append(notice);
+      }
       const summary = summarizeOrderReview(result);
       const panel = document.createElement('section'); panel.className = 'card';
       const summaryHeading = document.createElement('h3'); summaryHeading.textContent = `3. ${summary.title}`; panel.append(summaryHeading);
@@ -106,7 +113,7 @@ export function mountOrderReview(host, { post, isCurrent }) {
       const expire = () => { if (valid(requestRevision)) output.textContent = 'Review expired. Calculate a fresh draft. Nothing was approved or sent.'; };
       if (!remaining) expire(); else expiryTimer = setTimeout(expire, remaining);
     } catch {
-      if (valid(requestRevision)) output.textContent = 'Review unavailable. Use positive decimal quantity/price (up to 8 decimal places), an uppercase symbol, a stop below the limit and an optional fee of 0–1000 bps. Nothing was sent to an exchange.';
-    } finally { if (valid(requestRevision)) { submit.disabled = false; marketSubmit.disabled = false; } }
+      if (valid(requestRevision)) output.textContent = 'Review unavailable. Check draft inputs; cash + fees supports BTC only and requires a saved connection. No order was sent. Account or public checks may have queried Kraken; wait before retrying.';
+    } finally { if (valid(requestRevision)) { submit.disabled = false; marketSubmit.disabled = false; accountSubmit.disabled = false; } }
   });
 }

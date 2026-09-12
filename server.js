@@ -4772,6 +4772,28 @@ app.post('/api/exchange-connections/kraken/verify', requireUser, connectionVerif
 });
 
 const orderReviewLimiter = rateLimit({ windowMs: 60_000, limit: 20, standardHeaders: 'draft-7', legacyHeaders: false });
+app.post('/api/exchange-connections/account-review', requireUser, connectionVerificationLimiter, async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (req.userAgent || req.agentKey || !req.session?.userId) return res.status(403).json({ error: 'account owner session required' });
+  let review;
+  try {
+    review = buildOrderReview(req.body, { maxOrderUsd: String(liveRailConfig.maxOrderUsd) });
+    if (review.order.symbol !== 'BTC') throw Error('unsupported');
+  } catch { return res.status(400).json({ error: 'BTC/USD buy-limit draft required.' }); }
+  const userId = req.session.userId, user = auth.findById(userId), original = user?.krakenKey;
+  const keys = getUserKrakenKeys(user);
+  if (!keys) return res.status(409).json({ error: 'No usable saved connection.' });
+  if (connectionVerificationPending.has(userId)) return res.status(409).json({ error: 'Verification already running.' });
+  connectionVerificationPending.add(userId);
+  try {
+    const evidence = await verifyKrakenConnection(keys, { draftNotionalUsd: review.amounts.notionalUsd });
+    if (auth.findById(userId)?.krakenKey !== original) return res.status(409).json({ error: 'Connection changed. Discarding evidence.' });
+    review.expiresAt = review.createdAt + 30000;
+    review.accountFunding = evidence.draftFunding || { status: 'unavailable', executionAuthorized: false };
+    review.warnings.push('Account cash indication only: excludes offered credit but does not cover margin obligations, eligibility, market rules or full risk. No balance is reserved. Actual fees and funds can change. Not authorization.');
+    return res.json(review);
+  } finally { connectionVerificationPending.delete(userId); }
+});
 app.post('/api/exchange-connections/order-review', requireUser, orderReviewLimiter, (req, res) => {
   res.set('Cache-Control', 'private, no-store');
   if (req.userAgent || !req.session?.userId || req.agentKey) return res.status(403).json({ error: 'account owner session required' });
