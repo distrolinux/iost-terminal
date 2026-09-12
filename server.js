@@ -17,7 +17,8 @@ import { analyzePortfolio } from './lib/portfolio.js';
 import { getState, getAccount, closeTrade, resetAccount, setAccountSize, markToMarket, journalStats, ensureAccount, listAccounts, persistAccounts } from './lib/paper.js';
 import { getBroker } from './lib/broker/index.js';
 import { enableLive, disableLive, getLiveState, logLiveEvent, anyLiveEnabled, isLiveAllowed, isOwnerIdentity, liveTradingAvailable } from './lib/live.js';
-import { checkLiveOrder } from './lib/rails.js';
+import { checkLiveOrder, liveRailConfig } from './lib/rails.js';
+import { buildOrderReview } from './lib/order-review.js';
 import { getFeeConfig, setFeeConfig, canTrade, burnCredits, grantCredits, walletSummary } from './lib/fees.js';
 import { setUserKrakenKey, getUserKrakenKeys, clearUserKrakenKey, userKrakenStatus } from './lib/keys.js';
 import { createPayment, listPayments, confirmPayment, rejectPayment } from './lib/payments.js';
@@ -4737,6 +4738,14 @@ app.post('/api/exchange-connections/kraken/verify', requireUser, connectionVerif
     logLiveEvent(userId, 'user.key.verified', { provider: 'kraken', outcome: result.reasonCode });
     return res.json(result);
   } finally { connectionVerificationPending.delete(userId); }
+});
+
+const orderReviewLimiter = rateLimit({ windowMs: 60_000, limit: 20, standardHeaders: 'draft-7', legacyHeaders: false });
+app.post('/api/exchange-connections/order-review', requireUser, orderReviewLimiter, (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (req.userAgent || !req.session?.userId || req.agentKey) return res.status(403).json({ error: 'account owner session required' });
+  try { return res.json(buildOrderReview(req.body, { maxOrderUsd: String(liveRailConfig.maxOrderUsd) })); }
+  catch { return res.status(400).json({ error: 'Invalid draft. Check the symbol, positive quantity/price, stop below price, and fee assumption (0–1000 bps). Use at most eight decimal places.' }); }
 });
 
 const credentialMaintenance = createCredentialMaintenance({

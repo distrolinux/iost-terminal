@@ -1,5 +1,6 @@
 // IOST Terminal frontend — all views, live SSE updates, charts, chat
 import bs58 from '/js/vendor/bs58.mjs'; // vendored base58 (MIT) — for wallet key display
+import { mountOrderReview } from '/js/order-review.js?v=1';
 import { AITT_CHAIN_ID, chainIdNumber, claimGateReason, requestClaimIfOpen, shouldAllowClaim } from '/js/wallet-claims.js';
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -1074,6 +1075,7 @@ async function renderExchangeConnections() {
       <p>Real-money readiness, separate from paper practice. Verify saved credentials without placing an order. New credential onboarding and live execution remain separately gated.</p>
       <p><a class="btn" href="#launchpad">Paper agent Launchpad</a> <button class="btn ghost" id="refreshConnections">Refresh evidence</button></p>
       <p class="muted">Evidence fetched ${esc(new Date().toLocaleTimeString())}. This is a snapshot, not continuous monitoring.</p></section>
+      <section class="card" id="orderReviewWorkspace"></section>
       <section class="card"><h2>Connection setup guide</h2><ol><li>Check whether credential onboarding is available. Do not enable live trading just to unlock setup.</li><li>When onboarding is approved, use your own dedicated exchange key. Start with read-only permissions; never grant funding or withdrawal access for verification.</li><li>Verify the saved connection below. Missing or unsupported permissions require review at Kraken; agents cannot grant themselves access.</li><li>Review the separate live launch requirements. A reachable account is not approval to trade.</li></ol></section>
       <div class="grid g-2">${s.connections.map(c => `<section class="card"><h2>${esc(c.name)}</h2>
       <p><strong>${c.configured ? 'Credentials configured — not live authorization' : 'Not connected'}</strong></p>
@@ -1092,6 +1094,7 @@ async function renderExchangeConnections() {
       <section class="card"><h2>Public live launch requirements</h2><ul class="public-live-gates">${(s.readiness?.gates || []).map(g => `<li class="${g.pass === true ? 'is-ready' : 'is-locked'}"><span>${g.pass === true ? '✓' : '×'}</span><strong>${esc(g.label)}</strong></li>`).join('')}</ul><p>No checklist item can be toggled here. Missing evidence keeps public launch locked.</p></section>
       <section class="card"><h2>Agent permission boundary</h2><ul><li>Paper balances and paper approvals never authorize real-money orders.</li><li>Each live order needs separate owner authorization and server-side risk checks.</li><li>Withdrawals and transfers are not supported by this workspace.</li><li>Direct agent-to-provider orders bypass IOST controls and are not covered by our execution guarantees.</li></ul><p>Planned lifecycle: preview → owner approval → provider submission → fills → reconciliation → audit. Opening this page performs none of these actions.</p></section>`;
     $('#refreshConnections').onclick = renderExchangeConnections;
+    mountOrderReview($('#orderReviewWorkspace'), { post, isCurrent: () => generation === connectionRequestGeneration && state.activeView === 'live' && window.Auth?.state?.loggedIn });
     let storagePlan = null;
     $('#previewCredentialStorage').onclick = async (event) => {
       const button = event.currentTarget;

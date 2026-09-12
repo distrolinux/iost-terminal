@@ -4,6 +4,7 @@ import './kraken-connection-verification-check.mjs';
 import './credential-vault-check.mjs';
 import './credential-maintenance-check.mjs';
 import './credential-vault-file-check.mjs';
+import './order-review-check.mjs';
 import { readFileSync } from 'node:fs';
 import { buildExchangeConnections } from '../lib/exchange-connections.js';
 const empty = buildExchangeConnections();
