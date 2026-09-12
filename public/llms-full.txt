@@ -2,10 +2,13 @@
 
 > AI real-time trading platform for crypto + equities at **https://iostcallister.com**.
 > Live market data, AI trade scores (0–100 with full subscore breakdown), risk engine,
-> news sentiment, IOST on-chain dashboard, paper trading, an autonomous autopilot,
-> decentralized agent signals hash-pinned on the IOST mainnet, and a human-approved
-> live-trading proposal rail.
-> **Paper-first: nothing on this platform moves real money without explicit owner approval.**
+> news sentiment, IOST on-chain dashboard and bounded paper trading.
+> Public-chain signal writes remain launch-gated; local hashes are not on-chain verification.
+> **Public real-money execution remains locked pending launch requirements.**
+> IOST Terminal platform fee: $0 currently. Exchange/broker fees, spreads, slippage
+> and applicable network costs are separate. Unknown costs must not be treated as zero.
+> Start at [/agents.html](/agents.html). Discovery and evidence hashes grant no authority
+> and do not constitute an independent security audit or a profitability guarantee.
 >
 > This is the full-content companion to [/llms.txt](/llms.txt). The short index lists
 > what exists; this file describes how to actually use it.
