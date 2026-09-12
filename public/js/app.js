@@ -1071,17 +1071,40 @@ async function renderExchangeConnections() {
     if (!window.Auth?.state?.loggedIn) { el.replaceChildren(); return; }
     el.innerHTML = `
       <section class="card"><div class="section-title">Live Trading · Connections &amp; Permissions <span class="chip warn">${s.launchDecision === 'canary-review-required' ? 'Canary review required' : 'Public live locked'}</span></div>
-      <p>Real-money readiness, separate from paper practice. This page cannot connect credentials, authorize orders, or enable execution.</p>
+      <p>Real-money readiness, separate from paper practice. Verify saved credentials without placing an order. New credential onboarding and live execution remain separately gated.</p>
       <p><a class="btn" href="#launchpad">Paper agent Launchpad</a> <button class="btn ghost" id="refreshConnections">Refresh evidence</button></p>
       <p class="muted">Evidence fetched ${esc(new Date().toLocaleTimeString())}. This is a snapshot, not continuous monitoring.</p></section>
+      <section class="card"><h2>Connection setup guide</h2><ol><li>Check whether credential onboarding is available. Do not enable live trading just to unlock setup.</li><li>When onboarding is approved, use your own dedicated exchange key. Start with read-only permissions; never grant funding or withdrawal access for verification.</li><li>Verify the saved connection below. Missing or unsupported permissions require review at Kraken; agents cannot grant themselves access.</li><li>Review the separate live launch requirements. A reachable account is not approval to trade.</li></ol></section>
       <div class="grid g-2">${s.connections.map(c => `<section class="card"><h2>${esc(c.name)}</h2>
       <p><strong>${c.configured ? 'Credentials configured — not live authorization' : 'Not connected'}</strong></p>
       <dl><dt>Connection type</dt><dd>${esc(c.transport)}</dd><dt>Permission evidence</dt><dd>${esc(c.permissionStatus)}</dd><dt>Account health</dt><dd>Not probed</dd><dt>Symbol and order support</dt><dd>Requires fresh provider verification</dd></dl>
-      <p class="muted">Configured credentials are not proof of current account access, eligibility, or trading permission.</p></section>`).join('')}
+      <p class="muted">Configured credentials are not proof of current account access, eligibility, or trading permission.</p>
+      ${c.configured ? '<button class="btn" id="verifyKrakenConnection">Verify saved Kraken connection</button> <button class="btn ghost" id="disconnectKrakenConnection">Disconnect from IOST</button>' : '<p>Connection setup is unavailable during the paper-only launch. Do not send API keys to an agent or chat.</p>'}
+      <p id="krakenVerificationResult" role="status">No fresh verification in this view. A check inspects permissions and queries balance access; balances are not displayed or stored.</p></section>`).join('')}
       <section class="card"><h2>Robinhood</h2><span class="chip neut">Not integrated</span><p>Authenticated MCP adapter under consideration. No account connection or trading support is available here.</p><p>Provider authentication, account eligibility, order preview, cancellation, and fill reconciliation must be validated before integration.</p></section></div>
       <section class="card"><h2>Public live launch requirements</h2><ul class="public-live-gates">${(s.readiness?.gates || []).map(g => `<li class="${g.pass === true ? 'is-ready' : 'is-locked'}"><span>${g.pass === true ? '✓' : '×'}</span><strong>${esc(g.label)}</strong></li>`).join('')}</ul><p>No checklist item can be toggled here. Missing evidence keeps public launch locked.</p></section>
       <section class="card"><h2>Agent permission boundary</h2><ul><li>Paper balances and paper approvals never authorize real-money orders.</li><li>Each live order needs separate owner authorization and server-side risk checks.</li><li>Withdrawals and transfers are not supported by this workspace.</li><li>Direct agent-to-provider orders bypass IOST controls and are not covered by our execution guarantees.</li></ul><p>Planned lifecycle: preview → owner approval → provider submission → fills → reconciliation → audit. Opening this page performs none of these actions.</p></section>`;
     $('#refreshConnections').onclick = renderExchangeConnections;
+    $('#verifyKrakenConnection')?.addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      const output = $('#krakenVerificationResult');
+      output.textContent = 'Checking saved credentials with Kraken…';
+      try {
+        const result = await post('/api/exchange-connections/kraken/verify', {});
+        if (generation !== connectionRequestGeneration) return;
+        output.textContent = `Checked ${new Date(result.checkedAt).toLocaleTimeString()} · Account: ${result.accountHealth} · Permissions: ${result.permissionStatus} · Profile: ${result.profile} · ${result.reasonCode}. This snapshot does not authorize trading.`;
+      } catch {
+        if (generation === connectionRequestGeneration) output.textContent = 'Verification unavailable. Check your saved connection or wait before retrying. Live execution remains locked.';
+      } finally { button.disabled = false; }
+    });
+    $('#disconnectKrakenConnection')?.addEventListener('click', async () => {
+      if (!confirm('Remove the saved Kraken credential from IOST? This does not cancel exchange orders, close positions, or revoke the key at Kraken. Review those separately at Kraken.')) return;
+      try {
+        await api('/api/account/kraken', { method: 'DELETE' });
+        if (generation === connectionRequestGeneration) await renderExchangeConnections();
+      } catch { if (generation === connectionRequestGeneration) $('#krakenVerificationResult').textContent = 'Disconnection failed. The credential may still be saved; refresh to check.'; }
+    });
   } catch (e) {
     if (generation !== connectionRequestGeneration) return;
     el.innerHTML = `<section class="card"><h2>Live readiness unavailable</h2><p>${esc(e.message)}</p><p>No connection or authorization can be inferred. Real-money readiness remains unverified.</p><button class="btn" id="retryConnections">Retry</button></section>`;

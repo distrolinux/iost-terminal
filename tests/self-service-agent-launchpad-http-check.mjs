@@ -67,6 +67,10 @@ try {
   const ownerCookie = await register('launchpad-owner@example.com');
   const outsiderCookie = await register('launchpad-outsider@example.com');
   const anonymousConnections = await request('/api/exchange-connections');
+  const anonymousVerify = await request('/api/exchange-connections/kraken/verify', { method: 'POST', body: {} });
+  assert.equal(anonymousVerify.response.status, 401);
+  const noCredentialVerify = await request('/api/exchange-connections/kraken/verify', { method: 'POST', cookie: ownerCookie, body: {} });
+  assert.equal(noCredentialVerify.response.status, 409);
   assert.equal(anonymousConnections.response.status, 401);
   for (const cookie of [ownerCookie, outsiderCookie]) {
     const connections = await request('/api/exchange-connections', { cookie });
@@ -118,6 +122,8 @@ try {
   assert.equal(keyResult.response.status, 200, JSON.stringify(keyResult.json));
   const agentConnections = await request('/api/exchange-connections', { key: keyResult.json.key });
   assert.equal(agentConnections.response.status, 403, 'connection evidence requires a human owner session');
+  const agentVerify = await request('/api/exchange-connections/kraken/verify', { method: 'POST', key: keyResult.json.key, body: {} });
+  assert.equal(agentVerify.response.status, 403);
   const keyBlocked = await request('/api/agent-launchpad', { key: keyResult.json.key });
   assert.equal(keyBlocked.response.status, 403, 'agent credentials cannot bootstrap their own authority');
 

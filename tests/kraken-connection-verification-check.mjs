@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import { assessKrakenPermissions, verifyKrakenConnection } from '../lib/kraken-connection-verification.js';
+assert.equal(assessKrakenPermissions({}).profile, 'unknown');
+assert.equal(assessKrakenPermissions({ permissions: ['query-funds', 'withdraw-funds'] }).profile, 'unsupported');
+assert.equal(assessKrakenPermissions({ permissions: ['new-permission'] }).profile, 'unsupported');
+assert.equal(assessKrakenPermissions({ permissions: ['query-funds'] }).profile, 'read-only');
+const calls = [];
+const fetchFn = async (url, opts) => {
+  calls.push(url);
+  assert.equal(opts.redirect, 'error');
+  assert.ok(opts.signal);
+  return { ok: true, json: async () => ({ error: [], result: url.endsWith('GetApiKeyInfo') ? { apiKey: 'private-fixture', iban: 'private-account', permissions: ['query-funds'] } : { ZUSD: '123.45' } }) };
+};
+const keys = { apiKey: 'fixture-key', apiSecret: 'Zml4dHVyZQ==' };
+const result = await verifyKrakenConnection(keys, { fetchFn, now: () => 10000 });
+assert.equal(result.accountHealth, 'reachable');
+assert.equal(result.executionAuthorized, false);
+assert.deepEqual(calls, ['https://api.kraken.com/0/private/GetApiKeyInfo', 'https://api.kraken.com/0/private/Balance']);
+assert.doesNotMatch(JSON.stringify(result), /private|123.45|fixture-key/);
+const failure = await verifyKrakenConnection(keys, { fetchFn: async () => { throw Error('secret'); } });
+assert.equal(failure.reasonCode, 'verification-unavailable');
+assert.doesNotMatch(JSON.stringify(failure), /secret/);
+console.log('Kraken connection verification checks passed');
