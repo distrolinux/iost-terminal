@@ -28,3 +28,27 @@ const restricted = await verifyKrakenConnection(keys, { requireReadOnly: true, f
 assert.equal(restricted.reasonCode, 'read-only-key-required');
 assert.equal(restrictedCalls, 1, 'trade-capable credentials rejected before balance request');
 console.log('Kraken connection verification checks passed');
+const extendedCalls = [];
+const extended = await verifyKrakenConnection(keys, { includeFundingEvidence: true, fetchFn: async (url, options) => {
+  extendedCalls.push(url);
+  if (url.endsWith('BalanceEx')) return new Response(JSON.stringify({ error: [], result: { ZUSD: { balance: '100.12', credit: '0', credit_used: '0', hold_trade: '10' } } }));
+  return fetchFn(url, options);
+} });
+assert.equal(extended.fundingEvidence.usdCashStatus, 'positive');
+assert.equal(extended.executionAuthorized, false);
+assert.deepEqual(extendedCalls, ['https://api.kraken.com/0/private/GetApiKeyInfo', 'https://api.kraken.com/0/private/Balance', 'https://api.kraken.com/0/private/BalanceEx']);
+assert.doesNotMatch(JSON.stringify(extended), /100\.12|ZUSD|fixture-key/);
+const missing = await verifyKrakenConnection(keys, { includeFundingEvidence: true, fetchFn: async (url, options) => {
+  if (url.endsWith('BalanceEx')) throw Error('private-upstream-fixture');
+  return fetchFn(url, options);
+} });
+assert.equal(missing.accountHealth, 'reachable');
+assert.equal(missing.fundingEvidence.usdCashStatus, 'unavailable');
+assert.doesNotMatch(JSON.stringify(missing), /private-upstream-fixture/);
+let unsafeCalls = 0;
+const unsafe = await verifyKrakenConnection(keys, { includeFundingEvidence: true, fetchFn: async () => {
+  unsafeCalls++;
+  return new Response(JSON.stringify({ error: [], result: { permissions: ['query-funds', 'withdraw-funds'] } }));
+} });
+assert.equal(unsafeCalls, 1);
+assert.equal(unsafe.fundingEvidence, undefined);

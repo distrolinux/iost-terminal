@@ -1085,6 +1085,7 @@ async function renderExchangeConnections() {
       <dl><dt>Connection type</dt><dd>${esc(c.transport)}</dd><dt>Permission evidence</dt><dd>${esc(c.permissionStatus)}</dd><dt>Account health</dt><dd>Not probed</dd><dt>Symbol and order support</dt><dd>Requires fresh provider verification</dd></dl>
       <p class="muted">Configured credentials are not proof of current account access, eligibility, or trading permission.</p>
       ${c.configured ? '<button class="btn" id="verifyKrakenConnection">Verify saved Kraken connection</button> <button class="btn ghost" id="disconnectKrakenConnection">Disconnect from IOST</button>' : '<p>No connection saved. See the read-only onboarding panel above. Do not send API keys to an agent or chat.</p>'}
+      ${c.configured ? '<label><input type="checkbox" id="includeKrakenFundingEvidence"> Include read-only USD held-funds evidence (no balance amounts shown)</label><p>Optional check queries Kraken extended balances. Borrowed credit is excluded; margin holds, fees, eligibility and order affordability remain unverified.</p>' : ''}
       <p id="krakenVerificationResult" role="status">No fresh verification in this view. A check inspects permissions and queries balance access; balances are not displayed or stored.</p></section>`).join('')}
       <section class="card"><h2>Robinhood</h2><span class="chip neut">Not integrated</span><p>Authenticated MCP adapter under consideration. No account connection or trading support is available here.</p><p>Provider authentication, account eligibility, order preview, cancellation, and fill reconciliation must be validated before integration.</p></section></div>
       <section class="card"><h2>Credential storage</h2>
@@ -1142,9 +1143,13 @@ async function renderExchangeConnections() {
       const output = $('#krakenVerificationResult');
       output.textContent = 'Checking saved credentials with Kraken…';
       try {
-        const result = await post('/api/exchange-connections/kraken/verify', {});
+        const result = await post('/api/exchange-connections/kraken/verify', { includeFundingEvidence: $('#includeKrakenFundingEvidence')?.checked === true });
         if (generation !== connectionRequestGeneration) return;
         output.textContent = `Checked ${new Date(result.checkedAt).toLocaleTimeString()} · Account: ${result.accountHealth} · Permissions: ${result.permissionStatus} · Profile: ${result.profile} · ${result.reasonCode}. This snapshot does not authorize trading.`;
+        if (result.fundingEvidence) {
+          const labels = { positive: 'Positive cash indication', zero: 'Zero cash indication', negative: 'Negative cash indication', unavailable: 'Unavailable or unsupported evidence' };
+          output.textContent += ` USD held-funds check: ${labels[result.fundingEvidence.usdCashStatus] || labels.unavailable}. Credit excluded; not an affordability check. Margin coverage, fees and eligibility remain unverified. Evidence is a snapshot and can change immediately.`;
+        }
       } catch {
         if (generation === connectionRequestGeneration) output.textContent = 'Verification unavailable. Check your saved connection or wait before retrying. Live execution remains locked.';
       } finally { button.disabled = false; }
