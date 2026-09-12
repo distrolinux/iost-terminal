@@ -29,6 +29,9 @@ ok('deployment builds an immutable image from a supported LTS runtime',
   && /^FROM node:24-bookworm-slim@sha256:[a-f0-9]{64}$/m.test(dockerfile)
   && !/^FROM node:20/m.test(dockerfile));
 ok('candidate uses isolated scratch data', /start_candidate[\s\S]*--tmpfs ["']?\/app\/data:/.test(src));
+ok('vault is validated before pausing production', src.indexOf('node scripts/check-credential-vault.mjs --optional') < oldPause && /--network none --read-only --cap-drop ALL/.test(src));
+ok('candidate explicitly excludes vault configuration', /-e IOST_CREDENTIAL_VAULT_FILE= -e IOST_CREDENTIAL_VAULT_KEYS= -e IOST_CREDENTIAL_VAULT_ACTIVE_KEY_ID=/.test(src));
+ok('production vault mount is read-only and checked after promotion', /target=\$VAULT_TARGET,readonly/.test(src) && /exec "\$PROD_CONTAINER" node scripts\/check-credential-vault.mjs/.test(src));
 ok('candidate becomes healthy before the production writer pauses',
   candidateStart >= 0 && candidateHealth > candidateStart && oldPause > candidateHealth);
 ok('legacy data ownership is migrated only after the old writer pauses',

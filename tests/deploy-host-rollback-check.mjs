@@ -23,6 +23,7 @@ case "$cmd" in
     elif [[ "$args" == *State.Paused* ]]; then [[ "$value" == *paused ]] && echo true || echo false
     elif [[ "$args" == *NetworkSettings.Networks* ]]; then echo testnet
     elif [[ "$args" == *Config.Env* ]]; then echo NODE_ENV=production
+    elif [[ "$args" == *Mounts* ]]; then printf '%s' "\${FAKE_VAULT_MOUNT:-}"
     fi
     ;;
   ps)
@@ -45,6 +46,10 @@ case "$cmd" in
     fi
     ;;
   run)
+    printf '%s\\n' "$*" >> "$FAKE_DOCKER_RUN_LOG"
+    if [[ "$*" == *scripts/check-credential-vault.mjs* ]]; then
+      [ "\${FAKE_VAULT_FAIL:-0}" != 1 ]; exit $?
+    fi
     name=""
     while [ "$#" -gt 0 ]; do
       if [ "$1" = "--name" ]; then name="$2"; shift 2; else shift; fi
@@ -55,6 +60,7 @@ case "$cmd" in
   exec)
     container="$1"
     value="$(cat "$state/$container")"
+    if [[ "$*" == *check-credential-vault.mjs* && "$value" == new-running && "\${FAKE_PROMOTED_VAULT_FAIL:-0}" == 1 ]]; then exit 1; fi
     [ "$value" != new-running ] || [ "\${FAKE_PROMOTION_FAIL:-0}" != 1 ]
     ;;
   pause) echo old-paused > "$state/$1" ;;
@@ -75,12 +81,14 @@ case "$*" in
 esac
 `;
 
-function runScenario(promotionFails, preflightOnly = false, extraArgs = []) {
+function runScenario(promotionFails, preflightOnly = false, extraArgs = [], vaultMode = '') {
   const scratch = mkdtempSync(join(tmpdir(), 'iost-deploy-test-'));
   const app = join(scratch, 'app');
   const bin = join(scratch, 'bin');
   const state = join(scratch, 'state');
   mkdirSync(app); mkdirSync(bin); mkdirSync(state);
+  const vault = join(scratch, 'vault.json');
+  writeFileSync(vault, '{"fixture":true}', { mode: 0o600 });
   writeFileSync(join(app, 'Dockerfile'), 'FROM scratch\n');
   writeFileSync(join(app, 'package-lock.json'), '{"name":"fixture","lockfileVersion":3,"packages":{}}\n');
   writeFileSync(join(state, 'iost-terminal'), 'old-running\n');
@@ -105,13 +113,20 @@ function runScenario(promotionFails, preflightOnly = false, extraArgs = []) {
       PUBLIC_HEALTH_URL: 'https://example.invalid/api/health',
       FAKE_DOCKER_STATE: state,
       FAKE_PROMOTION_FAIL: promotionFails ? '1' : '0',
+      FAKE_DOCKER_RUN_LOG: join(scratch, 'runs.log'),
+      VAULT_SECRET_FILE: vaultMode === 'explicit' ? vault : '',
+      FAKE_VAULT_MOUNT: vaultMode === 'preserved' ? vault : '',
+      FAKE_VAULT_FAIL: vaultMode === 'invalid' ? '1' : '0',
+      FAKE_PROMOTED_VAULT_FAIL: vaultMode === 'post-invalid' ? '1' : '0',
       PREFLIGHT_ONLY: preflightOnly ? '1' : '0',
       PATH: `${bin}:${process.env.PATH}`,
     },
   });
   const containers = Object.fromEntries(readdirSync(state).map((name) => [name, readFileSync(join(state, name), 'utf8').trim()]));
+  let runs = '';
+  try { runs = readFileSync(join(scratch, 'runs.log'), 'utf8'); } catch { /* early rejection */ }
   rmSync(scratch, { recursive: true, force: true });
-  return { ...result, containers, output: `${result.stdout}${result.stderr}` };
+  return { ...result, containers, runs, output: `${result.stdout}${result.stderr}` };
 }
 
 let failures = 0;
@@ -145,6 +160,21 @@ const rollback = Object.entries(passed.containers).find(([name]) => name.include
 ok('healthy promotion exits successfully', passed.status === 0, passed.output);
 ok('healthy promotion runs the immutable replacement', passed.containers['iost-terminal'] === 'new-running', passed.output);
 ok('healthy promotion retains one paused predecessor', rollback?.[1] === 'old-paused', passed.output);
+
+for (const mode of ['explicit', 'preserved']) {
+  const secret = runScenario(false, false, [], mode);
+  const calls = secret.runs.trim().split('\n');
+  const validator = calls.find(line => line.includes('check-credential-vault.mjs')) || '';
+  const candidate = calls.find(line => line.includes('--name iost-terminal-candidate')) || '';
+  const production = calls.find(line => line.includes('--name iost-terminal --restart')) || '';
+  ok(`${mode} vault mount survives deployment`, secret.status === 0 && production.includes('target=/run/secrets/iost-credential-vault.json,readonly'), secret.output);
+  ok(`${mode} vault is validated without network or production data`, validator.includes('--network none --read-only') && !validator.includes('/app/data'), secret.output);
+  ok(`${mode} candidate receives no vault file or keyring`, !candidate.includes('type=bind') && candidate.includes('-e IOST_CREDENTIAL_VAULT_FILE= -e IOST_CREDENTIAL_VAULT_KEYS= -e IOST_CREDENTIAL_VAULT_ACTIVE_KEY_ID='), secret.output);
+}
+const invalidVault = runScenario(false, false, [], 'invalid');
+ok('vault validation failure leaves previous production serving', invalidVault.status !== 0 && invalidVault.containers['iost-terminal'] === 'old-running' && Object.keys(invalidVault.containers).length === 1, invalidVault.output);
+const postInvalidVault = runScenario(false, false, [], 'post-invalid');
+ok('post-promotion vault failure restores exact previous production', postInvalidVault.status !== 0 && postInvalidVault.containers['iost-terminal'] === 'old-running' && /rollback healthy/.test(postInvalidVault.output), postInvalidVault.output);
 
 console.log(failures === 0 ? '\nALL PASS ✅' : `\n${failures} FAILURES ❌`);
 process.exit(failures === 0 ? 0 : 1);
