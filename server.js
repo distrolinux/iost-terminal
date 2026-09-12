@@ -21,7 +21,8 @@ import { checkLiveOrder, liveRailConfig } from './lib/rails.js';
 import { buildOrderReview } from './lib/order-review.js';
 import { createKrakenOnboarding } from './lib/kraken-onboarding.js';
 import { issueCredentialProof, consumeCredentialProof, credentialAuthState } from './lib/credential-reauth.js';
-import { createKrakenDraftEvidence, createKrakenPairCatalog } from './lib/kraken-draft-evidence.js';
+import { createKrakenDraftEvidence, createKrakenPairCatalog, krakenSystemEvidence } from './lib/kraken-draft-evidence.js';
+import { combineKrakenReview } from './lib/combined-kraken-review.js';
 import { getFeeConfig, setFeeConfig, canTrade, burnCredits, grantCredits, walletSummary } from './lib/fees.js';
 import { getUserKrakenKeys, userKrakenStatus } from './lib/keys.js';
 import { createPayment, listPayments, confirmPayment, rejectPayment } from './lib/payments.js';
@@ -4786,12 +4787,15 @@ app.post('/api/exchange-connections/account-review', requireUser, connectionVeri
   if (connectionVerificationPending.has(userId)) return res.status(409).json({ error: 'Verification already running.' });
   connectionVerificationPending.add(userId);
   try {
-    const evidence = await verifyKrakenConnection(keys, { draftNotionalUsd: review.amounts.notionalUsd });
+    const [evidence, market, system] = await Promise.all([
+      verifyKrakenConnection(keys, { draftNotionalUsd: review.amounts.notionalUsd }),
+      krakenDraftEvidence(review), krakenSystemEvidence(),
+    ]);
     if (auth.findById(userId)?.krakenKey !== original) return res.status(409).json({ error: 'Connection changed. Discarding evidence.' });
     review.expiresAt = review.createdAt + 30000;
     review.accountFunding = evidence.draftFunding || { status: 'unavailable', executionAuthorized: false };
     review.warnings.push('Account cash indication only: excludes offered credit but does not cover margin obligations, eligibility, market rules or full risk. No balance is reserved. Actual fees and funds can change. Not authorization.');
-    return res.json(review);
+    return res.json(combineKrakenReview(review, market, system));
   } finally { connectionVerificationPending.delete(userId); }
 });
 app.post('/api/exchange-connections/order-review', requireUser, orderReviewLimiter, (req, res) => {

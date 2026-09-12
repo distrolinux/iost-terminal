@@ -40,6 +40,10 @@ try {
   assert.equal(r.data.decision, 'not-authorized');
   assert.equal(r.data.expiresAt - r.data.createdAt, 30000);
   assert.equal(r.data.execution.attempted, false);
+  assert.equal(r.data.combined.checks.venueOnline, true);
+  assert.equal(r.data.combined.checks.marketRules, true);
+  assert.equal(r.data.combined.checks.stopDrafted, false);
+  assert.equal(r.data.combined.executionAuthorized, false);
   assert.doesNotMatch(JSON.stringify(r.data), /12\.34|98765|fixture-not-real-key/);
   assert.equal(readFileSync(join(scratch, 'users.json'), 'utf8'), before);
 } finally { child.kill('SIGTERM'); await exited; rmSync(scratch, { recursive: true, force: true }); }
