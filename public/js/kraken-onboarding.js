@@ -1,3 +1,4 @@
+import { requestCredentialReauth } from './credential-reauth.js?v=1';
 export function mountKrakenOnboarding(host, { status, post, isCurrent, refresh }) {
   if (!status?.canConnect) {
     host.textContent = status?.enabled ? 'A connection is already saved. Disconnect it before enrolling a replacement.' : 'New read-only connections are disabled until the operator enables onboarding and verifies vault setup. Live trading must stay separately gated.';
@@ -37,7 +38,9 @@ export function mountKrakenOnboarding(host, { status, post, isCurrent, refresh }
     const token = plan.token; invalidate(); const r = revision; submit.disabled = true;
     output.textContent = 'Saving the encrypted credential…';
     try {
-      const result = await post('/api/exchange-connections/kraken/onboarding-commit', { token, confirmed: true });
+      const reauthToken = await requestCredentialReauth('connect', post);
+      if (!active(r)) return;
+      const result = await post('/api/exchange-connections/kraken/onboarding-commit', { token, confirmed: true, reauthToken });
       if (!active(r)) return;
       if (!result.ok || result.saved !== true) throw Error('unconfirmed');
       output.textContent = 'Read-only connection saved. Live trading remains separately gated.'; refresh();

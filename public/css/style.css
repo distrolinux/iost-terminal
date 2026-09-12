@@ -673,6 +673,12 @@ body.cmd .ticker-wrap { background: rgba(6, 10, 17, .9); border-color: rgba(0, 2
 .auth-btn:hover { background: rgba(0, 229, 255, .18); box-shadow: 0 0 14px rgba(0, 229, 255, .35); }
 
 .auth-modal { width: min(400px, 92vw); padding: 26px 28px; position: relative; }
+.credential-reauth { margin:auto; width:min(460px,92vw); max-height:90vh; overflow:auto; padding:24px; border:1px solid var(--border); border-radius:12px; background:var(--surface); color:var(--text); }
+.credential-reauth::backdrop { background:rgba(0,0,0,.75); }
+.credential-reauth label { display:block; margin:16px 0; }
+.credential-reauth input { display:block; box-sizing:border-box; width:100%; padding:10px; margin-top:6px; }
+.credential-reauth button { padding:10px; cursor:pointer; }
+.credential-reauth [role=status] { min-height:1.5em; }
 .gate-close {
   position: absolute; top: 10px; right: 10px;
   background: none; border: 1px solid transparent; color: var(--muted);

@@ -88,13 +88,15 @@ try {
   assert.equal(plan.status, 200);
   assert.equal(plan.data.roundtripVerified, true);
   assert.equal(readFileSync(join(scratch, 'users.json'), 'utf8'), before);
-  const upgraded = await request('/api/exchange-connections/kraken/storage-upgrade', { cookie, body: { token: plan.data.token, confirmed: true } });
+  const proof = await request('/api/exchange-connections/reauthenticate', { cookie, body: { action: 'storage-upgrade', password: 'fixture-password-for-tests' } });
+  assert.equal(proof.status, 200);
+  const upgraded = await request('/api/exchange-connections/kraken/storage-upgrade', { cookie, body: { token: plan.data.token, confirmed: true, reauthToken: proof.data.token } });
   assert.equal(upgraded.status, 200);
   assert.equal(upgraded.data.persisted, true);
   assert.equal(upgraded.data.authorityExpanded, false);
   assert.equal(JSON.parse(readFileSync(join(scratch, 'users.json'), 'utf8'))[0].krakenKey.keyId, 'after');
   const replay = await request('/api/exchange-connections/kraken/storage-upgrade', { cookie, body: { token: plan.data.token, confirmed: true } });
-  assert.equal(replay.status, 409);
+  assert.equal(replay.status, 403);
   const status = await request('/api/exchange-connections', { cookie });
   assert.equal(status.data.storage.migrationNeeded, false);
   assert.equal(status.data.launchDecision, 'locked');

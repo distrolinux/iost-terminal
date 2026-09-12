@@ -2,7 +2,7 @@
 
 This release implements first-connection enrollment, not live execution. Operators must explicitly set `KRAKEN_READONLY_ONBOARDING_ENABLED=1` in the production environment **and** configure the dedicated credential vault. The default is disabled. This flag never sets any live launch gate or trading flag. Production enablement is a separate owner-approved action; do not enable trading to unlock credential storage.
 
-Before enabling this beyond fixtures, complete the operational security review and update/review public privacy disclosures that currently describe a paper-only service without exchange credential collection. Deploying this default-off code is not authorization to collect customer credentials.
+Before enabling this beyond fixtures, complete the operational security review, production recovery verification, retention implementation and owner review of the updated public privacy disclosures. Deploying this default-off code is not authorization to collect customer credentials.
 
 ## Owner workflow
 
@@ -27,3 +27,7 @@ Existing credentials cannot be overwritten. This release accepts only read-only 
 Fixture tests cover denied enrollment, unsafe permissions, wrong owner/session, expiry, replay, changed password, no plaintext at rest, no preview writes, deletion and HTTP authentication/origin boundaries. No real credentials are used.
 
 Official provider reference: [Get API Key Info](https://docs.kraken.com/api-reference/account-data/get-api-key-info). The observed permission vocabulary is allowlisted; unrecognized permissions fail closed.
+
+## Credential lifecycle hardening
+
+Credential save, disconnect and storage upgrade now require fresh password authentication plus configured 2FA, with a two-minute single-use action-bound proof. Pending encrypted candidates have timed cleanup. See [recovery and retention](CREDENTIAL_RECOVERY_AND_RETENTION.md) for the proposed 30-day policy and the distinction between fixture tests and actual production recovery. Onboarding remains disabled by default; this change does not enable trading.

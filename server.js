@@ -20,6 +20,7 @@ import { enableLive, disableLive, getLiveState, logLiveEvent, anyLiveEnabled, is
 import { checkLiveOrder, liveRailConfig } from './lib/rails.js';
 import { buildOrderReview } from './lib/order-review.js';
 import { createKrakenOnboarding } from './lib/kraken-onboarding.js';
+import { issueCredentialProof, consumeCredentialProof, credentialAuthState } from './lib/credential-reauth.js';
 import { createKrakenDraftEvidence, createKrakenPairCatalog } from './lib/kraken-draft-evidence.js';
 import { getFeeConfig, setFeeConfig, canTrade, burnCredits, grantCredits, walletSummary } from './lib/fees.js';
 import { getUserKrakenKeys, userKrakenStatus } from './lib/keys.js';
@@ -3845,6 +3846,7 @@ app.delete('/api/account/kraken', requireUser, (req, res) => {
   res.set('Cache-Control', 'private, no-store');
   if (req.userAgent || req.agentKey || !req.session?.userId) return res.status(403).json({ error: 'account owner session required' });
   const u = auth.findById(req.session.userId);
+  if (!consumeCredentialProof(req.session, u, 'disconnect', req.body?.reauthToken)) return res.status(403).json({ error: 'Fresh credential authentication required.' });
   try { auth.persistCredentialReplacement(u, null); }
   catch { return res.status(503).json({ error: 'Disconnect unconfirmed. Refresh status before retrying.' }); }
   logLiveEvent(u.id, 'user.key.disconnected', { provider: 'kraken' });
@@ -4715,12 +4717,30 @@ app.get('/api/security-sentinel', requireUser, (req, res) => {
 
 const connectionVerificationLimiter = rateLimit({ windowMs: 60_000, limit: 3, standardHeaders: 'draft-7', legacyHeaders: false, message: { error: 'Please wait before verifying again.' } });
 const connectionVerificationPending = new Set();
+const credentialReauthLimiter = rateLimit({ windowMs: 600000, limit: 5, standardHeaders: 'draft-7', legacyHeaders: false });
+app.post('/api/exchange-connections/reauthenticate', requireUser, credentialReauthLimiter, async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (req.userAgent || req.agentKey || !req.session?.userId) return res.status(403).json({ error: 'account owner session required' });
+  delete req.session.credentialProof;
+  const user = auth.findById(req.session.userId), input = req.body || {};
+  if (!user || Object.keys(input).some(k => !['password', 'totpCode', 'action'].includes(k)) || !['connect', 'disconnect', 'storage-upgrade'].includes(input.action) || typeof input.password !== 'string' || Buffer.byteLength(input.password) > 72 || typeof (input.totpCode || '') !== 'string') return res.status(400).json({ error: 'Invalid authentication request.' });
+  const state = credentialAuthState(user);
+  try {
+    const checked = await auth.verifyLogin(user.email, input.password);
+    if (credentialAuthState(user) !== state || checked.user !== user || (!checked.ok && !checked.totpRequired) || (user.totpEnabled && !auth.checkTotp(user, input.totpCode).ok)) return res.status(403).json({ error: 'Authentication failed.' });
+    const token = issueCredentialProof(req.session, user, input.action);
+    return req.session.save(error => error ? res.status(503).json({ error: 'Authentication not confirmed.' }) : res.json({ ok: true, token, expiresInMs: 120000, action: input.action }));
+  } catch { return res.status(503).json({ error: 'Authentication unavailable.' }); }
+  finally { delete input.password; delete input.totpCode; }
+});
 const krakenOnboarding = createKrakenOnboarding({ persist: auth.persistCredentialReplacement });
 for (const phase of ['preview', 'commit']) {
   app.post(`/api/exchange-connections/kraken/onboarding-${phase}`, requireUser, connectionVerificationLimiter, async (req, res) => {
     res.set('Cache-Control', 'private, no-store');
     if (req.userAgent || req.agentKey || !req.session?.userId) return res.status(403).json({ error: 'account owner session required' });
     const user = auth.findById(req.session.userId);
+    if (phase === 'commit' && !consumeCredentialProof(req.session, user, 'connect', req.body?.reauthToken)) return res.status(403).json({ error: 'Fresh credential authentication required.' });
+    if (phase === 'commit' && req.body) delete req.body.reauthToken;
     const result = phase === 'preview' ? await krakenOnboarding.preview(user, req.sessionID, req.body) : krakenOnboarding.commit(user, req.sessionID, req.body);
     if (phase === 'preview' && req.body) { delete req.body.apiKey; delete req.body.apiSecret; }
     if (phase === 'commit' && result.ok) logLiveEvent(user.id, 'user.key.connected', { provider: 'kraken', profile: 'read-only', storageVersion: 1 });
@@ -4786,7 +4806,9 @@ app.post('/api/exchange-connections/kraken/storage-preview', requireUser, connec
 app.post('/api/exchange-connections/kraken/storage-upgrade', requireUser, connectionVerificationLimiter, (req, res) => {
   res.set('Cache-Control', 'private, no-store');
   if (req.userAgent || !req.session?.userId || req.agentKey) return res.status(403).json({ error: 'account owner session required' });
-  const result = credentialMaintenance.apply(auth.findById(req.session.userId), req.sessionID, req.body?.token, req.body?.confirmed);
+  const user = auth.findById(req.session.userId);
+  if (!consumeCredentialProof(req.session, user, 'storage-upgrade', req.body?.reauthToken)) return res.status(403).json({ error: 'Fresh credential authentication required.' });
+  const result = credentialMaintenance.apply(user, req.sessionID, req.body?.token, req.body?.confirmed);
   logLiveEvent(req.session.userId, 'user.key.storage-upgrade', { provider: 'kraken', outcome: result.reasonCode });
   return res.status(result.ok ? 200 : 409).json(result);
 });

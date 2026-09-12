@@ -1,7 +1,8 @@
 // IOST Terminal frontend — all views, live SSE updates, charts, chat
 import bs58 from '/js/vendor/bs58.mjs'; // vendored base58 (MIT) — for wallet key display
 import { mountOrderReview } from '/js/order-review.js?v=3';
-import { mountKrakenOnboarding } from '/js/kraken-onboarding.js?v=1';
+import { mountKrakenOnboarding } from '/js/kraken-onboarding.js?v=2';
+import { requestCredentialReauth } from '/js/credential-reauth.js?v=1';
 import { AITT_CHAIN_ID, chainIdNumber, claimGateReason, requestClaimIfOpen, shouldAllowClaim } from '/js/wallet-claims.js';
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -1127,7 +1128,9 @@ async function renderExchangeConnections() {
       storagePlan = null; event.currentTarget.disabled = true;
       const output = $('#credentialStorageResult');
       try {
-        const result = await post('/api/exchange-connections/kraken/storage-upgrade', { token, confirmed: true });
+        const reauthToken = await requestCredentialReauth('storage-upgrade', post);
+        if (generation !== connectionRequestGeneration || !window.Auth?.state?.loggedIn) return;
+        const result = await post('/api/exchange-connections/kraken/storage-upgrade', { token, confirmed: true, reauthToken });
         if (generation !== connectionRequestGeneration) return;
         if (!result.ok) throw Error('upgrade failed');
         output.textContent = 'Encrypted backup created and storage upgraded. No trade or permission change. Refresh evidence to see the new format.';
@@ -1149,7 +1152,9 @@ async function renderExchangeConnections() {
     $('#disconnectKrakenConnection')?.addEventListener('click', async () => {
       if (!confirm('Remove the saved Kraken credential from IOST? This does not cancel exchange orders, close positions, or revoke the key at Kraken. Review those separately at Kraken.')) return;
       try {
-        await api('/api/account/kraken', { method: 'DELETE' });
+        const reauthToken = await requestCredentialReauth('disconnect', post);
+        if (generation !== connectionRequestGeneration || !window.Auth?.state?.loggedIn) return;
+        await api('/api/account/kraken', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reauthToken }) });
         if (generation === connectionRequestGeneration) await renderExchangeConnections();
       } catch { if (generation === connectionRequestGeneration) $('#krakenVerificationResult').textContent = 'Disconnection failed. The credential may still be saved; refresh to check.'; }
     });
