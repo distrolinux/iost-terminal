@@ -93,6 +93,15 @@ across multiple instances/processes sharing a key remains a launch blocker.
 No real API calls were made. HTTP lifecycle/owner isolation, global request
 coordination, settlement accounting and recovery acceptance remain unfinished.
 
+Shared process coordinator update: broker instances and connection verification
+now share one serialized request lane per hashed API key. Nonces increase even
+when the clock moves backward. Queue depth (32), key registry (4096) and queue
+wait (10 seconds) are bounded; capacity/deadline failures do not retry requests.
+No raw keys are stored in the lane registry. Failed calls do not poison the lane.
+This is PROCESS-LOCAL, not cross-process or restart-durable coordination. External
+clients sharing the key and process restarts still require a reviewed operational
+design before live readiness. Offline integration verifies broker/verifier overlap.
+
 The five initial broker regressions now pass: bounded no-redirect transport,
 explicit accepted status, missing-ID rejection, unknown submission outcomes and
 exact partial-fill quantity evidence. Server acceptance no longer invents a fill
