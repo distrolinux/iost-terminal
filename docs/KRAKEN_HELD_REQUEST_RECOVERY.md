@@ -24,11 +24,31 @@ It is not yet exposed by HTTP/MCP or the website.
 3. For a possible order action, reconcile the exact owner, credential, account,
    client/venue order identity, fills, cancellations and settlement records.
    Absence from open orders is not proof of rejection.
-4. Design and test a separate authenticated recovery-read lane with monotonic
-   nonce coordination that cannot submit or cancel orders. This is not implemented.
+4. Integrate and acceptance-test the internal separate-credential recovery reader
+   through an owner-authorized workflow. It cannot submit or cancel orders; the
+   owner-facing credential and recovery workflow is not yet implemented.
 5. Require an audited, evidence-bound owner recovery decision and prove crash,
    race and replay behavior before any lock-release operation is implemented.
 
 There is intentionally no unlock command, stale-lock expiry or automatic retry.
 Restarting alone will not clear a held request. Current diagnostic classification
 is a prerequisite for recovery, not a completed recovery workflow.
+
+## Internal separate-credential recovery reader
+
+The draft now includes a broker method that uses a separately provisioned
+read-only credential. It accepts only GetApiKeyInfo and QueryOrders, validates
+the key's reported read-only permissions/expiry, and matches its reported account
+against the original private account binding. It does not send a request using
+the held trading credential and never modifies that credential's lock/nonce.
+The recovery key uses its own normal coordinated request lane.
+
+Only an acknowledged, exactly bound order can be inspected. Unknown/missing
+venue IDs remain unresolved; empty responses are not rejection evidence. No
+fill ledger, fee settlement, history write, hold release or resubmission occurs.
+The original credential remains necessary to validate the original binding.
+Missing/lost original credentials need a separately reviewed recovery design.
+
+There is no UI, HTTP/MCP endpoint, recovery-key storage or automatic provisioning
+in this phase. Do not paste or send keys to an agent. A real owner-controlled
+credential workflow and end-to-end acceptance review are still required.

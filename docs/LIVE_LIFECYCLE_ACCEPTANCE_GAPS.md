@@ -129,6 +129,14 @@ diagnostic, not an HTTP/MCP route or completed recovery mechanism. See
 KRAKEN_HELD_REQUEST_RECOVERY.md for the still-required recovery-read lane and
 evidence-bound owner release design. Tests verify inspection leaves files unchanged.
 
+Separate recovery reader update: an internal broker method uses a different,
+verified read-only key to inspect an acknowledged order on the original reported
+account. Its only methods are GetApiKeyInfo and QueryOrders. It rejects original
+trading-key reuse, wrong owner/account, missing bindings and trading permissions.
+The original lane stays locked and untouched. Empty order evidence stays unknown;
+no unlock, execution, settlement or credential storage was added. This is not yet
+an owner-facing recovery workflow, and lost acknowledgements remain unresolved.
+
 The five initial broker regressions now pass: bounded no-redirect transport,
 explicit accepted status, missing-ID rejection, unknown submission outcomes and
 exact partial-fill quantity evidence. Server acceptance no longer invents a fill
