@@ -72,6 +72,8 @@ import { observeSecurityResponse, securitySentinelStatus } from './lib/security-
 import { buildPublicLiveReadiness } from './lib/public-live-readiness.js';
 import { buildExchangeConnections } from './lib/exchange-connections.js';
 import { verifyKrakenConnection } from './lib/kraken-connection-verification.js';
+import { credentialStorageStatus, createCredentialMaintenance } from './lib/credential-maintenance.js';
+import { writeCredentialBackup } from './lib/credential-backup.js';
 import * as liveProposals from './lib/live-proposals.js';
 import * as management from './lib/management.js';
 import * as triggers from './lib/triggers.js';
@@ -3841,7 +3843,7 @@ app.put('/api/account/kraken', requireUser, async (req, res) => {
   const u = auth.findById(req.session.userId);
   const r = setUserKrakenKey(u, String(apiKey).trim(), String(apiSecret).trim());
   if (!r.ok) return res.status(400).json({ error: r.error });
-  persistUsers();
+  auth.persistUsers();
   logLiveEvent(u.id, 'user.key.connected', { provider: 'kraken', storageVersion: 1 });
   res.json({ ok: true, status: userKrakenStatus(u) });
 });
@@ -3850,7 +3852,7 @@ app.delete('/api/account/kraken', requireUser, (req, res) => {
   if (!req.session?.userId) return res.status(401).json({ error: 'auth required' });
   const u = auth.findById(req.session.userId);
   clearUserKrakenKey(u);
-  persistUsers();
+  auth.persistUsers();
   logLiveEvent(u.id, 'user.key.disconnected', { provider: 'kraken' });
   res.json({ ok: true });
 });
@@ -4721,7 +4723,7 @@ const connectionVerificationLimiter = rateLimit({ windowMs: 60_000, limit: 3, st
 const connectionVerificationPending = new Set();
 app.post('/api/exchange-connections/kraken/verify', requireUser, connectionVerificationLimiter, async (req, res) => {
   res.set('Cache-Control', 'private, no-store');
-  if (req.userAgent || !req.session?.userId) return res.status(403).json({ error: 'account owner session required' });
+  if (req.userAgent || !req.session?.userId || req.agentKey) return res.status(403).json({ error: 'account owner session required' });
   const userId = req.session.userId;
   const user = auth.findById(userId);
   const originalCredential = user?.krakenKey;
@@ -4737,11 +4739,30 @@ app.post('/api/exchange-connections/kraken/verify', requireUser, connectionVerif
   } finally { connectionVerificationPending.delete(userId); }
 });
 
+const credentialMaintenance = createCredentialMaintenance({
+  backup: record => writeCredentialBackup(DATA_DIR, record),
+  persist: auth.persistCredentialReplacement,
+});
+app.post('/api/exchange-connections/kraken/storage-preview', requireUser, connectionVerificationLimiter, (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (req.userAgent || !req.session?.userId || req.agentKey) return res.status(403).json({ error: 'account owner session required' });
+  const result = credentialMaintenance.preview(auth.findById(req.session.userId), req.sessionID);
+  return res.status(result.ok ? 200 : 409).json(result);
+});
+app.post('/api/exchange-connections/kraken/storage-upgrade', requireUser, connectionVerificationLimiter, (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (req.userAgent || !req.session?.userId || req.agentKey) return res.status(403).json({ error: 'account owner session required' });
+  const result = credentialMaintenance.apply(auth.findById(req.session.userId), req.sessionID, req.body?.token, req.body?.confirmed);
+  logLiveEvent(req.session.userId, 'user.key.storage-upgrade', { provider: 'kraken', outcome: result.reasonCode });
+  return res.status(result.ok ? 200 : 409).json(result);
+});
+
 app.get('/api/exchange-connections', requireUser, (req, res) => {
   res.set('Cache-Control', 'private, no-store');
-  if (req.userAgent || !req.session?.userId) return res.status(403).json({ error: 'account owner session required' });
+  if (req.userAgent || !req.session?.userId || req.agentKey) return res.status(403).json({ error: 'account owner session required' });
   const readiness = publicLiveReadinessFor(req);
-  return res.json({ ...buildExchangeConnections({ kraken: userKrakenStatus(auth.findById(req.session.userId)), readiness }), readiness });
+  const user = auth.findById(req.session.userId);
+  return res.json({ ...buildExchangeConnections({ kraken: userKrakenStatus(user), readiness }), readiness, storage: credentialStorageStatus(user) });
 });
 
 app.get('/api/public-live-readiness', requireUser, (req, res) => {
