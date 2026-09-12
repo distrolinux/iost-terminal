@@ -2,14 +2,32 @@
 
 ## Remediation update
 
+Durable submission guard added: exclusive owner-scoped file, file/directory sync
+before outbound submission, persistent UUID sent as Kraken cl_ord_id. Another
+submission for that owner is blocked regardless of acceptance or failure. No hold
+release/expiry API exists. This is conservative lockout, not completed recovery.
+Do not manually delete holds to retry. A corrupt/incomplete hold stays blocking.
+The directory lives under IOST_DATA_DIR/live-submission-holds and must be preserved
+in operational backups; this change does not establish a backup recovery rehearsal.
+
+Tests now exercise a fresh child process, concurrent child processes, corruption
+and separate owners. Actual power-loss/filesystem durability is not proven.
+Kraken client IDs identify open orders; they are not claimed as venue-wide exactly-once
+guarantees. Reference: https://docs.kraken.com/api-reference/trading/add-order
+
+A pure reconciliation preview recognizes partial/filled/terminal evidence and
+holds on conflicting terminal observations or decreasing quantities. It is NOT
+connected to a venue query, ledger, fee accounting or hold release. Fees remain
+unverified and releaseAllowed remains false in every preview.
+
 The five initial broker regressions now pass: bounded no-redirect transport,
 explicit accepted status, missing-ID rejection, unknown submission outcomes and
 exact partial-fill quantity evidence. Server acceptance no longer invents a fill
 or burns credits. Unknown proposals persist as unknown and cannot be reclaimed.
 The probe now runs in the offline suite. These fixes do NOT complete live readiness.
 
-Still blocking: durable per-submission identity, cross-request/account retry
-control, confirmed fill/fee ingestion, cancel/fill races, full process recovery and
+Still blocking: confirmed fill/fee ingestion, authenticated venue reconciliation,
+verified hold release, end-to-end cancel/fill races, full recovery and
 HTTP execution-path acceptance. Keep this PR draft and do not deploy it as a live
 readiness upgrade. The historical baseline findings below explain the regressions.
 

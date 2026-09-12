@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import { previewLiveReconciliation as preview } from '../lib/live-reconciliation-preview.js';
+const expected = { clientOrderId: 'fixture-client', venueOrderId: 'fixture-order', pair: 'XBTUSD', side: 'buy', quantity: '1' };
+const partial = { ...expected, status: 'open', filledQuantity: '0.25' };
+assert.equal(preview(expected, partial).status, 'partial-evidence');
+assert.equal(preview(expected, partial).releaseAllowed, false);
+assert.equal(preview(expected, partial, partial).status, 'partial-evidence');
+assert.equal(preview(expected, { ...partial, filledQuantity: '0.1' }, partial).status, 'unknown');
+assert.equal(preview(expected, { ...partial, status: 'closed', filledQuantity: '1' }, partial).status, 'filled-evidence');
+assert.equal(preview(expected, { ...partial, status: 'closed' }).status, 'unknown');
+const canceled = { ...partial, status: 'canceled' };
+assert.equal(preview(expected, canceled, partial).status, 'terminal-evidence');
+assert.equal(preview(expected, { ...partial, status: 'closed', filledQuantity: '1' }, canceled).status, 'unknown', 'conflicting terminal event requires review');
+assert.equal(preview(expected, { ...partial, venueOrderId: 'other' }).status, 'unknown');
+assert.equal(preview(expected, null).status, 'unknown');
+assert.equal(preview(expected, { ...partial, filledQuantity: '1.01' }).status, 'unknown');
+console.log('Read-only reconciliation preview fixtures passed; no hold release');

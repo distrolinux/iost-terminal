@@ -19,12 +19,13 @@ const response = result => new Response(JSON.stringify({ error: [], result }));
 try {
   const { createKrakenBroker } = await import('../lib/broker/kraken.js');
   const broker = createKrakenBroker();
-  const order = { symbol: 'BTC', side: 'long', size: 0.0001, entry: 50000 };
+  const order = { symbol: 'BTC', side: 'long', size: 0.0001, entry: 50000, clientOrderId: '12345678-1234-1234-1234-123456789abc' };
   let transport;
   handler = (url, options) => { assert.equal(url, 'https://api.kraken.com/0/private/AddOrder'); transport = options; return response({ txid: ['fixture-order'] }); };
   const accepted = await broker.placeOrder(order);
   check('accepted order is explicitly not a confirmed fill', accepted.order?.status === 'accepted' && accepted.order?.filledQuantity === undefined);
   check('submission has bounded timeout and refuses redirects', Boolean(transport.signal) && transport.redirect === 'error');
+  check('stable client identity is sent', new URLSearchParams(transport.body).get('cl_ord_id') === order.clientOrderId);
   handler = () => response({});
   const missing = await broker.placeOrder(order);
   check('missing venue ID cannot be reported as success', missing.ok === false);

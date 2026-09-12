@@ -23,6 +23,7 @@ import { createKrakenOnboarding } from './lib/kraken-onboarding.js';
 import { issueCredentialProof, consumeCredentialProof, credentialAuthState } from './lib/credential-reauth.js';
 import { createKrakenDraftEvidence, createKrakenPairCatalog, krakenSystemEvidence } from './lib/kraken-draft-evidence.js';
 import { combineKrakenReview } from './lib/combined-kraken-review.js';
+import { createLiveSubmissionHold } from './lib/live-submission-hold.js';
 import { getFeeConfig, setFeeConfig, canTrade, burnCredits, grantCredits, walletSummary } from './lib/fees.js';
 import { getUserKrakenKeys, userKrakenStatus } from './lib/keys.js';
 import { createPayment, listPayments, confirmPayment, rejectPayment } from './lib/payments.js';
@@ -3893,6 +3894,7 @@ app.get('/api/account/iost/status', (req, res) => {
 // APPROVING user's session; venue = their own Kraken keys or (owner only)
 // the platform key. Risk rails + venue are re-validated at execution time —
 // prices move between proposal and approval.
+const liveSubmissionHold = createLiveSubmissionHold(join(DATA_DIR, 'live-submission-holds'));
 async function executeLiveOrder(req, { symbol, side = 'long', size, entry }) {
   const u = req.session?.userId ? auth.findById(req.session.userId) : null;
   if (!u) return { status: 403, error: 'session required' };
@@ -3929,7 +3931,9 @@ async function executeLiveOrder(req, { symbol, side = 'long', size, entry }) {
   const fee = canTrade(st);
   if (!fee.ok) return { status: 400, error: fee.error };
 
-  const r = await kraken.placeOrder({ symbol, side, size: effSize, entry });
+  const hold = liveSubmissionHold.claim(u.id, { symbol, side, size: effSize, entry });
+  if (!hold.ok) return { status: 409, outcome: 'unknown', error: hold.error };
+  const r = await kraken.placeOrder({ symbol, side, size: effSize, entry, clientOrderId: hold.clientOrderId });
   if (!r.ok) return { status: 502, outcome: r.outcome, error: 'Venue submission not confirmed; reconcile before retrying.' };
   // Acceptance is not a fill. No invented position, execution price or credit burn.
   logLiveEvent(st.accountId, 'live.order.accepted', { symbol, venueOrderId: r.order.venueOrderId });
@@ -3939,7 +3943,7 @@ async function executeLiveOrder(req, { symbol, side = 'long', size, entry }) {
 app.post('/api/trade/live', requireUser, async (req, res) => {
   const { symbol, side = 'long', size, entry } = req.body || {};
   const r = await executeLiveOrder(req, { symbol, side, size, entry });
-  res.status(r.status).json(r.status === 200 ? r : { error: r.error });
+  res.status(r.status).json(r.status === 200 ? r : { error: r.error, ...(r.outcome ? { outcome: r.outcome } : {}) });
 });
 
 // masked view of venue positions/orders for the account owner (never keys)
