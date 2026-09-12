@@ -25,7 +25,11 @@ check('landing copy identifies the product as paper-first without ambiguous real
   !/AI Real-Trading Platform/i.test(server + home)
   && /AI Trading Platform[^\n<]*Paper-First/i.test(server + home));
 
-check('landing conversion paths remain paper-only and expose Agent Trust Arena',
+check('landing offers paper execution and locked live setup plus Agent Trust Arena',
+  /href="\/app\?auth=login#launchpad"/.test(home)
+  && /href="\/app\?auth=login#live"/.test(home)
+  && /Real-money orders are not available yet/.test(home)
+  &&
   /href="\/arena"[^>]*>Arena</.test(home)
   && /href="\/arena"[^>]+aria-label="Explore the paper-only Agent Trust Arena"/.test(home)
   && !/LIVE ON KRAKEN|Connect your Kraken API key|execute on your real Kraken account/i.test(home)
@@ -128,7 +132,7 @@ for (const [name, html] of [['landing', home], ['AITT', token], ['Terminal', app
 
 check('Terminal skip-link styles are cache-versioned',
   /\.skip-link\s*\{/.test(css)
-  && /\/css\/style\.css\?v=2\.38/.test(app));
+  && /\/css\/style\.css\?v=2\.39/.test(app));
 
 check('Terminal mobile navigation keeps every primary view reachable',
   /@media \(max-width: 860px\)[\s\S]{0,900}\.sidebar \{ display: block;/.test(css)
