@@ -40,3 +40,9 @@ const failedSave = broken.commit(user, 'session', { token: brokenPlan.token, con
 assert.equal(failedSave.ok, false); assert.equal(user.krakenKey, undefined);
 assert.doesNotMatch(JSON.stringify(failedSave), /private filesystem/);
 console.log('Secure Kraken onboarding checks passed');
+let expire;
+const timed = createKrakenOnboarding({ vault: () => v, enabled: () => true, schedule: callback => { expire = callback; return 1; }, cancel: () => {}, verify: async () => ({ accountHealth: 'reachable', profile: 'read-only', permissionStatus: 'observed-allowed-permissions' }) });
+await timed.preview(user, 'session', input);
+assert.equal(timed.pendingCount(), 1);
+expire();
+assert.equal(timed.pendingCount(), 0, 'expiry removes candidate without another API request');

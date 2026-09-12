@@ -71,15 +71,16 @@ footer a:hover { color: var(--cyan); text-decoration: none; }
 
 <main id="main-content">
   <h1>Privacy Policy</h1>
-  <div class="effective">EFFECTIVE DATE: August 26, 2026</div>
-  <p class="lede">This Privacy Policy explains what the independently developed IOST Terminal open-source project ("we", "us") collects, why we collect it, and the choices you have. In short: we collect the minimum needed to run the Service, we never sell your data, and we store secrets in hashed or encrypted form.</p>
+  <div class="effective">UPDATED: September 12, 2026</div>
+  <p class="lede">This Privacy Policy explains what the independently developed IOST Terminal project ("we", "us") collects, why we collect it, and the choices you have. We do not sell your data. Passwords are hashed and saved exchange credentials, if enrollment is separately enabled, are encrypted.</p>
 
-  <div class="note">LAUNCH SCOPE — The public Service is paper-only. It does not accept exchange API keys or enable real-money or public-chain execution.</div>
+  <div class="note">LAUNCH SCOPE — The public Service is paper-only. Optional read-only exchange onboarding is disabled by default and requires separate operator review and enablement. It never enables real-money or public-chain execution.</div>
 
   <h2>1. What we collect</h2>
   <ul>
     <li><b>Account data:</b> email address, a <b>hashed</b> password (bcrypt — plaintext passwords are never stored or logged), and optional two-factor authentication (2FA) configuration.</li>
-    <li><b>Trading data:</b> paper-trading positions, journal entries, autopilot configuration, and simulated actions. The public Service does not accept exchange API keys or route real-money orders.</li>
+    <li><b>Trading data:</b> paper-trading positions, journal entries, autopilot configuration, and simulated actions. While read-only onboarding is disabled, the public Service does not accept exchange API keys or route real-money orders. Read-only enrollment, if enabled, still cannot authorize orders.</li>
+    <li><b>Optional exchange connection:</b> if enabled and you consent, your Kraken API key and secret are sent to our server for read-only verification. The server uses the API key and a secret-derived signature to contact Kraken; it does not send your secret as a request field. We inspect permissions and balance access. Raw provider responses and balance amounts are not stored or shown by this flow. A separate confirmation is required to save the encrypted credential.</li>
     <li><b>Session data:</b> a session cookie (<code>iost.sid</code>, httpOnly, SameSite=Lax, Secure when served over HTTPS) so you stay signed in. We do not use third-party advertising cookies or tracking cookies.</li>
     <li><b>Technical logs:</b> brief server-side audit entries (timestamp, method, path, API key label or "anon") used to detect abuse. No request bodies are logged.</li>
   </ul>
@@ -91,11 +92,12 @@ footer a:hover { color: var(--cyan); text-decoration: none; }
   <ul>
     <li>We do <b>not</b> sell, rent, or trade your personal data.</li>
     <li>We do <b>not</b> use your data for advertising or ad targeting.</li>
-    <li>We do <b>not</b> accept exchange API keys or submit real-money orders through the public Service.</li>
+    <li>We do <b>not</b> submit real-money orders through this read-only onboarding flow or grant agents credential-management access.</li>
   </ul>
 
   <h2>4. Data sharing</h2>
   <p>We share data only with service providers strictly necessary to run the Service (hosting), and only where required by law or to protect the rights and safety of the Service and its users. A list of processors and their purposes is available on request.</p>
+  <p>If you explicitly verify a Kraken connection, Kraken receives authenticated API requests from our infrastructure and processes them under its own policies. Your IOST account password is not sent to Kraken. Public market lookup sends only market identifiers, not your entered order quantities or account credentials.</p>
 
   <h2>5. Security practices</h2>
   <ul>
@@ -104,10 +106,14 @@ footer a:hover { color: var(--cyan); text-decoration: none; }
     <li>All traffic is served over <b>HTTPS</b> with HSTS; security headers (CSP, nosniff, X-Frame-Options, Referrer-Policy, Permissions-Policy) are set on every response.</li>
     <li>Sessions expire after 4 hours of inactivity.</li>
     <li>Access to production infrastructure is limited to authorized operators.</li>
+    <li>Saved exchange credentials use account-bound application encryption. The running application can decrypt them for permitted verification; this is not end-to-end encryption or independent vault certification.</li>
+    <li>Credential saving, disconnect and storage upgrades require fresh account authentication, including configured 2FA. This authentication does not authorize trading.</li>
   </ul>
 
   <h2>6. Retention and deletion</h2>
   <p>Account and paper-trading data are kept while your account is active. You may request deletion of your account and associated data at any time via <a href="mailto:iostcallister@hotmail.com">iostcallister@hotmail.com</a>; we will delete or anonymize the data within 30 days, except where law requires retention (for example, security records required for fraud prevention).</p>
+  <p>Unsaved credential candidates are encrypted in process memory and expire after two minutes. A timer removes the expired candidate when the event loop runs; expiry also prevents saving. JavaScript memory cannot be guaranteed to be immediately zeroized. No unsaved candidate is intentionally written to disk.</p>
+  <p>Disconnect removes the active saved exchange credential from IOST. It does not revoke the key at Kraken or cancel any exchange orders. Encrypted historical backups may retain a credential after disconnect; there is no automatic backup-erasure guarantee. Revoke retired keys at Kraken. A documented backup retention and deletion schedule, including off-host copies and recovery testing, must be finalized before customer credential onboarding is enabled. Contact us about a deletion request that includes backups.</p>
 
   <h2>7. Your rights</h2>
   <p>Depending on your jurisdiction, you may have rights to access, correct, export, or delete your personal data, and to object to or restrict certain processing. To exercise them, contact <a href="mailto:iostcallister@hotmail.com">iostcallister@hotmail.com</a>.</p>
