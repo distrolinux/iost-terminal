@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import './trading-workspace-entry-check.mjs';
 import './kraken-connection-verification-check.mjs';
+import './credential-vault-check.mjs';
 import { readFileSync } from 'node:fs';
 import { buildExchangeConnections } from '../lib/exchange-connections.js';
 const empty = buildExchangeConnections();

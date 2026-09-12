@@ -3842,7 +3842,7 @@ app.put('/api/account/kraken', requireUser, async (req, res) => {
   const r = setUserKrakenKey(u, String(apiKey).trim(), String(apiSecret).trim());
   if (!r.ok) return res.status(400).json({ error: r.error });
   persistUsers();
-  logLiveEvent(u.id, 'user.key.connected', { masked: u.krakenKeyStatus?.maskedKey });
+  logLiveEvent(u.id, 'user.key.connected', { provider: 'kraken', storageVersion: 1 });
   res.json({ ok: true, status: userKrakenStatus(u) });
 });
 
@@ -3851,6 +3851,7 @@ app.delete('/api/account/kraken', requireUser, (req, res) => {
   const u = auth.findById(req.session.userId);
   clearUserKrakenKey(u);
   persistUsers();
+  logLiveEvent(u.id, 'user.key.disconnected', { provider: 'kraken' });
   res.json({ ok: true });
 });
 
@@ -4731,6 +4732,7 @@ app.post('/api/exchange-connections/kraken/verify', requireUser, connectionVerif
   try {
     const result = await verifyKrakenConnection(keys);
     if (auth.findById(userId)?.krakenKey !== originalCredential) return res.status(409).json({ error: 'Connection changed. Discarding verification.' });
+    logLiveEvent(userId, 'user.key.verified', { provider: 'kraken', outcome: result.reasonCode });
     return res.json(result);
   } finally { connectionVerificationPending.delete(userId); }
 });
