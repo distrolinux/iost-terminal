@@ -906,7 +906,7 @@ app.get('/privacy', (req, res) => { res.set('Cache-Control', 'no-store'); res.se
 app.get('/risk-disclosure', (req, res) => { res.set('Cache-Control', 'no-store'); res.send(LEGAL_PAGES['risk-disclosure.html']); });
 
 // ---- sitemap.xml ----
-const SITEMAP_URLS = ['/', '/app', '/hub', '/aitt', '/arena', '/whitepaper', '/terms', '/privacy', '/risk-disclosure'];
+const SITEMAP_URLS = ['/', '/agents.html', '/app', '/hub', '/aitt', '/arena', '/whitepaper', '/terms', '/privacy', '/risk-disclosure'];
 app.get('/sitemap.xml', (req, res) => {
   const lastmod = new Date().toISOString().slice(0, 10);
   const urls = SITEMAP_URLS
@@ -4482,6 +4482,9 @@ app.get('/.well-known/agent.json', (req, res) => {
   res.set('Access-Control-Allow-Origin', '*');
   res.json({
     name: 'IOST Terminal', version: DISCOVERY_VERSION, machineReadable: true,
+    agentGuide: '/agents.html',
+    pricing: { platformFee: 0, currency: 'USD', policy: 'currently-free', providerCosts: 'separate', unknownCosts: 'not-zero' },
+    discoveryBoundary: { executionAuthority: 'none', publicLiveExecution: 'launch-gated', ownerAuthorizationRequired: true, independentAuditClaimed: false },
     api: '/api', index: '/api', meta: '/api/meta', uiState: '/api/ui-state',
     openapi: '/openapi.json', apiCatalog: '/.well-known/api-catalog',
     ard: '/.well-known/ai-catalog.json', auth: '/api/auth', authMd: '/auth.md',

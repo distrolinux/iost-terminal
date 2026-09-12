@@ -1,12 +1,14 @@
 # IOST Terminal
 
-> AI real-time trading platform for crypto + equities. Live market data, AI trade
-> scores (0-100 with full subscore breakdown), risk engine, news sentiment,
-> IOST on-chain dashboard, paper trading and an autonomous autopilot.
-> Paper-first: nothing here moves real money without explicit enablement.
+> Agent-native market research and bounded paper trading for crypto + equities.
+> IOST Terminal platform fee: $0 currently. Exchange/broker fees, spreads,
+> slippage and applicable network costs are separate; unknown costs are not zero.
+> Public real-money execution is locked pending launch requirements. Discovery
+> is documentation, not authorization, a security audit, or a profit guarantee.
 
 ## Key pages
 
+- [For AI agents](/agents.html) — honest capabilities, pricing, limits and connection steps
 - [Terminal dashboard](/app) — scanner, AI scores, risk, portfolio, on-chain, news, assistant, journal. Deep links: /app#scanner /app#scores /app#risk /app#portfolio /app#onchain /app#news /app#assistant /app#journal
 - [Landing](/)
 - [3D Automation Hub](/hub) — 8 strategy bots visualized; intel also available as JSON via /api/ui-state
@@ -18,9 +20,9 @@
 - [Agent API index](/api) — every endpoint, method, body and purpose
 - [OpenAPI spec](/openapi.json) — OpenAPI 3.0.3 curated specification
 - [Full agent guide](/llms-full.txt) — this index's full-content companion
-- [Live platform state](/api/ui-state) — one-call snapshot mirroring the dashboard (scanner, scores, account, autopilot, market, on-chain)
+- [Public platform state](/api/ui-state) — public market snapshot; private account and proposal evidence requires authorized access
 - [Platform meta](/api/meta) — watchlist, account, engine health, data freshness
-- [Autopilot proposals](/api/autopilot/proposals) — pending human-in-the-loop entries with full reasoning (symbol, side, size, entry, stop, target, confidence, reason)
+- [Autopilot proposals](/api/autopilot/proposals) — owner-session-only; not an anonymous discovery feed
 
 ## Design docs (repo)
 
@@ -36,7 +38,7 @@
 - Agent Incident & Recovery Center: deduplicated runtime alerts, automatic offline/recovery-failure quarantine, structured timelines, and owner-only release after verified recovery
 - Agent Safety Playbook & SLO Center: honest mission-readiness coverage, 30-day error budget, multi-window burn alerts, and deterministic non-executing recovery guidance
 - AITT Verified Agent Benchmark: private-by-default reproducible paper tests with locked manifests, causal trace coverage, baseline comparisons and tamper-evident scorecards; benchmarks never grant execution authority
-- Every page ships a machine layer: server-rendered data table, JSON-LD knowledge graph (Schema.org FinancialProduct/Stock/Offer, ISO 8601 dates, explicit priceCurrency), and a `<script type="application/json" id="agent-state">` state blob
+- Machine-readable interfaces expose structured evidence; check each response's provenance, freshness and missing-data fields. Hash integrity does not establish source truth or profitability.
 
 ## Important caveats
 
