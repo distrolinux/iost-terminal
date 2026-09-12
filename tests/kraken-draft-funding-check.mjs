@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import { assessKrakenDraftFunding as assess } from '../lib/kraken-draft-funding.js';
+const b = { ZUSD: { balance: '100', credit: '200', credit_used: '0', hold_trade: '10' } };
+const fees = { fees: { XXBTZUSD: { fee: '0.40' } }, fees_maker: { XXBTZUSD: { fee: '0.25' } } };
+assert.equal(assess(b, fees, '90').status, 'cash-indication-below-estimate');
+const r = assess(b, fees, '20');
+assert.equal(r.estimatedFeeUsd, '0.08000000');
+assert.equal(r.estimatedRequiredUsd, '20.08000000');
+assert.equal(r.status, 'cash-indication-covers-estimate');
+assert.equal(r.executionAuthorized, false);
+assert.equal(assess(b, fees, '0.00000001').estimatedFeeUsd, '0.00000001');
+assert.equal(assess({ ZUSD: { ...b.ZUSD, balance: '20.08', hold_trade: '0' } }, fees, '20').status, 'cash-indication-covers-estimate');
+assert.equal(assess({ ZUSD: { ...b.ZUSD, balance: '20.0799999999', hold_trade: '0' } }, fees, '20').status, 'cash-indication-below-estimate');
+for (const balance of [null, { USD: b.ZUSD, ZUSD: b.ZUSD }, { ZUSD: { ...b.ZUSD, hold_trade: -1 } }, { ZUSD: {} }]) assert.equal(assess(balance, fees, '20').status, 'unavailable');
+for (const n of ['0', '-1', '1e2', 20, null]) assert.equal(assess(b, fees, n).status, 'unavailable');
+assert.equal(assess(b, {}, '20').status, 'unavailable');
+assert.doesNotMatch(JSON.stringify(r), /"balance":|"credit":|"hold_trade":/);
+console.log('Draft cash plus fee arithmetic checks passed');
