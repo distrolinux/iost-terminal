@@ -7,12 +7,68 @@ Live onboarding and execution remain separately locked. No new MCP capability.
 
 ## Runtime configuration
 
+### Protected file (preferred for this VPS)
+
+Set `IOST_CREDENTIAL_VAULT_FILE` to an absolute, read-only mounted file containing
+the same `activeKeyId` and `keys` object accepted by `createCredentialVault`.
+The file must be a regular, non-symlink file, owned by the application UID, mode
+0400 or 0600, at most 8192 bytes. Restrict its host parent directory too. The
+reader opens without following the final symlink, checks the open descriptor,
+and bounds reads. It never prints contents, parser errors, key IDs or paths.
+
+Do not also set `IOST_CREDENTIAL_VAULT_KEYS` or
+`IOST_CREDENTIAL_VAULT_ACTIVE_KEY_ID`: conflicting file/environment sources fail
+closed instead of silently selecting a keyring. Environment-only installations
+remain supported. There is no automatic file creation, key generation, rotation,
+fallback to the session secret, or credential migration.
+
+### Environment compatibility
+
 Operators supply `IOST_CREDENTIAL_VAULT_KEYS` as a JSON mapping from key IDs to
 canonical base64-encoded, independently generated random 32-byte keys, and
 `IOST_CREDENTIAL_VAULT_ACTIVE_KEY_ID` as the ID for new writes. At most eight keys
 are supported. Inject through approved secret management; never commit, log, paste
 into chat, or copy key material into shell history. Do not reuse SESSION_SECRET.
 No keyring is generated, provisioned, or enabled by this release.
+
+### Deployment and operator setup boundary
+
+After explicit owner approval, an operator must provision independently generated
+32-byte keys through approved secret management into a new protected file outside
+the Git checkout, Docker build context and account-data directory. Never paste key
+material into a command, shell history, chat or source control. Do not reuse or
+rotate SESSION_SECRET. Keep an independently protected recovery copy of the vault
+and all keys required by encrypted credential backups. File encryption is not an
+external KMS, hardware isolation, or automatic satisfaction of the live launch gate.
+
+`deploy-host.sh` accepts `VAULT_SECRET_FILE` as a host **path only**. It binds that
+file read-only at `/run/secrets/iost-credential-vault.json`, sets the application
+file reference, and preserves an existing mount at that destination on later
+deployments. A missing, symlinked or in-repository source is rejected. With no file
+configured, deployment continues with credential storage unavailable as before.
+An existing environment-only vault remains supported; a configured invalid source
+blocks deployment rather than being dropped.
+
+Before production is paused, a short-lived container validates permissions and an
+in-memory encryption round trip under the application UID, using the new image,
+`--network none`, a read-only filesystem, no capabilities and no production data.
+The scratch candidate receives no vault mount and all three vault variables are
+cleared. Production gets the read-only mount and runs the same validation again
+before success is declared. Failure after promotion invokes the existing rollback.
+Validation performs no provider call, credential write or key generation.
+
+The operator can run `node scripts/check-credential-vault.mjs` inside the production
+container for sanitized validation only; `--optional` permits an entirely absent
+configuration, not an invalid one. No secret contents are returned. The private
+storage panel reflects the configured file without exposing its location or keys.
+
+For rotation, prefer a new versioned file path retaining old keys, then explicitly
+deploy using that path. Replacing a bind-mounted host file atomically does not
+update the inode already mounted in a running container: recreate through the
+health-checked deployment to apply it. Never edit a mounted keyring in place or
+remove files needed by retained rollback containers. Preserve the old compatible
+container and secret file until migration and recovery are verified. These are
+operator responsibilities; this build performs none of those production actions.
 
 AES-256-GCM uses a random 96-bit nonce and authenticated context binding version,
 account ID, provider and key ID. Unknown versions, missing keys and tampering fail

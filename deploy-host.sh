@@ -191,6 +191,25 @@ fi
 APP_UID="$(stat -c '%u' "$APP")"
 APP_GID="$(stat -c '%g' "$APP")"
 
+# Optional host-managed secret. Preserve the production mount across releases;
+# never silently drop file-backed encryption or add the secret to image context.
+VAULT_ARGS=()
+VAULT_TARGET=/run/secrets/iost-credential-vault.json
+if [ -z "${VAULT_SECRET_FILE:-}" ] && [ "$OLD_PRESENT" -eq 1 ]; then
+  VAULT_SECRET_FILE="$(docker_cmd inspect -f '{{range .Mounts}}{{if eq .Destination "/run/secrets/iost-credential-vault.json"}}{{.Source}}{{end}}{{end}}' "$PROD_CONTAINER")"
+fi
+if [ -n "${VAULT_SECRET_FILE:-}" ]; then
+  [[ "$VAULT_SECRET_FILE" == /* && "$VAULT_SECRET_FILE" != *','* && "$VAULT_SECRET_FILE" != *$'\n'* ]] || { echo "ERROR: invalid vault file location"; exit 1; }
+  [ -f "$VAULT_SECRET_FILE" ] && [ ! -L "$VAULT_SECRET_FILE" ] || { echo "ERROR: vault must be an existing regular, non-symlink file"; exit 1; }
+  VAULT_SECRET_FILE="$(cd "$(dirname "$VAULT_SECRET_FILE")" && pwd -P)/$(basename "$VAULT_SECRET_FILE")"
+  APP_CANONICAL="$(cd "$APP" && pwd -P)"
+  DATA_CANONICAL="$(cd "$DATA_DIR" && pwd -P)"
+  case "$VAULT_SECRET_FILE" in
+    "$APP_CANONICAL"/*|"$DATA_CANONICAL"/*) echo "ERROR: vault file must be outside app and data directories"; exit 1 ;;
+  esac
+  VAULT_ARGS=(--mount "type=bind,source=$VAULT_SECRET_FILE,target=$VAULT_TARGET,readonly" -e "IOST_CREDENTIAL_VAULT_FILE=$VAULT_TARGET")
+fi
+
 echo "==> building immutable image: $IOST_IMAGE"
 docker_cmd build --pull \
   --label "com.iost-terminal.revision=$REVISION" \
@@ -203,15 +222,25 @@ docker_cmd build --pull \
 [ "$(docker_cmd image inspect -f '{{index .Config.Labels "com.iost-terminal.package-lock-sha256"}}' "$IOST_IMAGE")" = "$PACKAGE_LOCK_SHA256" ] || { echo "ERROR: image lockfile provenance mismatch"; exit 1; }
 [ "$(docker_cmd image inspect -f '{{index .Config.Labels "com.iost-terminal.dockerfile-sha256"}}' "$IOST_IMAGE")" = "$DOCKERFILE_SHA256" ] || { echo "ERROR: image Dockerfile provenance mismatch"; exit 1; }
 
+# No network, production data, or persistent writes. Validate under the exact
+# application UID before pausing production. An invalid configured source blocks
+# promotion; an unconfigured vault stays unavailable without enabling anything.
+echo "==> validating optional credential vault configuration..."
+docker_cmd run --rm --network none --read-only --cap-drop ALL \
+  --security-opt no-new-privileges --user "$APP_UID:$APP_GID" \
+  ${ENV_ARGS[@]+"${ENV_ARGS[@]}"} ${VAULT_ARGS[@]+"${VAULT_ARGS[@]}"} \
+  "$IOST_IMAGE" node scripts/check-credential-vault.mjs --optional
+
 start_candidate() {
   echo "==> starting isolated candidate (scratch data, live credentials disabled)..."
   docker_cmd run -d --name "$CANDIDATE" --restart no \
     --network "$NET" --user "$APP_UID:$APP_GID" \
-    "${ENV_ARGS[@]}" \
+    ${ENV_ARGS[@]+"${ENV_ARGS[@]}"} \
     -e APP_REVISION="$REVISION" \
     -e IOST_PACKAGE_LOCK_SHA256="$PACKAGE_LOCK_SHA256" \
     -e IOST_DOCKERFILE_SHA256="$DOCKERFILE_SHA256" \
     -e KRAKEN_API_KEY= -e KRAKEN_API_SECRET= -e IOST_PIN_KEY= \
+    -e IOST_CREDENTIAL_VAULT_FILE= -e IOST_CREDENTIAL_VAULT_KEYS= -e IOST_CREDENTIAL_VAULT_ACTIVE_KEY_ID= \
     --tmpfs "/app/data:rw,noexec,nosuid,nodev,size=64m,mode=1770,uid=$APP_UID,gid=$APP_GID" \
     "$IOST_IMAGE" >/dev/null
 }
@@ -253,7 +282,8 @@ chown -R "$APP_UID:$APP_GID" "$DATA_DIR"
 echo "==> starting production from $IOST_IMAGE..."
 docker_cmd run -d --name "$PROD_CONTAINER" --restart unless-stopped \
   --network "$NET" --user "$APP_UID:$APP_GID" \
-  "${ENV_ARGS[@]}" \
+  ${ENV_ARGS[@]+"${ENV_ARGS[@]}"} \
+  ${VAULT_ARGS[@]+"${VAULT_ARGS[@]}"} \
   -e APP_REVISION="$REVISION" \
   -e IOST_PACKAGE_LOCK_SHA256="$PACKAGE_LOCK_SHA256" \
   -e IOST_DOCKERFILE_SHA256="$DOCKERFILE_SHA256" \
@@ -268,6 +298,7 @@ docker_cmd run -d --name "$PROD_CONTAINER" --restart unless-stopped \
   "$IOST_IMAGE" >/dev/null
 
 wait_for_health "$PROD_CONTAINER" || { echo "ERROR: promotion failed internal health"; exit 1; }
+docker_cmd exec "$PROD_CONTAINER" node scripts/check-credential-vault.mjs --optional || { echo "ERROR: promoted vault validation failed"; exit 1; }
 wait_for_public_health || { echo "ERROR: promotion failed public health"; exit 1; }
 DEPLOY_SUCCEEDED=1
 
