@@ -9,7 +9,7 @@ const fetchFn = async (url, opts) => {
   calls.push(url);
   assert.equal(opts.redirect, 'error');
   assert.ok(opts.signal);
-  return { ok: true, json: async () => ({ error: [], result: url.endsWith('GetApiKeyInfo') ? { apiKey: 'private-fixture', iban: 'private-account', permissions: ['query-funds'] } : { ZUSD: '123.45' } }) };
+  return new Response(JSON.stringify({ error: [], result: url.endsWith('GetApiKeyInfo') ? { apiKey: 'private-fixture', iban: 'private-account', permissions: ['query-funds'] } : { ZUSD: '123.45' } }));
 };
 const keys = { apiKey: 'fixture-key', apiSecret: 'Zml4dHVyZQ==' };
 const result = await verifyKrakenConnection(keys, { fetchFn, now: () => 10000 });
@@ -20,4 +20,11 @@ assert.doesNotMatch(JSON.stringify(result), /private|123.45|fixture-key/);
 const failure = await verifyKrakenConnection(keys, { fetchFn: async () => { throw Error('secret'); } });
 assert.equal(failure.reasonCode, 'verification-unavailable');
 assert.doesNotMatch(JSON.stringify(failure), /secret/);
+let restrictedCalls = 0;
+const restricted = await verifyKrakenConnection(keys, { requireReadOnly: true, fetchFn: async () => {
+  restrictedCalls++;
+  return new Response(JSON.stringify({ error: [], result: { permissions: ['query-funds', 'modify-trades'] } }));
+} });
+assert.equal(restricted.reasonCode, 'read-only-key-required');
+assert.equal(restrictedCalls, 1, 'trade-capable credentials rejected before balance request');
 console.log('Kraken connection verification checks passed');

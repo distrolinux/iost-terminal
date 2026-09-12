@@ -1,6 +1,7 @@
 // IOST Terminal frontend — all views, live SSE updates, charts, chat
 import bs58 from '/js/vendor/bs58.mjs'; // vendored base58 (MIT) — for wallet key display
 import { mountOrderReview } from '/js/order-review.js?v=3';
+import { mountKrakenOnboarding } from '/js/kraken-onboarding.js?v=1';
 import { AITT_CHAIN_ID, chainIdNumber, claimGateReason, requestClaimIfOpen, shouldAllowClaim } from '/js/wallet-claims.js';
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -1075,13 +1076,14 @@ async function renderExchangeConnections() {
       <p>Real-money readiness, separate from paper practice. Verify saved credentials without placing an order. New credential onboarding and live execution remain separately gated.</p>
       <p><a class="btn" href="#launchpad">Paper agent Launchpad</a> <button class="btn ghost" id="refreshConnections">Refresh evidence</button></p>
       <p class="muted">Evidence fetched ${esc(new Date().toLocaleTimeString())}. This is a snapshot, not continuous monitoring.</p></section>
+      <section class="card" id="krakenOnboardingWorkspace"></section>
       <section class="card" id="orderReviewWorkspace"></section>
       <section class="card"><h2>Connection setup guide</h2><ol><li>Check whether credential onboarding is available. Do not enable live trading just to unlock setup.</li><li>When onboarding is approved, use your own dedicated exchange key. Start with read-only permissions; never grant funding or withdrawal access for verification.</li><li>Verify the saved connection below. Missing or unsupported permissions require review at Kraken; agents cannot grant themselves access.</li><li>Review the separate live launch requirements. A reachable account is not approval to trade.</li></ol></section>
       <div class="grid g-2">${s.connections.map(c => `<section class="card"><h2>${esc(c.name)}</h2>
       <p><strong>${c.configured ? 'Credentials configured — not live authorization' : 'Not connected'}</strong></p>
       <dl><dt>Connection type</dt><dd>${esc(c.transport)}</dd><dt>Permission evidence</dt><dd>${esc(c.permissionStatus)}</dd><dt>Account health</dt><dd>Not probed</dd><dt>Symbol and order support</dt><dd>Requires fresh provider verification</dd></dl>
       <p class="muted">Configured credentials are not proof of current account access, eligibility, or trading permission.</p>
-      ${c.configured ? '<button class="btn" id="verifyKrakenConnection">Verify saved Kraken connection</button> <button class="btn ghost" id="disconnectKrakenConnection">Disconnect from IOST</button>' : '<p>Connection setup is unavailable during the paper-only launch. Do not send API keys to an agent or chat.</p>'}
+      ${c.configured ? '<button class="btn" id="verifyKrakenConnection">Verify saved Kraken connection</button> <button class="btn ghost" id="disconnectKrakenConnection">Disconnect from IOST</button>' : '<p>No connection saved. See the read-only onboarding panel above. Do not send API keys to an agent or chat.</p>'}
       <p id="krakenVerificationResult" role="status">No fresh verification in this view. A check inspects permissions and queries balance access; balances are not displayed or stored.</p></section>`).join('')}
       <section class="card"><h2>Robinhood</h2><span class="chip neut">Not integrated</span><p>Authenticated MCP adapter under consideration. No account connection or trading support is available here.</p><p>Provider authentication, account eligibility, order preview, cancellation, and fill reconciliation must be validated before integration.</p></section></div>
       <section class="card"><h2>Credential storage</h2>
@@ -1094,6 +1096,7 @@ async function renderExchangeConnections() {
       <section class="card"><h2>Public live launch requirements</h2><ul class="public-live-gates">${(s.readiness?.gates || []).map(g => `<li class="${g.pass === true ? 'is-ready' : 'is-locked'}"><span>${g.pass === true ? '✓' : '×'}</span><strong>${esc(g.label)}</strong></li>`).join('')}</ul><p>No checklist item can be toggled here. Missing evidence keeps public launch locked.</p></section>
       <section class="card"><h2>Agent permission boundary</h2><ul><li>Paper balances and paper approvals never authorize real-money orders.</li><li>Each live order needs separate owner authorization and server-side risk checks.</li><li>Withdrawals and transfers are not supported by this workspace.</li><li>Direct agent-to-provider orders bypass IOST controls and are not covered by our execution guarantees.</li></ul><p>Planned lifecycle: preview → owner approval → provider submission → fills → reconciliation → audit. Opening this page performs none of these actions.</p></section>`;
     $('#refreshConnections').onclick = renderExchangeConnections;
+    mountKrakenOnboarding($('#krakenOnboardingWorkspace'), { status: s.onboarding, post, isCurrent: () => generation === connectionRequestGeneration && state.activeView === 'live' && window.Auth?.state?.loggedIn, refresh: renderExchangeConnections });
     mountOrderReview($('#orderReviewWorkspace'), { post, isCurrent: () => generation === connectionRequestGeneration && state.activeView === 'live' && window.Auth?.state?.loggedIn });
     let storagePlan = null;
     $('#previewCredentialStorage').onclick = async (event) => {
@@ -2653,54 +2656,10 @@ async function renderPortfolio() {
 }
 
 // ---------------- Trading Keys card ----------------
-// Free trading: no fees, no credits, no bundles, no deposit addresses. The
-// only thing this card does is let a user connect their own Kraken key for
-// live trades (non-custodial — the platform never holds funds).
+// Credential entry exists only in the dedicated verified onboarding workspace.
 async function renderFeeCard(container) {
   if (!window.Auth?.state?.loggedIn) return;
-  let ks = null;
-  try { ks = await api('/api/account/kraken'); } catch { return; }
-  const kst = ks?.status || {};
-  if (ks?.available !== true) {
-    container.innerHTML = `
-      <div class="card" style="margin-top:16px">
-        <div class="section-title" style="margin-bottom:8px">Trading Keys <span class="sub">paper-only launch</span></div>
-        <div class="muted" style="font-size:12px">Exchange-key connection and real-money execution are unavailable.</div>
-      </div>`;
-    return;
-  }
-  container.innerHTML = `
-    <div class="card" style="margin-top:16px">
-      <div class="section-title" style="margin-bottom:8px">Trading Keys <span class="sub">trade your own account · encrypted, never shown · free</span></div>
-      ${kst.configured
-        ? `<div class="muted" style="font-size:12px">✓ Connected ${esc(kst.maskedKey || '')} · verified ${new Date(kst.lastVerified).toLocaleString()}</div>
-           <button class="btn sm ghost" id="keyDisconnect" style="margin-top:6px">Disconnect</button>`
-        : `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
-             <input type="password" id="keyApi" placeholder="Kraken API Key" autocomplete="off" style="flex:1;min-width:170px;padding:6px 8px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);border-radius:6px;color:var(--txt)">
-             <input type="password" id="keySecret" placeholder="Kraken Private Key" autocomplete="off" style="flex:1;min-width:170px;padding:6px 8px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);border-radius:6px;color:var(--txt)">
-             <button class="btn sm" id="keyConnect">Connect</button>
-           </div>
-           <div class="muted" style="font-size:11px;margin-top:6px">Create at Kraken → API → key with Query + Trade only, <strong>no withdraw</strong>. Stored AES-256 encrypted; validated with a read-only call.</div>`}
-    </div>`;
-  $('#keyConnect')?.addEventListener('click', async () => {
-    const apiKey = $('#keyApi')?.value.trim();
-    const apiSecret = $('#keySecret')?.value.trim();
-    if (!apiKey || !apiSecret) { toast('⚠️ Fill both key fields'); return; }
-    toast('Verifying key with Kraken (read-only)…');
-    const r = await fetch('/api/account/kraken', {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ apiKey, apiSecret }),
-    }).then(async x => ({ status: x.status, body: await x.json().catch(() => ({})) }));
-    if (r.status !== 200) { toast(`⚠️ ${esc(r.body.error || r.status)}`); return; }
-    toast('✅ Kraken key connected');
-    renderFeeCard(container);
-  });
-  $('#keyDisconnect')?.addEventListener('click', async () => {
-    if (!confirm('Disconnect your Kraken key?')) return;
-    await fetch('/api/account/kraken', { method: 'DELETE' });
-    toast('Key disconnected');
-    renderFeeCard(container);
-  });
+  container.innerHTML = '<div class="card"><h3>Exchange connections</h3><p>Use the verified read-only connection flow. Connection setup and real-money execution are separately gated.</p><a class="btn" href="#live">Open Connections &amp; Permissions</a></div>';
 }
 
 // ---------------- Live trading card (real-money mode) ----------------
