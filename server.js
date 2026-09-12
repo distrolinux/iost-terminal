@@ -23,6 +23,9 @@ import { createKrakenOnboarding } from './lib/kraken-onboarding.js';
 import { issueCredentialProof, consumeCredentialProof, credentialAuthState } from './lib/credential-reauth.js';
 import { createKrakenDraftEvidence, createKrakenPairCatalog, krakenSystemEvidence } from './lib/kraken-draft-evidence.js';
 import { combineKrakenReview } from './lib/combined-kraken-review.js';
+import { createLiveSubmissionHold } from './lib/live-submission-hold.js';
+import { inspectLiveSettlementReview } from './lib/live-settlement-review.js';
+import { configureKrakenCoordination } from './lib/kraken-request-coordinator.js';
 import { getFeeConfig, setFeeConfig, canTrade, burnCredits, grantCredits, walletSummary } from './lib/fees.js';
 import { getUserKrakenKeys, userKrakenStatus } from './lib/keys.js';
 import { createPayment, listPayments, confirmPayment, rejectPayment } from './lib/payments.js';
@@ -101,6 +104,7 @@ import { MCP_APP_MIME_TYPE, listMcpAppResources, readMcpAppResource } from './li
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.IOST_DATA_DIR || join(ROOT, 'data');
+configureKrakenCoordination(join(DATA_DIR, 'kraken-request-coordination'));
 const PORT = process.env.PORT || 8787;
 const AITT_DOC_VERSION = '2.3';
 process.umask(0o077);
@@ -3827,7 +3831,7 @@ function isOwnerSession(req) {
 // Per-user broker: the user's OWN Kraken keys (encrypted). null when not set.
 function brokerForUser(u) {
   const keys = u ? getUserKrakenKeys(u) : null;
-  return keys ? createKrakenBroker(keys) : null;
+  return keys ? createKrakenBroker({ ...keys, ownerId: u.id }) : null;
 }
 
 // ---- per-user Kraken key connection (v3 — customers trade their own account) ----
@@ -3893,14 +3897,19 @@ app.get('/api/account/iost/status', (req, res) => {
 // APPROVING user's session; venue = their own Kraken keys or (owner only)
 // the platform key. Risk rails + venue are re-validated at execution time —
 // prices move between proposal and approval.
+const liveSubmissionHold = createLiveSubmissionHold(join(DATA_DIR, 'live-submission-holds'));
 async function executeLiveOrder(req, { symbol, side = 'long', size, entry }) {
   const u = req.session?.userId ? auth.findById(req.session.userId) : null;
   if (!u) return { status: 403, error: 'session required' };
   const st = accountFor(req);
   if (!getLiveState(st).enabled) return { status: 400, error: 'live mode not enabled for this account' };
-  // venue: user's own keys when connected, else the platform key (owner only)
+  // Legacy fallback is rejected by the binding check before any venue request.
   const kraken = brokerForUser(u) || (isOwnerSession(req) ? getBroker('kraken') : null);
   if (!kraken) return { status: 403, error: 'connect your own Kraken key first (platform venue is owner-only)' };
+  const credentialBinding = kraken.credentialBinding?.(u.id);
+  if (!credentialBinding) return { status: 409, error: 'An owner-bound exchange connection is required; no submission made.' };
+  const venueIdentity = await kraken.getVenueIdentity(u.id);
+  if (!venueIdentity.ok || !venueIdentity.submissionPermissions) return { status: 409, error: 'Exchange account identity or permissions unavailable; no submission made.' };
   // rails need live venue state — fetch before touching anything
   const [acct, pos] = await Promise.all([kraken.getAccount(), kraken.getPositions()]);
   if (!acct.ok) return { status: 502, error: `venue: ${acct.error}` };
@@ -3929,33 +3938,22 @@ async function executeLiveOrder(req, { symbol, side = 'long', size, entry }) {
   const fee = canTrade(st);
   if (!fee.ok) return { status: 400, error: fee.error };
 
-  const r = await kraken.placeOrder({ symbol, side, size: effSize, entry });
-  if (!r.ok) return { status: 502, error: `venue: ${r.error}` };
-  // journal the live fill (live:true) — previously live fills never reached
-  // the journal, so the daily-loss rail and account views saw nothing
-  const lastQuote = quotes[symbol]?.last || null;
-  const fillPrice = entry && entry > 0 ? entry : lastQuote;
-  if (fillPrice) {
-    st.journal.push({
-      id: r.order.venueOrderId || `live_${Date.now()}`,
-      symbol, side, entry: fillPrice, size: effSize, reason: 'live (venue fill)',
-      status: 'open', openedAt: Date.now(), closedAt: null, exitPrice: null,
-      pnl: 0, pnlPct: null, result: null, live: true, venue: 'kraken',
-    });
+  const hold = liveSubmissionHold.claim(u.id, { symbol, side, size: effSize, entry }, credentialBinding, venueIdentity.venueAccountBinding);
+  if (!hold.ok) return { status: 409, outcome: 'unknown', error: hold.error };
+  const r = await kraken.placeOrder({ symbol, side, size: effSize, entry, clientOrderId: hold.clientOrderId });
+  if (!r.ok) return { status: 502, outcome: r.outcome, error: 'Venue submission not confirmed; reconcile before retrying.' };
+  // Acceptance is not a fill. No invented position, execution price or credit burn.
+  if (!liveSubmissionHold.acknowledge(u.id, hold.clientOrderId, r.order.venueOrderId).ok) {
+    return { status: 503, outcome: 'unknown', error: 'Venue acknowledgement could not be retained; submission remains held. Do not retry.' };
   }
-  // fee: burn credits on the executed notional (entry price or last quote)
-  let notional = entry && entry > 0 ? effSize * entry : 0;
-  if (!notional && lastQuote) notional = effSize * lastQuote;
-  const burn = burnCredits(st, notional);
-  persistAccounts();
-  logLiveEvent(st.accountId, 'live.order', { symbol, side, size: effSize, requestedSize: Number(size), entry: entry || null, garchMult: gs.multiplier, garchRegime: gs.regime, stormCapped: gs.stormCapped || false, venueOrderId: r.order.venueOrderId, burn: burn.ok ? burn.burn : 0 });
-  return { status: 200, ok: true, order: { venue: 'kraken', venueOrderId: r.order.venueOrderId, symbol, side, size: effSize, entry: entry || null, garch: { multiplier: gs.multiplier, regime: gs.regime, requestedSize: Number(size) } }, fee: burn.ok ? { burn: burn.burn, credits: burn.credits } : { error: burn.error } };
+  logLiveEvent(st.accountId, 'live.order.accepted', { symbol, venueOrderId: r.order.venueOrderId });
+  return { status: 200, ok: true, order: { ...r.order, symbol, side, requestedSize: effSize, requestedEntry: entry || null }, fee: { platformFeeUsd: '0' }, reconciliationRequired: true };
 }
 
 app.post('/api/trade/live', requireUser, async (req, res) => {
   const { symbol, side = 'long', size, entry } = req.body || {};
   const r = await executeLiveOrder(req, { symbol, side, size, entry });
-  res.status(r.status).json(r.status === 200 ? r : { error: r.error });
+  res.status(r.status).json(r.status === 200 ? r : { error: r.error, ...(r.outcome ? { outcome: r.outcome } : {}) });
 });
 
 // masked view of venue positions/orders for the account owner (never keys)
@@ -4047,9 +4045,9 @@ app.post('/api/live/proposals/:id/approve', requireUser, async (req, res) => {
   try {
     r = await executeLiveOrder(req, { symbol: p.symbol, side: p.side, size: p.size, entry: p.entry });
   } catch (e) {
-    const error = e instanceof Error ? e.message : 'live execution failed';
-    liveProposals.finalizeExecution(p.id, { status: 'rejected', by: 'owner', error });
-    logLiveEvent(p.userId, 'live.proposal.rejected', { proposalId: p.id, error });
+    const error = 'Execution outcome unknown; reconciliation required.';
+    liveProposals.finalizeExecution(p.id, { status: 'unknown', by: 'owner', error });
+    logLiveEvent(p.userId, 'live.proposal.unknown', { proposalId: p.id });
     return res.status(502).json({ ok: false, error, proposal: liveProposals.getProposal(p.id) });
   }
   if (r.status === 200) {
@@ -4057,8 +4055,8 @@ app.post('/api/live/proposals/:id/approve', requireUser, async (req, res) => {
     logLiveEvent(p.userId, 'live.proposal.approved', { proposalId: p.id, venueOrderId: r.order.venueOrderId });
     res.json({ ok: true, proposal: liveProposals.getProposal(p.id), order: r.order });
   } else {
-    liveProposals.finalizeExecution(p.id, { status: 'rejected', by: 'owner', error: r.error });
-    logLiveEvent(p.userId, 'live.proposal.rejected', { proposalId: p.id, error: r.error });
+    liveProposals.finalizeExecution(p.id, { status: r.outcome === 'unknown' ? 'unknown' : 'rejected', by: 'owner', error: r.error });
+    logLiveEvent(p.userId, r.outcome === 'unknown' ? 'live.proposal.unknown' : 'live.proposal.rejected', { proposalId: p.id });
     res.status(r.status).json({ ok: false, error: r.error, proposal: liveProposals.getProposal(p.id) });
   }
 });
@@ -4851,7 +4849,8 @@ app.get('/api/exchange-connections', requireUser, (req, res) => {
   const readiness = publicLiveReadinessFor(req);
   const user = auth.findById(req.session.userId);
   const onboarding = krakenOnboarding.status(user);
-  return res.json({ ...buildExchangeConnections({ kraken: userKrakenStatus(user), readiness, onboarding }), readiness, storage: credentialStorageStatus(user), onboarding });
+  const settlementReview = inspectLiveSettlementReview(join(DATA_DIR, 'live-settlement-history'), user.id);
+  return res.json({ ...buildExchangeConnections({ kraken: userKrakenStatus(user), readiness, onboarding }), readiness, storage: credentialStorageStatus(user), onboarding, settlementReview });
 });
 
 app.get('/api/public-live-readiness', requireUser, (req, res) => {

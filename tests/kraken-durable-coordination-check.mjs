@@ -1,0 +1,32 @@
+import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { spawnSync, spawn } from 'node:child_process';
+import { createDurableKrakenLane } from '../lib/kraken-durable-lane.js';
+const root = mkdtempSync(join(tmpdir(), 'iost-nonce-'));
+const id = 'a'.repeat(64);
+const moduleUrl = new URL('../lib/kraken-durable-lane.js', import.meta.url).href;
+const script = `import { createDurableKrakenLane } from ${JSON.stringify(moduleUrl)}; const lane = createDurableKrakenLane(${JSON.stringify(root)}); try { await lane('${id}', async n => process.stdout.write(n), () => 1); } catch { process.stdout.write('held'); }`;
+try {
+  const lane = createDurableKrakenLane(root);
+  let initial;
+  await lane(id, async nonce => { initial = BigInt(nonce); }, () => 1000);
+  const restarted = spawnSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8' });
+  assert.equal(restarted.status, 0); assert.ok(BigInt(restarted.stdout) > initial);
+  const crash = script.replace('async n => process.stdout.write(n)', 'async () => process.exit(7)');
+  assert.equal(spawnSync(process.execPath, ['--input-type=module', '-e', crash]).status, 7);
+  assert.equal(spawnSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8' }).stdout, 'held');
+  const other = 'b'.repeat(64);
+  const contender = script.replace(id, other);
+  const waiting = contender.replace('async n => process.stdout.write(n)', "async () => { process.stdout.write('ready'); await new Promise(resolve => process.once('message', resolve)); }");
+  const child = spawn(process.execPath, ['--input-type=module', '-e', waiting], { stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
+  const exit = new Promise(resolve => child.on('exit', resolve));
+  await new Promise(resolve => child.stdout.once('data', resolve));
+  assert.equal(spawnSync(process.execPath, ['--input-type=module', '-e', contender], { encoding: 'utf8' }).stdout, 'held');
+  child.send('finish'); child.disconnect(); assert.equal(await exit, 0);
+  assert.notEqual(spawnSync(process.execPath, ['--input-type=module', '-e', contender], { encoding: 'utf8' }).stdout, 'held');
+  await assert.rejects(lane('c'.repeat(64), async () => { throw Error('uncertain request'); }));
+  await assert.rejects(lane('c'.repeat(64), async () => assert.fail('must not retry')));
+  console.log('Durable nonce restart, competing process, crash and uncertain-outcome holds passed');
+} finally { rmSync(root, { recursive: true, force: true }); }
