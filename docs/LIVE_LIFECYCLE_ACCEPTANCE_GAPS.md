@@ -31,6 +31,21 @@ so unknown submissions without one remain unresolved. No real authenticated
 exchange call has been used in verification; tests replace transport entirely.
 Reference: https://docs.kraken.com/api-reference/account-data/query-orders-info
 
+The internal inspector now follows the order's explicit fill IDs with one
+QueryTrades request (maximum 20 IDs). It rejects duplicate/missing/extra fills,
+wrong order/pair/direction, margin fills, malformed decimals and aggregate
+quantity/cost/fee mismatches. Totals use fixed-scale integer arithmetic, not
+floating point. Pair aliases are normalized in the adapter. Larger histories
+remain unknown; there is no truncation, retry or inferred fill.
+
+`fill-totals-matched` means provider-reported totals agree, NOT settled funds or
+verified fee currency. `feesVerified` and `feeSettlementVerified` remain false.
+No ledger writes, balance adjustments or hold release are implemented. The two
+queries are not an atomic snapshot: changes between responses remain unknown
+when their totals disagree. Owner/credential binding, durable history and ledger
+evidence are still required before these internal helpers can be exposed.
+Reference: https://docs.kraken.com/api-reference/account-data/query-trades-info
+
 The five initial broker regressions now pass: bounded no-redirect transport,
 explicit accepted status, missing-ID rejection, unknown submission outcomes and
 exact partial-fill quantity evidence. Server acceptance no longer invents a fill
