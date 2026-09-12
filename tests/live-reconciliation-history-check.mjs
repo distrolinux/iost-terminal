@@ -1,0 +1,34 @@
+import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createHash } from 'node:crypto';
+import { spawnSync, spawn } from 'node:child_process';
+import { createLiveReconciliationHistory } from '../lib/live-reconciliation-history.js';
+const dir = mkdtempSync(join(tmpdir(), 'iost-history-'));
+const expected = { clientOrderId: 'client', venueOrderId: 'venue', pair: 'XBTUSD', side: 'buy', quantity: '1' };
+const observation = { ...expected, status: 'open', filledQuantity: '0.25' };
+const fills = { status: 'fill-totals-matched', reportedFilledQuantity: '0.25', reportedCost: '10', reportedFee: '1', fills: [{ id: 'fill-a', digest: 'a'.repeat(64) }] };
+try {
+  let history = createLiveReconciliationHistory(dir);
+  assert.equal(history.append('owner', expected, observation, fills).status, 'recorded');
+  history = createLiveReconciliationHistory(dir);
+  assert.equal(history.append('owner', expected, observation, fills).status, 'replay');
+  const script = `import { createLiveReconciliationHistory } from ${JSON.stringify(new URL('../lib/live-reconciliation-history.js', import.meta.url).href)}; const r = createLiveReconciliationHistory(${JSON.stringify(dir)}).append('owner', ${JSON.stringify(expected)}, ${JSON.stringify(observation)}, ${JSON.stringify(fills)}); process.stdout.write(r.status);`;
+  assert.equal(spawnSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8' }).stdout, 'replay', 'fresh process sees history');
+  const race = script.replace("append('owner'", "append('race-owner'");
+  const run = () => new Promise(resolve => { const p = spawn(process.execPath, ['--input-type=module', '-e', race]); let output = ''; p.stdout.on('data', d => { output += d; }); p.on('close', code => resolve({ output, code })); });
+  const races = await Promise.all([run(), run()]);
+  assert.equal(races.filter(r => r.output === 'recorded' && r.code === 0).length, 1);
+  assert.ok(races.every(r => r.code === 0 && ['recorded', 'replay', 'held'].includes(r.output)));
+  assert.equal(history.append('owner', expected, { ...observation, filledQuantity: '0.1' }, { ...fills, reportedFilledQuantity: '0.1' }).status, 'held');
+  assert.equal(history.append('owner', expected, observation, { ...fills, fills: [{ id: 'fill-a', digest: 'b'.repeat(64) }] }).status, 'held');
+  const full = { ...fills, reportedFilledQuantity: '1', reportedCost: '40', reportedFee: '4', fills: [...fills.fills, { id: 'fill-b', digest: 'b'.repeat(64) }] };
+  assert.equal(history.append('owner', expected, { ...observation, status: 'closed', filledQuantity: '1' }, full).status, 'recorded');
+  assert.equal(history.append('owner', expected, observation, fills).status, 'held');
+  assert.equal(history.append('other-owner', expected, observation, fills).status, 'recorded');
+  const ownerDirectory = join(dir, createHash('sha256').update('owner').digest('hex'));
+  writeFileSync(join(ownerDirectory, '00000001.json'), '{broken');
+  assert.equal(history.append('owner', expected, { ...observation, status: 'closed', filledQuantity: '1' }, full).status, 'held');
+  console.log('Durable reconciliation replay, regression, conflict and corruption checks passed');
+} finally { rmSync(dir, { recursive: true, force: true }); }

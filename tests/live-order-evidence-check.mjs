@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync, readdirSync, readFileSync } from 'n
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createLiveSubmissionHold } from '../lib/live-submission-hold.js';
+import { createLiveReconciliationHistory } from '../lib/live-reconciliation-history.js';
 process.env.KRAKEN_API_KEY = 'offline-fixture-only';
 process.env.KRAKEN_API_SECRET = Buffer.from('offline-fixture-only').toString('base64');
 let result, tradeResult, tradeFailure = false, calls = 0;
@@ -27,7 +28,7 @@ try {
   const persisted = createLiveSubmissionHold(scratch).read('owner');
   assert.equal(persisted.hold.venueOrderId, 'fixture-order');
   const { createKrakenBroker } = await import('../lib/broker/kraken.js');
-  const { inspectHeldLiveOrder } = await import('../lib/live-order-evidence.js');
+  const { inspectHeldLiveOrder, recordHeldLiveOrderEvidence } = await import('../lib/live-order-evidence.js');
   const broker = createKrakenBroker();
   const observation = { cl_ord_id: claim.clientOrderId, vol: '1.00000000', vol_exec: '0.25', status: 'open', descr: { pair: 'XBTUSD', type: 'buy', ordertype: 'limit', price: '50000.0' } };
   result = { 'fixture-order': observation };
@@ -42,7 +43,14 @@ try {
   assert.equal(review.fillEvidence.status, 'fill-totals-matched');
   assert.equal(review.fillEvidence.feesVerified, false);
   assert.equal(review.releaseAllowed, false);
+  const history = createLiveReconciliationHistory(join(scratch, 'history'));
+  assert.equal((await recordHeldLiveOrderEvidence(holds, 'owner', broker, history)).status, 'recorded');
+  assert.equal((await recordHeldLiveOrderEvidence(holds, 'owner', broker, history)).status, 'replay');
+  tradeResult['fixture-fill'].price = '51000';
+  assert.equal((await recordHeldLiveOrderEvidence(holds, 'owner', broker, history)).status, 'held', 'changed same-fill evidence cannot replace history');
+  tradeResult['fixture-fill'].price = '50000';
   tradeResult = {};
+  assert.equal((await recordHeldLiveOrderEvidence(holds, 'owner', broker, history)).status, 'held');
   assert.equal((await inspectHeldLiveOrder(holds, 'owner', broker)).fillEvidence.status, 'unknown');
   tradeFailure = true;
   const failureStart = calls;

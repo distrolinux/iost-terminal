@@ -21,8 +21,8 @@ read-only inspector now queries Kraken QueryOrders using an immutable persisted
 acknowledgement sidecar. It compares client ID, venue ID, pair, direction, quantity
 and limit terms; missing evidence remains unknown. There is no HTTP/MCP exposure,
 scheduler, ledger integration or hold release. Fees remain unverified and
-releaseAllowed remains false. This inspector does not yet persist observation
-history, so cross-query monotonicity remains an integration requirement.
+releaseAllowed remains false. The inspector remains read-only; a separate internal
+recordHeldLiveOrderEvidence helper explicitly writes private evidence history.
 
 The sidecar is exclusively created and synced; failures leave the original hold
 blocking. A lost acknowledgement requires further recovery work, not a guessed
@@ -42,9 +42,25 @@ remain unknown; there is no truncation, retry or inferred fill.
 verified fee currency. `feesVerified` and `feeSettlementVerified` remain false.
 No ledger writes, balance adjustments or hold release are implemented. The two
 queries are not an atomic snapshot: changes between responses remain unknown
-when their totals disagree. Owner/credential binding, durable history and ledger
+when their totals disagree. Owner/credential binding, production integration and ledger
 evidence are still required before these internal helpers can be exposed.
 Reference: https://docs.kraken.com/api-reference/account-data/query-trades-info
+
+Persistent reconciliation history now records immutable, hash-linked snapshots
+under a caller-supplied private directory (0700 directories, 0600 files). Exact
+replays add no record. Prior fill IDs/digests must remain present and unchanged;
+quantities/costs/fees cannot decrease and terminal snapshots cannot change.
+Records are bounded to 128 per owner, with at most 20 fills each. Capacity,
+corruption, incomplete writes, sequence gaps and concurrent append conflicts
+hold rather than overwriting/deleting history. Files and directories are synced.
+Offline tests exercise a new process and concurrent processes, not real power loss.
+
+This is evidence deduplication, NOT exactly-once financial posting. There is no
+ledger or balance mutation. The hash chain is not externally anchored or signed;
+it cannot prove absence of tail deletion or replacement by a privileged writer.
+Conflicting observations are rejected, not permanently quarantined by this helper.
+No HTTP/MCP route or scheduler invokes the writer. Account/credential binding and
+operational backup/recovery acceptance remain required. No hold is released.
 
 The five initial broker regressions now pass: bounded no-redirect transport,
 explicit accepted status, missing-ID rejection, unknown submission outcomes and
